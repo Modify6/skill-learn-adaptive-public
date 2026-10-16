@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>C++ 移动语义与 std::move —— 抄一遍 · 直接拔走</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#151f36; --panel2:#0f1729;
+    --line:#26334d; --text:#dde6f5; --muted:#a6b9d9;
+    --blue:#3b82f6; --green:#22c55e; --purple:#a855f7;
+    --amber:#f5b544; --cyan:#38bdf8; --red:#f87171;
+    --mono:"Cascadia Code",Consolas,"JetBrains Mono",monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:radial-gradient(1200px 600px at 50% -100px,#16223d 0%,var(--bg) 60%);
+    color:var(--text);
+    font-family:system-ui,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+    padding:30px 18px 70px; line-height:1.65;
+  }
+  body.shake{animation:shake .5s;}
+  @keyframes shake{
+    0%,100%{transform:translateX(0);} 20%{transform:translateX(-9px);}
+    40%{transform:translateX(8px);} 60%{transform:translateX(-6px);} 80%{transform:translateX(4px);}
+  }
+  .wrap{max-width:1200px; margin:0 auto;}
+
+  /* ---------- header ---------- */
+  h1{font-size:26px; letter-spacing:.5px;}
+  h1 .dot-word{color:var(--amber);}
+  .sub{color:var(--muted); margin-top:6px; font-size:14.5px;}
+  .ladder{
+    margin-top:12px; padding:8px 14px; border:1px dashed var(--line); border-radius:10px;
+    font-size:12.5px; color:var(--muted); background:rgba(255,255,255,.02);
+    font-family:var(--mono);
+  }
+  .ladder b{color:var(--cyan); font-weight:600;}
+  .ladder .bad{color:var(--red);}
+
+  /* ---------- landing table (绰号落地表) ---------- */
+  .ltable{margin-top:12px; border:1px solid var(--line); border-radius:10px; overflow:hidden; font-size:12px;}
+  .ltable table{width:100%; border-collapse:collapse;}
+  .ltable th{
+    background:rgba(255,255,255,.03); color:var(--muted); font-size:11px; font-weight:600;
+    padding:6px 10px; text-align:left; border-bottom:1px solid var(--line); letter-spacing:1px;
+  }
+  .ltable td{padding:6px 10px; border-bottom:1px solid rgba(38,51,77,.5); vertical-align:top;}
+  .ltable tr:last-child td{border-bottom:none;}
+  .ltable .nick{color:var(--amber); font-weight:700; font-family:var(--mono); white-space:nowrap;}
+  .ltable .real{color:var(--cyan); font-family:var(--mono);}
+  .ltable .phys{color:var(--text);}
+  .ltable .life{color:var(--muted);}
+
+  /* ---------- journey rail ---------- */
+  .journey{margin-top:22px;}
+  .rail{display:flex; align-items:center; gap:6px; overflow-x:auto; padding:4px 2px 10px;}
+  .pill{
+    flex:none; font-size:11.5px; padding:4px 11px; border-radius:999px;
+    border:1px solid var(--line); color:var(--muted); white-space:nowrap; background:var(--panel2);
+  }
+  .pill.done{color:var(--green); border-color:rgba(34,197,94,.55);}
+  .pill.current{color:var(--amber); border-color:var(--amber); box-shadow:0 0 10px rgba(245,181,68,.25); font-weight:700;}
+  .sep{flex:none; width:14px; height:2px; background:var(--line);}
+
+  /* ---------- quest card ---------- */
+  .quest{
+    border:1px solid rgba(245,181,68,.45); border-left:4px solid var(--amber);
+    background:linear-gradient(90deg, rgba(245,181,68,.07), var(--panel2) 45%);
+    border-radius:12px; padding:14px 18px;
+  }
+  .quest.free{border-color:rgba(34,197,94,.45); border-left-color:var(--green);
+    background:linear-gradient(90deg, rgba(34,197,94,.07), var(--panel2) 45%);}
+  .quest-head{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .quest-stage{font-family:var(--mono); font-size:11px; color:var(--amber); letter-spacing:1px;}
+  .quest-title{font-size:16px; font-weight:700;}
+  .skip{margin-left:auto; font-size:12px; color:var(--muted); cursor:pointer; border:none; background:none; text-decoration:underline dotted;}
+  .skip:hover{color:var(--text);}
+  .q-row{display:flex; gap:12px; margin-top:9px; font-size:13.5px;}
+  .q-row .k{flex:none; width:88px; color:var(--muted); font-weight:600;}
+  .q-row .v{color:var(--text);}
+  .q-row .v b{color:var(--amber);}
+  .quest .go{margin-top:12px;}
+  .quest .go button{
+    font-size:13px; padding:7px 18px; border-color:var(--amber); color:var(--amber);
+    font-family:system-ui,"Microsoft YaHei",sans-serif; font-weight:700;
+  }
+
+  /* quiz */
+  .quiz{margin-top:6px;}
+  .qitem{margin-top:12px; padding-top:10px; border-top:1px dashed var(--line);}
+  .qitem .qtext{font-size:13.5px; font-weight:600;}
+  .opts{display:flex; flex-direction:column; gap:6px; margin-top:8px;}
+  .opt{
+    text-align:left; font-size:12.5px; font-family:var(--mono),system-ui,sans-serif;
+    background:#182338; color:var(--text); border:1px solid var(--line); border-radius:6px;
+    padding:8px 12px; cursor:pointer;
+  }
+  .opt.correct{border-color:var(--green); color:var(--green); background:rgba(34,197,94,.1);}
+  .opt.wrong{border-color:var(--red); color:var(--red); background:rgba(248,113,113,.08);}
+  .opt.dim{opacity:.4;}
+  .qexpl{font-size:12px; color:var(--muted); margin-top:6px;}
+
+  /* ---------- crash banner ---------- */
+  .crashbar{
+    margin-top:18px; border:1px solid rgba(248,113,113,.6); border-radius:12px;
+    background:linear-gradient(90deg, rgba(248,113,113,.16), rgba(248,113,113,.04));
+    padding:12px 18px; font-size:14px; color:#ffc9c9; display:none;
+  }
+  .crashbar.show{display:flex; align-items:center; gap:12px; flex-wrap:wrap;}
+  .crashbar .boom{font-size:22px;}
+  .crashbar b{color:#fff;}
+  .crashbar .fix{margin-left:auto;}
+
+  /* ---------- stage ---------- */
+  .stage-scroll{overflow-x:auto; margin-top:20px; padding-bottom:6px;}
+  .stage{
+    min-width:1080px;
+    display:grid;
+    grid-template-columns:1.05fr 1.05fr 1.3fr;
+    gap:0 12px; align-items:stretch;
+  }
+  .col-head{margin-bottom:10px; text-align:center;}
+  .col-head .nick{font-size:17px; font-weight:700;}
+  .col-head .real{font-family:var(--mono); font-size:11.5px; color:var(--cyan); letter-spacing:1px; text-transform:uppercase;}
+  .col-head .duty{font-size:12px; color:var(--muted); margin-top:2px;}
+  .col{
+    background:var(--panel2); border:1px solid var(--line); border-radius:14px;
+    padding:14px; display:flex; flex-direction:column; gap:12px; min-height:460px;
+  }
+  .c1 .nick{color:var(--cyan);} .c2 .nick{color:var(--amber);} .c3 .nick{color:var(--green);}
+
+  /* code box */
+  .codebox{
+    background:#080d18; border:1px solid var(--line); border-radius:10px;
+    padding:12px; font-family:var(--mono); font-size:12px; line-height:1.75;
+    flex:1; overflow-y:auto;
+  }
+  .codeline{padding:1px 6px; border-radius:4px; transition:background .2s;}
+  .codeline.active{background:rgba(245,181,68,.18); color:var(--amber); border-left:3px solid var(--amber);}
+  .codeline .kw{color:#ff7b72;}
+  .codeline .tp{color:#79c0ff;}
+  .codeline .fn{color:#d2a8ff;}
+  .codeline .cm{color:#8b949e; font-style:italic;}
+  .codeline .str{color:#a5d6ff;}
+  .codeline .tag{color:var(--green); font-weight:bold;}
+
+  /* stack cards */
+  .stack-list{display:flex; flex-direction:column; gap:10px; flex:1;}
+  .stack-card{
+    background:#0d1424; border:1px solid var(--line); border-radius:10px;
+    padding:10px 12px; font-family:var(--mono); font-size:12px;
+    transition:all .3s ease; position:relative;
+  }
+  .stack-card.moved{
+    border-color:rgba(248,113,113,.4); background:rgba(248,113,113,.04);
+  }
+  .stack-card.active{
+    border-color:var(--amber); box-shadow:0 0 10px rgba(245,181,68,.25);
+  }
+  .sc-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;}
+  .sc-name{font-weight:700; color:var(--text); font-size:13px;}
+  .sc-badge{
+    font-size:10px; padding:2px 7px; border-radius:4px; font-family:var(--mono);
+    text-transform:uppercase; letter-spacing:.5px;
+  }
+  .badge-lval{background:rgba(56,189,248,.15); color:var(--cyan); border:1px solid rgba(56,189,248,.3);}
+  .badge-rval{background:rgba(245,181,68,.15); color:var(--amber); border:1px solid rgba(245,181,68,.3);}
+  .badge-hollow{background:rgba(248,113,113,.15); color:var(--red); border:1px solid rgba(248,113,113,.3);}
+  .sc-row{display:flex; justify-content:space-between; font-size:11.5px; color:var(--muted); margin-top:2px;}
+  .sc-row .val{color:var(--text);}
+  .sc-row .val.ptr{color:var(--cyan); font-weight:600;}
+  .sc-row .val.null{color:var(--red); font-weight:700;}
+  .move-sticker{
+    margin-top:6px; padding:3px 8px; border-radius:4px; background:rgba(245,181,68,.18);
+    border:1px dashed var(--amber); color:var(--amber); font-size:11px;
+    display:flex; align-items:center; gap:6px; animation:pop .3s ease;
+  }
+  @keyframes pop{ 0%{transform:scale(.8);opacity:0;} 100%{transform:scale(1);opacity:1;} }
+
+  /* heap items */
+  .heap-list{display:flex; flex-direction:column; gap:12px; flex:1;}
+  .heap-card{
+    background:#0a0f1d; border:1px solid var(--line); border-radius:10px;
+    padding:12px; font-family:var(--mono); font-size:12px;
+    position:relative; transition:all .3s ease;
+  }
+  .heap-card.hl{border-color:var(--green); box-shadow:0 0 12px rgba(34,197,94,.25);}
+  .hc-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;}
+  .hc-addr{color:var(--cyan); font-size:11.5px; font-weight:600;}
+  .hc-owner{font-size:11px; color:var(--muted);}
+  .hc-owner b{color:var(--amber);}
+  .hc-slots{
+    display:flex; gap:3px; margin:8px 0; overflow-x:auto; padding:3px 0;
+  }
+  .hc-slot{
+    flex:1; min-width:28px; height:24px; background:rgba(34,197,94,.15);
+    border:1px solid rgba(34,197,94,.3); border-radius:4px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:10px; color:var(--green);
+  }
+  .hc-meta{font-size:11px; color:var(--muted); display:flex; justify-content:space-between;}
+
+  /* stats dashboard */
+  .stats-bar{
+    display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;
+    margin-top:auto; padding-top:10px; border-top:1px dashed var(--line);
+  }
+  .stat-item{background:#0e172a; padding:6px 8px; border-radius:6px; border:1px solid var(--line); text-align:center;}
+  .stat-val{font-size:14px; font-weight:700; color:var(--text); font-family:var(--mono);}
+  .stat-val.good{color:var(--green);}
+  .stat-val.warn{color:var(--amber);}
+  .stat-val.bad{color:var(--red);}
+  .stat-lbl{font-size:10px; color:var(--muted);}
+
+  /* ---------- console ---------- */
+  .console{margin-top:26px; background:var(--panel2); border:1px solid var(--line); border-radius:14px; overflow:hidden;}
+  .console-head{
+    display:flex; align-items:center; gap:10px; padding:10px 16px;
+    border-bottom:1px solid var(--line); background:rgba(255,255,255,.02);
+    font-size:13px; color:var(--muted); flex-wrap:wrap;
+  }
+  .btns{display:flex; gap:8px; flex-wrap:wrap; margin-left:auto;}
+  button{
+    font-family:var(--mono); font-size:12px; color:var(--text);
+    background:#1d2a47; border:1px solid var(--line); border-radius:8px;
+    padding:6px 12px; cursor:pointer; transition:all .15s;
+  }
+  button:hover:not(:disabled){border-color:var(--amber); color:var(--amber); transform:translateY(-1px);}
+  button:disabled{opacity:.3; cursor:not-allowed;}
+  button.primary{border-color:var(--amber); color:var(--amber);}
+  button.action-btn{border-color:var(--cyan); color:var(--cyan);}
+  button.fix-btn{border-color:var(--green); color:var(--green);}
+  button.danger-btn{border-color:var(--red); color:var(--red);}
+
+  .logbox{padding:12px 16px; max-height:240px; overflow-y:auto; font-family:var(--mono); font-size:12.5px;}
+  .logline{margin-bottom:8px;}
+  .logline .cmd{color:var(--amber);}
+  .logline .expl{color:var(--muted); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:12px; margin-top:1px;}
+  .logline .expl b{color:var(--amber); font-weight:600;}
+  .logline .expl .say{color:var(--green); font-family:var(--mono);}
+  .logline.info{color:var(--cyan); font-family:system-ui,"Microsoft YaHei",sans-serif;}
+  .logline.ok{color:var(--green); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:12.5px;}
+  .logline.err{color:var(--red); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:12.5px;}
+
+  /* ---------- details cards ---------- */
+  .why{margin-top:22px; display:grid; grid-template-columns:repeat(3,1fr); gap:12px;}
+  .why-card{background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:14px 16px; font-size:13px;}
+  .why-card h3{font-size:13.5px; margin-bottom:6px;}
+  .why-card p{color:var(--muted); font-size:12.5px;}
+  .why-card b{color:var(--text);}
+  .w1 h3{color:var(--cyan);} .w2 h3{color:var(--amber);} .w3 h3{color:var(--green);}
+
+  footer{margin-top:26px; text-align:center; color:var(--muted); font-size:12px;}
+  @media (max-width:900px){ .why{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>C++ 移动语义与 std::move：<span class="dot-word">抄一遍</span> · <span class="dot-word">直接拔走</span></h1>
+  <p class="sub">治「大对象深拷贝慢成蜗牛、独占资源无法转交」—— 让 C++ 从「只懂重新建房」进化到「零成本过户」。从百万数据的深拷贝现场出发，关卡推进，透视指针与堆内存的真实流动。</p>
+
+  <div class="ladder">
+    两种搬家：<span class="bad">深拷贝（Deep Copy）＝新开堆内存 + 逐字节复制，慢！</span> ｜ <span style="color:var(--green)">移动（Move）＝直接偷走底层指针 + 原主指针置空，0 开销！</span>
+    &nbsp;‖&nbsp; 关键真相：<b>std::move 自身不移动任何字节（0 机器码）</b>，它只负责盖章<b>「我是将亡品（转为右值引用 &&）」</b>；真正动手偷指针的是<b>移动构造函数</b>。
+  </div>
+
+  <!-- 绰号与机制落地表 -->
+  <div class="ltable">
+    <table>
+      <tr><th>概念 / 术语</th><th>物理上是什么</th><th>生活同类 / 绰号</th><th>核心区别与职责</th></tr>
+      <tr><td class="real">深拷贝 Vector b = a;</td><td class="phys">在堆上调用 new[] 分配新内存，逐个复制元素</td><td class="life">照着图纸在隔壁重新盖一模一样的一栋楼</td><td>内存翻倍，原对象和新对象各自独立</td></tr>
+      <tr><td class="real">右值 (rvalue / T&&)</td><td class="phys">无持久名字、求值完就地销毁的临时对象/表达式结果</td><td class="life">马上要拆除的临时活动板房</td><td>生命周期极短，别人把它掏空是完全安全的</td></tr>
+      <tr><td class="real">std::move(a)</td><td class="phys">编译期 static_cast&lt;T&&&gt;(a)，汇编指令为 0</td><td class="nick">“拆迁许可 / 过户便签纸”</td><td>把有名字的左值盖章成右值引用，允许接收方掏空它</td></tr>
+      <tr><td class="real">移动构造 Vector(Vector&& o)</td><td class="phys">b.data = o.data; o.data = nullptr;</td><td class="life">直接把房本递给新主人，老房东两手空空</td><td><b>真正动手搬家的人</b>：瞬间接管指针，原指针安全置空</td></tr>
+      <tr><td class="real">被掏空状态 (Moved-from)</td><td class="phys">对象仍存在，但 data=nullptr, size=0</td><td class="life">家具已搬空的毛坯房</td><td>合法状态：可以安全析构、可以重新赋值，但<b>别读内容</b></td></tr>
+    </table>
+  </div>
+
+  <!-- journey rail -->
+  <div class="journey">
+    <div class="rail" id="rail"></div>
+    <div class="quest" id="quest"></div>
+  </div>
+
+  <!-- crash / error banner -->
+  <div class="crashbar" id="crashbar">
+    <span class="boom">🛑</span>
+    <span id="crashtext"></span>
+    <button class="fix-btn fix" id="b-revive">↺ 恢复状态（继续）</button>
+  </div>
+
+  <!-- visual stage (3 cols) -->
+  <div class="stage-scroll">
+    <div class="stage">
+
+      <!-- Col 1: Code -->
+      <div class="col c1">
+        <div class="col-head">
+          <div class="nick">执行代码</div>
+          <div class="real">CODE & EXECUTION</div>
+          <div class="duty">观察当前执行的 C++ 语句与内部函数调用</div>
+        </div>
+        <div class="codebox" id="codebox"></div>
+      </div>
+
+      <!-- Col 2: Stack -->
+      <div class="col c2">
+        <div class="col-head">
+          <div class="nick">栈内存（变量区）</div>
+          <div class="real">STACK & OWNERSHIP</div>
+          <div class="duty">看变量的名字、值类型与指针指向</div>
+        </div>
+        <div class="stack-list" id="stack-list"></div>
+      </div>
+
+      <!-- Col 3: Heap & Stats -->
+      <div class="col c3">
+        <div class="col-head">
+          <div class="nick">堆内存（资源实体）</div>
+          <div class="real">HEAP ALLOCATIONS</div>
+          <div class="duty">真实数据存储区，看指针归属与内存分配次数</div>
+        </div>
+        <div class="heap-list" id="heap-list"></div>
+        <div class="stats-bar">
+          <div class="stat-item">
+            <div class="stat-val" id="stat-allocs">0</div>
+            <div class="stat-lbl">堆内存申请次数</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-val" id="stat-copied">0</div>
+            <div class="stat-lbl">累计元素拷贝量</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-val" id="stat-time">0 ms</div>
+            <div class="stat-lbl">操作累计耗时</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Console Controls & Logs -->
+  <div class="console">
+    <div class="console-head">
+      <span>控制台 & 操作面板</span>
+      <div class="btns" id="btns"></div>
+    </div>
+    <div class="logbox" id="logbox"></div>
+  </div>
+
+  <!-- Why cards -->
+  <div class="why">
+    <div class="why-card w1">
+      <h3>🔍 std::move 根本不移动任何东西</h3>
+      <p>初学者最大的误区就是以为 <code>std::move</code> 会产生搬运数据的机器码。其实它的源码只有一行 <code>static_cast&lt;T&&&gt;(t)</code>。它是个纯编译期的<b>语法开关</b>，把右值重载版本（移动构造）给激活而已。</p>
+    </div>
+    <div class="why-card w2">
+      <h3>📦 为什么原指针必须置为 nullptr？</h3>
+      <p>如果移动构造只偷了指针 <code>b.data = a.data</code> 却没有把 <code>a.data = nullptr</code>，那么当 <code>a</code> 和 <code>b</code> 走出作用域时，它们的析构函数都会执行 <code>delete[] data</code>，瞬间引发<b>双重释放（Double Free）崩溃</b>！</p>
+    </div>
+    <div class="why-card w3">
+      <h3>🛡️ 什么时候不能用 std::move？</h3>
+      <p>如果你在后面还要继续使用这个对象，<b>千万不要 move 它</b>！被 move 后的对象虽然析构安全，但里面的数据已经是空壳（合法但未指定状态）。想复用数据就老老实实拷贝。</p>
+    </div>
+  </div>
+
+  <footer>
+    C++ 移动语义精髓：识别将亡对象 → std::move 撕掉保护贴上过户便签 → 移动构造接管底层指针并置空原主 ｜ 告别无谓的深拷贝浪费
+  </footer>
+
+</div>
+
+<script>
+const KEY = 'cpp-std-move-journey-v1';
+
+/* ============ 关卡定义 ============ */
+const STAGES = [
+  { nm:'起点·导览', stageTag:'STAGE 0 / 9', title:'先认地形：深拷贝 vs 零成本过户',
+    start:'欢迎来到移动语义沙盒！先扫一眼上方的「机制落地表」：深拷贝、右值、std::move、移动构造、被掏空状态。',
+    task:'熟悉三列舞台：<b>代码列</b>、<b>栈变量</b>、<b>堆实体</b>。然后点击右侧「开始旅程」。',
+    watch:'带着问题思考：当你把一个存了 100 万个数据的 vector 传给别人时，凭什么要重新分配内存复制一遍？',
+    pass:()=>flags.started },
+
+  { nm:'① 深拷贝之痛', stageTag:'STAGE 1 / 9', title:'深拷贝的昂贵代价：100万数据重抄一遍',
+    start:'栈上已有一个 vector a，掌管堆上 1,000,000 个整数（8MB 内存）。',
+    task:'点击 <b>深拷贝 b = a;</b>，观察堆内存和操作耗时。',
+    watch:'注意看堆内存区：出现了一块全新的 8MB 内存，累计拷贝数飙升到 1,000,000，耗时 15ms。两个对象各自独立。如果 a 马上就要销毁，这 15ms 纯属白白浪费！',
+    pass:()=>flags.copyDone },
+
+  { nm:'② 右值觉醒', stageTag:'STAGE 2 / 9', title:'将亡之物：临时对象何必深拷贝？',
+    start:'假设有个工厂函数 createBigData() 返回一个临时 vector，求值完马上就会死。',
+    task:'点击 <b>c = createBigData()（临时右值）</b>，看编译器如何处理临时对象。',
+    watch:'临时对象没有名字（右值）。编译器聪明地启用了<b>移动构造</b>：c 直接把临时对象的指针拔走！堆内存没有新分配，耗时 0.001ms！',
+    pass:()=>flags.rvalMoveDone },
+
+  { nm:'③ 编译器的顾虑', stageTag:'STAGE 3 / 9', title:'有名字的左值，编译器不敢擅动',
+    start:'既然拔指针这么爽，那我们写 d = a 时，编译器为什么不自动拔指针？',
+    task:'点击 <b>普通赋值 d = a;</b>，观察为什么依然触发深拷贝。',
+    watch:'因为 a 是个有名字的持久变量（左值）。编译器无法预知你未来是否还会使用 a，不敢擅自掏空它，只能保守地做昂贵深拷贝。',
+    pass:()=>flags.lvalCopyDone },
+
+  { nm:'④ std::move 出场', stageTag:'STAGE 4 / 9', title:'撕掉保护膜：亲手盖上“过户便签”',
+    start:'你作为程序员，明确知道 a 后面不要了。你需要告诉编译器：“批准掏空！”',
+    task:'点击 <b>std::move(a)（贴上便签）</b>，仔细观察堆内存和指针！',
+    watch:'<b>极其关键：</b>看堆内存！没有任何新分配！看指针！没有发生任何移动！耗时为 0ns！仅仅是栈变量 a 身上多了一张黄色的 <b>&& 便签纸</b>（右值引用）。std::move 自身什么都不搬！',
+    pass:()=>flags.moveStickerDone },
+
+  { nm:'⑤ 移动构造动手', stageTag:'STAGE 5 / 9', title:'偷走指针 + 原指针置空 nullptr',
+    start:'现在 a 已经被贴上 && 便签。新建变量 e 来接收它。',
+    task:'点击 <b>Vector e = std::move(a)（触发移动构造）</b>。',
+    watch:'看连线与指针：e 看到便签，直接把 a 指向堆的箭头<b>拔了过来</b>！同时 <b>a 的指针被安全涂成 nullptr（变成空壳）</b>。堆内存 0 申请，耗时瞬间完成！',
+    pass:()=>flags.moveCtorDone },
+
+  { nm:'⑥ 避坑：被掏空的对象', stageTag:'STAGE 6 / 9', title:'被 move 后的对象还能干啥？',
+    start:'此时 a 处于 Moved-from（被掏空）状态：data = nullptr, size = 0。',
+    task:'先按 <b>读取 a[0]（踩坑）</b> 看会发生什么，点击警告横幅恢复后，再按 <b>重新给 a 赋值</b>。',
+    watch:'读取空对象会触发崩溃/警告！但对象依然健康活着：你可以安全给它重新赋值，或者等待它走出作用域析构（delete nullptr 绝不崩溃）。',
+    pass:()=>flags.readHollowDone && flags.reassignDone },
+
+  { nm:'⑦ 独占指针的基石', stageTag:'STAGE 7 / 9', title:'unique_ptr 为什么离不开 std::move？',
+    start:'智能指针课程里的 std::unique_ptr 是独占房本，禁止拷贝构造。',
+    task:'先点击 <b>尝试拷贝 unique_ptr（编译拦截）</b>，再点击 <b>std::move 过户 unique_ptr</b>。',
+    watch:'拷贝直接在编译期被拦截（红色报错！）。使用 std::move 后，房本成功过户给新变量，老指针变 nullptr。移动语义正是现代智能指针的底座！',
+    pass:()=>flags.uptrCopyFail && flags.uptrMoveDone },
+
+  { nm:'⑧ 毕业测验', stageTag:'STAGE 8 / 9', title:'毕业测：3 道硬核实战题',
+    start:'恭喜你走完 7 关！左值、右值、std::move 的标签本质、移动构造拔指针的真相，你全亲手操作过了。',
+    task:'答对下面 3 道单选题即可毕业（答错可重选）。',
+    watch:'每题均配有详尽的底层原理解释。',
+    pass:()=>quiz.length===3 && quiz.every(v=>v && v.ok) },
+
+  { nm:'⑨ 自由模式', stageTag:'STAGE 9 / 9', title:'自由沙盒：随时实验',
+    start:'你已经完全掌握了 C++ 移动语义与 std::move！',
+    task:'所有按钮已完全解锁，你可以随意组合操作、观察堆栈变化。',
+    watch:'探索不同操作下的内存与指针流动。',
+    pass:()=>true }
+];
+
+const QUIZ = [
+  { q:'1 / 3 · std::move(x) 执行时，底层到底生成了什么汇编指令？',
+    opts:[
+      '在内存中把 x 的所有成员变量 memcpy 搬到新地址',
+      '调用操作系统的内存重定向 API',
+      '指令数为 0：它只是个编译期强制类型转换 static_cast<T&&>(x)，给对象盖上右值印章'
+    ],
+    ans:2,
+    expl:'真相：std::move 本身根本不搬动任何数据，它只是编译期的语法转换，用于告诉编译器“请优先匹配右值重载的移动构造函数”。' },
+
+  { q:'2 / 3 · 在自定义移动构造函数中，除了将对方的指针接管过来（this->data = other.data），为什么必须把 other.data = nullptr？',
+    opts:[
+      'C++ 语法硬性规定，不写编译不通过',
+      '防止双重释放（Double Free）：若不置空，other 析构时会再次 delete 该内存引发致命崩溃',
+      '为了释放 other 所占用的栈内存'
+    ],
+    ans:1,
+    expl:'第⑤关和第⑥关亲眼验证：如果不置空 nullptr，原对象析构时会再次执行 delete[] data，同一块堆内存被释放两次，程序直接崩溃！' },
+
+  { q:'3 / 3 · 什么时候应该使用 std::move？',
+    opts:[
+      '只要传递大对象，不管后面用不用，一律加上 std::move 提升性能',
+      '当你确定这个对象是“将亡品”，后续代码绝对不会再读取其内容时',
+      '只在返回局部变量时使用（如 return std::move(localVar);）'
+    ],
+    ans:1,
+    expl:'被 move 后的对象处于“合法但未指定（空壳）”状态，读取它会导致逻辑错误或空指针崩溃。注意：C++ 标准有返回值优化（RVO），return 局部变量时乱加 std::move 反而会破坏 RVO。' },
+];
+
+/* ============ 核心状态 ============ */
+let stage = 0;
+let flags = {};
+let quiz = [null, null, null];
+let crashActive = false;
+
+// 模拟堆内存
+let nextHeapId = 1;
+let heapObjects = [];
+
+// 模拟栈变量
+let stackVars = [];
+
+// 统计指标
+let stats = {
+  allocs: 0,
+  copied: 0,
+  timeMs: 0
+};
+
+// 执行代码与高亮行
+let codeLines = [
+  { text: '// C++ Move Semantics Simulator', cls: 'cm' },
+  { text: '#include <iostream>', cls: 'kw' },
+  { text: '#include <vector>', cls: 'kw' },
+  { text: '', cls: '' },
+  { text: 'class BigBuffer {', cls: 'kw' },
+  { text: '    int* data; size_t size;', cls: 'tp' },
+  { text: 'public:', cls: 'kw' },
+  { text: '    // 深拷贝构造：新申请堆内存 + 逐字节复制', cls: 'cm' },
+  { text: '    BigBuffer(const BigBuffer& o) { ... }', cls: 'fn' },
+  { text: '    // 移动构造：直接接管指针 + 原指针置空', cls: 'cm' },
+  { text: '    BigBuffer(BigBuffer&& o) noexcept {', cls: 'fn' },
+  { text: '        this->data = o.data;', cls: 'tp' },
+  { text: '        o.data = nullptr; // 必须置空！', cls: 'tag' },
+  { text: '    }', cls: 'fn' },
+  { text: '};', cls: 'kw' },
+  { text: '', cls: '' },
+  { text: 'int main() {', cls: 'kw' },
+  { text: '    BigBuffer a(1000000); // 占用 8MB 堆内存', cls: 'tp', id: 'init-a' },
+  { text: '    // 待执行操作...', cls: 'cm', id: 'action-line' },
+  { text: '}', cls: 'kw' }
+];
+let activeLineId = 'init-a';
+
+// 日志
+const logLines = [];
+function addLog(cmd, type, expl){
+  logLines.unshift({cmd, type, expl});
+  if(logLines.length > 30) logLines.pop();
+}
+
+/* ============ 初始化世界 ============ */
+function initWorld(){
+  heapObjects = [
+    {
+      id: 'h-1',
+      addr: '0x7fff' + Math.floor(Math.random()*9000+1000).toString(16),
+      size: '1,000,000 个 int',
+      bytes: '8.00 MB',
+      owner: 'a',
+      preview: [1, 2, 3, 4, '...', 999999, 1000000]
+    }
+  ];
+  stackVars = [
+    {
+      name: 'a',
+      type: 'BigBuffer (左值)',
+      badge: 'lval',
+      ptr: heapObjects[0].addr,
+      heapId: 'h-1',
+      isMoved: false,
+      hasSticker: false
+    }
+  ];
+  stats = { allocs: 1, copied: 0, timeMs: 0.1 };
+  nextHeapId = 2;
+}
+
+/* ============ 业务动作 ============ */
+
+// 1. 深拷贝 b = a
+function doDeepCopy(){
+  if(crashActive) return;
+  const aVar = stackVars.find(v => v.name === 'a');
+  if(!aVar || aVar.isMoved){
+    addLog('BigBuffer b = a;', 'err', '失败：源对象 a 已被掏空，无法进行有效深拷贝！');
+    return;
+  }
+  const newHeap = {
+    id: 'h-' + nextHeapId++,
+    addr: '0x7fff' + Math.floor(Math.random()*9000+1000).toString(16),
+    size: '1,000,000 个 int',
+    bytes: '8.00 MB',
+    owner: 'b',
+    preview: [1, 2, 3, 4, '...', 999999, 1000000]
+  };
+  heapObjects.push(newHeap);
+
+  // 检查是否已有 b
+  let bVar = stackVars.find(v => v.name === 'b');
+  if(!bVar){
+    stackVars.push({
+      name: 'b',
+      type: 'BigBuffer (左值)',
+      badge: 'lval',
+      ptr: newHeap.addr,
+      heapId: newHeap.id,
+      isMoved: false,
+      hasSticker: false
+    });
+  } else {
+    bVar.ptr = newHeap.addr;
+    bVar.heapId = newHeap.id;
+    bVar.isMoved = false;
+  }
+
+  stats.allocs += 1;
+  stats.copied += 1000000;
+  stats.timeMs += 15.4;
+
+  activeLineId = 'copy-action';
+  updateCodeLine('    BigBuffer b = a; // 触发深拷贝构造函数', 'copy-action');
+
+  addLog('BigBuffer b = a;', 'ok', '执行【深拷贝构造】：新调用 new[] 申请 8MB 堆内存，逐个拷贝 1,000,000 个元素！耗时 15.4ms。内存占用增加 8MB。');
+  flags.copyDone = true;
+  render();
+}
+
+// 2. 右值接收 c = createBigData()
+function doRvalueMove(){
+  if(crashActive) return;
+  const tempHeap = {
+    id: 'h-' + nextHeapId++,
+    addr: '0x7fff' + Math.floor(Math.random()*9000+1000).toString(16),
+    size: '1,000,000 个 int',
+    bytes: '8.00 MB',
+    owner: 'c (直接接管)',
+    preview: [100, 101, 102, '...', 999999]
+  };
+  heapObjects.push(tempHeap);
+
+  let cVar = stackVars.find(v => v.name === 'c');
+  if(!cVar){
+    stackVars.push({
+      name: 'c',
+      type: 'BigBuffer (左值)',
+      badge: 'lval',
+      ptr: tempHeap.addr,
+      heapId: tempHeap.id,
+      isMoved: false,
+      hasSticker: false
+    });
+  }
+
+  stats.allocs += 1; // 仅工厂函数本身分配了一次
+  // 移动零拷贝！
+  stats.timeMs += 0.001;
+
+  updateCodeLine('    BigBuffer c = createBigData(); // 自动调用移动构造！', 'rval-action');
+  addLog('BigBuffer c = createBigData();', 'ok', '返回值是临时无名右值！编译器自动触发【移动构造】：直接偷走临时对象的堆指针！零拷贝，耗时仅 0.001ms！');
+  flags.rvalMoveDone = true;
+  render();
+}
+
+// 3. 左值尝试赋值 d = a
+function doLvalueCopy(){
+  if(crashActive) return;
+  const aVar = stackVars.find(v => v.name === 'a');
+  if(!aVar || aVar.isMoved){
+    addLog('BigBuffer d = a;', 'err', '无法拷贝：a 已经是空壳！');
+    return;
+  }
+  const newHeap = {
+    id: 'h-' + nextHeapId++,
+    addr: '0x7fff' + Math.floor(Math.random()*9000+1000).toString(16),
+    size: '1,000,000 个 int',
+    bytes: '8.00 MB',
+    owner: 'd',
+    preview: [1, 2, 3, 4, '...', 999999, 1000000]
+  };
+  heapObjects.push(newHeap);
+
+  let dVar = stackVars.find(v => v.name === 'd');
+  if(!dVar){
+    stackVars.push({
+      name: 'd',
+      type: 'BigBuffer (左值)',
+      badge: 'lval',
+      ptr: newHeap.addr,
+      heapId: newHeap.id,
+      isMoved: false,
+      hasSticker: false
+    });
+  }
+
+  stats.allocs += 1;
+  stats.copied += 1000000;
+  stats.timeMs += 15.2;
+
+  updateCodeLine('    BigBuffer d = a; // a 是左值，只能深拷贝', 'lval-action');
+  addLog('BigBuffer d = a;', 'info', '变量 a 有名字（左值），编译器不敢假设你以后不用它，保守地退回到【深拷贝】！耗时 15.2ms。');
+  flags.lvalCopyDone = true;
+  render();
+}
+
+// 4. std::move(a) 打标签
+function doApplyMoveSticker(){
+  if(crashActive) return;
+  const aVar = stackVars.find(v => v.name === 'a');
+  if(!aVar){
+    addLog('std::move(a)', 'err', '找不到变量 a！');
+    return;
+  }
+  if(aVar.isMoved){
+    addLog('std::move(a)', 'err', 'a 已经被掏空了，贴便签也没有数据可偷！');
+    return;
+  }
+  aVar.hasSticker = true;
+  aVar.badge = 'rval';
+  aVar.type = 'BigBuffer&& (右值引用)';
+
+  updateCodeLine('    std::move(a); // 纯静态强转 static_cast<BigBuffer&&>(a)', 'move-cast');
+  addLog('std::move(a);', 'info', '【贴上便签】看堆内存：0 分配！看指针：0 移动！耗时：0ns！仅在 a 身上贴了“可掏空 (&&)”标签！');
+  flags.moveStickerDone = true;
+  render();
+}
+
+// 5. 移动构造：BigBuffer e = std::move(a)
+function doMoveConstructor(){
+  if(crashActive) return;
+  const aVar = stackVars.find(v => v.name === 'a');
+  if(!aVar || aVar.isMoved){
+    addLog('BigBuffer e = std::move(a);', 'err', '错误：a 已被掏空，无资源可转移！');
+    return;
+  }
+  if(!aVar.hasSticker){
+    aVar.hasSticker = true;
+  }
+
+  // 找到 a 原本拥有的堆对象
+  const heapObj = heapObjects.find(h => h.id === aVar.heapId);
+  if(heapObj){
+    heapObj.owner = 'e (已过户)';
+  }
+
+  // 创建 e 并接管指针
+  let eVar = stackVars.find(v => v.name === 'e');
+  if(!eVar){
+    stackVars.push({
+      name: 'e',
+      type: 'BigBuffer (新主人)',
+      badge: 'lval',
+      ptr: aVar.ptr,
+      heapId: aVar.heapId,
+      isMoved: false,
+      hasSticker: false
+    });
+  } else {
+    eVar.ptr = aVar.ptr;
+    eVar.heapId = aVar.heapId;
+  }
+
+  // a 被掏空！
+  aVar.ptr = 'nullptr (0x0)';
+  aVar.heapId = null;
+  aVar.isMoved = true;
+  aVar.hasSticker = false;
+  aVar.badge = 'hollow';
+  aVar.type = 'BigBuffer (已掏空/毛坯房)';
+
+  stats.timeMs += 0.001; // 仅指针赋值
+
+  updateCodeLine('    BigBuffer e = std::move(a); // e 偷走指针，a.data 置为 nullptr', 'move-ctor');
+  addLog('BigBuffer e = std::move(a);', 'ok', '【移动构造生效】：e 瞬间抢走堆指针！a.data 被安全重置为 nullptr。堆内存 0 分配，0 元素复制！');
+  flags.moveCtorDone = true;
+  render();
+}
+
+// 6. 踩坑：读取被 move 后的 a[0]
+function doReadHollowA(){
+  const aVar = stackVars.find(v => v.name === 'a');
+  if(!aVar || !aVar.isMoved){
+    addLog('std::cout << a[0];', 'info', '此时 a 尚未被掏空，读取正常。请先执行 std::move 掏空它。');
+    return;
+  }
+
+  crashActive = true;
+  document.body.classList.add('shake');
+  setTimeout(()=>document.body.classList.remove('shake'), 500);
+
+  const crashBar = document.getElementById('crashbar');
+  const crashText = document.getElementById('crashtext');
+  crashText.innerHTML = '<b>SIGSEGV / 空指针解引用崩溃！</b> 你试图访问 <code>a[0]</code>，但 <code>a.data</code> 已经被移动构造函数置为 <code>nullptr</code>！这是经典的“访问 Moved-from 对象”事故！';
+  crashBar.classList.add('show');
+
+  addLog('std::cout << a[0];', 'err', '💥 崩溃：解引用 nullptr！被 move 后的对象是合法但未指定状态，禁止再读取其业务数据！');
+  flags.readHollowDone = true;
+  render();
+}
+
+// 恢复崩溃
+function doRevive(){
+  crashActive = false;
+  document.getElementById('crashbar').classList.remove('show');
+  addLog('修复恢复', 'info', '已脱离空指针崩溃状态。请记住：被掏空的对象只能赋予新值或等待析构。');
+  render();
+}
+
+// 重新赋值 a
+function doReassignA(){
+  if(crashActive) return;
+  const aVar = stackVars.find(v => v.name === 'a');
+  if(!aVar){ return; }
+
+  const newHeap = {
+    id: 'h-' + nextHeapId++,
+    addr: '0x7fff' + Math.floor(Math.random()*9000+1000).toString(16),
+    size: '10 个 int (新住户)',
+    bytes: '40 Bytes',
+    owner: 'a (复活)',
+    preview: [9, 8, 7, 6, 5]
+  };
+  heapObjects.push(newHeap);
+
+  aVar.ptr = newHeap.addr;
+  aVar.heapId = newHeap.id;
+  aVar.isMoved = false;
+  aVar.hasSticker = false;
+  aVar.badge = 'lval';
+  aVar.type = 'BigBuffer (重新激活)';
+
+  stats.allocs += 1;
+  updateCodeLine('    a = BigBuffer(10); // 重新给 a 赋予新资源，安全复活', 'reassign-a');
+  addLog('a = BigBuffer(10);', 'ok', '【重新赋值安全】：被掏空的对象被注入了新的堆内存，完全合法复活！析构时也会安全释放新内存。');
+  flags.reassignDone = true;
+  render();
+}
+
+// 7. unique_ptr 模拟
+function doTryCopyUptr(){
+  if(crashActive) return;
+  addLog('auto p2 = p1; // 尝试拷贝 unique_ptr', 'err', '🛑 编译拦截失败！error: call to implicitly-deleted copy constructor of \'std::unique_ptr<File>\'！独占指针彻底禁用了拷贝构造！');
+  flags.uptrCopyFail = true;
+  render();
+}
+
+function doMoveUptr(){
+  if(crashActive) return;
+  let p1 = stackVars.find(v => v.name === 'p1');
+  if(!p1){
+    const fileHeap = {
+      id: 'h-file',
+      addr: '0x7fff' + Math.floor(Math.random()*9000+1000).toString(16),
+      size: 'File 句柄对象',
+      bytes: '64 Bytes',
+      owner: 'p1',
+      preview: ['FD: 3', 'Mode: RW']
+    };
+    heapObjects.push(fileHeap);
+    p1 = {
+      name: 'p1',
+      type: 'unique_ptr<File>',
+      badge: 'lval',
+      ptr: fileHeap.addr,
+      heapId: fileHeap.id,
+      isMoved: false,
+      hasSticker: false
+    };
+    stackVars.push(p1);
+  }
+
+  // 执行过户
+  const fileHeap = heapObjects.find(h => h.id === p1.heapId);
+  if(fileHeap){
+    fileHeap.owner = 'p2 (新主人)';
+  }
+
+  let p2 = stackVars.find(v => v.name === 'p2');
+  if(!p2){
+    stackVars.push({
+      name: 'p2',
+      type: 'unique_ptr<File>',
+      badge: 'lval',
+      ptr: p1.ptr,
+      heapId: p1.heapId,
+      isMoved: false,
+      hasSticker: false
+    });
+  }
+
+  p1.ptr = 'nullptr';
+  p1.heapId = null;
+  p1.isMoved = true;
+  p1.badge = 'hollow';
+  p1.type = 'unique_ptr<File> (空)';
+
+  updateCodeLine('    auto p2 = std::move(p1); // 唯一合法的过户方式！', 'uptr-move');
+  addLog('auto p2 = std::move(p1);', 'ok', '【过户成功】：unique_ptr 禁止复制，唯一转移所有权的方式就是 std::move！p1 归零，p2 接管文件句柄。');
+  flags.uptrMoveDone = true;
+  render();
+}
+
+function updateCodeLine(text, id){
+  const existing = codeLines.find(l => l.id === id);
+  if(!existing){
+    codeLines.splice(codeLines.length - 2, 0, { text, cls: 'tag active', id });
+  }
+  activeLineId = id;
+}
+
+/* ============ 渲染与关卡系统 ============ */
+
+function renderRail(){
+  const rail = document.getElementById('rail');
+  rail.innerHTML = STAGES.map((s, idx)=>{
+    const cls = idx === stage ? 'pill current' : (idx < stage ? 'pill done' : 'pill');
+    return `<div class="${cls}" onclick="jumpStage(${idx})">${s.nm}</div>${idx < STAGES.length - 1 ? '<div class="sep"></div>' : ''}`;
+  }).join('');
+}
+
+function renderQuest(){
+  const s = STAGES[stage];
+  const q = document.getElementById('quest');
+  const isFree = stage === STAGES.length - 1;
+  q.className = isFree ? 'quest free' : 'quest';
+
+  let bodyHtml = `
+    <div class="quest-head">
+      <span class="quest-stage">${s.stageTag}</span>
+      <span class="quest-title">${s.title}</span>
+      ${stage < STAGES.length - 1 ? `<button class="skip" onclick="jumpStage(${stage + 1})">跳过本关 →</button>` : ''}
+    </div>
+    <div class="q-row"><div class="k">📍 起点状态</div><div class="v">${s.start}</div></div>
+    <div class="q-row"><div class="k">🎯 任务</div><div class="v">${s.task}</div></div>
+    <div class="q-row"><div class="k">👀 观察点</div><div class="v">${s.watch}</div></div>
+  `;
+
+  if(stage === 8){
+    // 测验关
+    bodyHtml += `
+      <div class="quiz">
+        ${QUIZ.map((qz, qidx)=>{
+          const res = quiz[qidx];
+          return `
+            <div class="qitem">
+              <div class="qtext">${qz.q}</div>
+              <div class="opts">
+                ${qz.opts.map((opt, oidx)=>{
+                  let cls = 'opt';
+                  if(res !== null){
+                    if(oidx === qz.ans) cls += ' correct';
+                    else if(oidx === res.pick) cls += ' wrong';
+                    else cls += ' dim';
+                  }
+                  return `<button class="${cls}" onclick="answerQuiz(${qidx}, ${oidx})">${opt}</button>`;
+                }).join('')}
+              </div>
+              ${res !== null ? `<div class="qexpl">${res.ok ? '✅ 答对了！' : '❌ 答错了。'} ${qz.expl}</div>` : ''}
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  if(stage === 0){
+    bodyHtml += `<div class="go"><button onclick="startJourney()">开始旅程（进入第 1 关）→</button></div>`;
+  } else if(s.pass() && stage < STAGES.length - 1 && stage !== 8){
+    bodyHtml += `<div class="go"><button class="primary" onclick="jumpStage(${stage + 1})">✅ 本关目标达成！进入下一关 →</button></div>`;
+  } else if(stage === 8 && s.pass()){
+    bodyHtml += `<div class="go"><button class="primary" onclick="jumpStage(9)">🎉 测验全对！毕业并解锁自由模式 →</button></div>`;
+  }
+
+  q.innerHTML = bodyHtml;
+}
+
+function renderCode(){
+  const box = document.getElementById('codebox');
+  box.innerHTML = codeLines.map(l => {
+    const act = (l.id && l.id === activeLineId) ? 'active' : '';
+    return `<div class="codeline ${l.cls} ${act}">${escapeHtml(l.text)}</div>`;
+  }).join('');
+}
+
+function renderStack(){
+  const list = document.getElementById('stack-list');
+  list.innerHTML = stackVars.map(v => {
+    const isHollow = v.isMoved;
+    const badgeClass = v.badge === 'lval' ? 'badge-lval' : (v.badge === 'rval' ? 'badge-rval' : 'badge-hollow');
+    return `
+      <div class="stack-card ${isHollow ? 'moved' : ''}">
+        <div class="sc-head">
+          <span class="sc-name">${v.name}</span>
+          <span class="sc-badge ${badgeClass}">${v.badge}</span>
+        </div>
+        <div class="sc-row"><span>类型声明:</span><span class="val">${v.type}</span></div>
+        <div class="sc-row"><span>堆指针 data:</span><span class="val ${v.ptr.includes('nullptr') ? 'null' : 'ptr'}">${v.ptr}</span></div>
+        ${v.hasSticker ? `<div class="move-sticker">🏷️ 已盖章 std::move (右值引用 &&)</div>` : ''}
+        ${isHollow ? `<div class="move-sticker" style="border-color:var(--red);color:var(--red);background:rgba(248,113,113,.1);">⚠️ 已被掏空 (Moved-from 空壳)</div>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+function renderHeap(){
+  const list = document.getElementById('heap-list');
+  if(heapObjects.length === 0){
+    list.innerHTML = `<div style="color:var(--muted);font-size:12px;text-align:center;padding:20px;">堆内存为空</div>`;
+    return;
+  }
+  list.innerHTML = heapObjects.map(h => {
+    return `
+      <div class="heap-card">
+        <div class="hc-head">
+          <span class="hc-addr">${h.addr}</span>
+          <span class="hc-owner">归属者: <b>${h.owner}</b></span>
+        </div>
+        <div class="hc-slots">
+          ${h.preview.map(p => `<div class="hc-slot">${p}</div>`).join('')}
+        </div>
+        <div class="hc-meta">
+          <span>容量: ${h.size}</span>
+          <span>实际占用: ${h.bytes}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // 渲染统计
+  document.getElementById('stat-allocs').innerText = stats.allocs;
+  document.getElementById('stat-copied').innerText = stats.copied.toLocaleString();
+  document.getElementById('stat-time').innerText = stats.timeMs.toFixed(3) + ' ms';
+}
+
+function renderConsoleButtons(){
+  const btns = document.getElementById('btns');
+  const isFree = stage === STAGES.length - 1;
+
+  let btnHtml = '';
+
+  // 关卡 1 按钮
+  if(stage === 1 || isFree){
+    btnHtml += `<button class="primary" onclick="doDeepCopy()">深拷贝 b = a</button>`;
+  }
+  // 关卡 2 按钮
+  if(stage === 2 || isFree){
+    btnHtml += `<button class="action-btn" onclick="doRvalueMove()">c = createBigData() (右值)</button>`;
+  }
+  // 关卡 3 按钮
+  if(stage === 3 || isFree){
+    btnHtml += `<button onclick="doLvalueCopy()">普通赋值 d = a (左值)</button>`;
+  }
+  // 关卡 4 按钮
+  if(stage === 4 || isFree){
+    btnHtml += `<button class="primary" onclick="doApplyMoveSticker()">std::move(a) (贴便签)</button>`;
+  }
+  // 关卡 5 按钮
+  if(stage === 5 || isFree){
+    btnHtml += `<button class="fix-btn" onclick="doMoveConstructor()">e = std::move(a) (移动构造)</button>`;
+  }
+  // 关卡 6 按钮
+  if(stage === 6 || isFree){
+    btnHtml += `<button class="danger-btn" onclick="doReadHollowA()">读取 a[0] (踩坑测试)</button>`;
+    btnHtml += `<button class="fix-btn" onclick="doReassignA()">给 a 重新赋值 (复活)</button>`;
+  }
+  // 关卡 7 按钮
+  if(stage === 7 || isFree){
+    btnHtml += `<button class="danger-btn" onclick="doTryCopyUptr()">拷贝 unique_ptr (编译报错)</button>`;
+    btnHtml += `<button class="fix-btn" onclick="doMoveUptr()">std::move 过户 unique_ptr</button>`;
+  }
+
+  // 通用重置按钮
+  btnHtml += `<button onclick="resetWorldState()">↺ 重置环境</button>`;
+
+  btns.innerHTML = btnHtml;
+}
+
+function renderLogs(){
+  const box = document.getElementById('logbox');
+  if(logLines.length === 0){
+    box.innerHTML = `<div style="color:var(--muted);font-size:12px;">日志就绪，点击上方控制台按钮执行操作...</div>`;
+    return;
+  }
+  box.innerHTML = logLines.map(l => {
+    return `
+      <div class="logline ${l.type}">
+        <span class="cmd">${escapeHtml(l.cmd)}</span>
+        <div class="expl">${l.expl}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function render(){
+  renderRail();
+  renderQuest();
+  renderCode();
+  renderStack();
+  renderHeap();
+  renderConsoleButtons();
+  renderLogs();
+  saveState();
+}
+
+function startJourney(){
+  flags.started = true;
+  jumpStage(1);
+}
+
+function jumpStage(idx){
+  stage = idx;
+  if(stage === 1 && !flags.copyDone){
+    // stage 1 准备
+  }
+  render();
+}
+
+function answerQuiz(qidx, oidx){
+  const qz = QUIZ[qidx];
+  const ok = oidx === qz.ans;
+  quiz[qidx] = { pick: oidx, ok };
+  if(ok){
+    addLog(`测验第 ${qidx+1} 题`, 'ok', `回答正确！${qz.expl}`);
+  } else {
+    addLog(`测验第 ${qidx+1} 题`, 'err', `回答错误，再想想看！`);
+  }
+  render();
+}
+
+function resetWorldState(){
+  initWorld();
+  activeLineId = 'init-a';
+  addLog('环境已重置', 'info', '栈变量 a 重新就位，堆内存分配为 1 次。');
+  render();
+}
+
+function escapeHtml(str){
+  if(!str) return '';
+  return str.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+/* ============ 持久化 ============ */
+function saveState(){
+  try{
+    localStorage.setItem(KEY, JSON.stringify({ stage, flags, quiz }));
+  }catch(e){}
+}
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(KEY);
+    if(raw){
+      const data = JSON.parse(raw);
+      if(typeof data.stage === 'number') stage = data.stage;
+      if(data.flags) flags = data.flags;
+      if(Array.isArray(data.quiz)) quiz = data.quiz;
+    }
+  }catch(e){}
+}
+
+// 页面装载入口
+window.onload = function(){
+  initWorld();
+  loadState();
+  document.getElementById('b-revive').onclick = doRevive;
+  render();
+};
+</script>
+</body>
+</html>

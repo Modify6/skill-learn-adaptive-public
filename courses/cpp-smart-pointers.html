@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>C++ 智能指针 —— 谁拥有 · 谁销毁</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#151f36; --panel2:#0f1729;
+    --line:#26334d; --text:#dde6f5; --muted:#a6b9d9;
+    --blue:#3b82f6; --green:#22c55e; --purple:#a855f7;
+    --amber:#f5b544; --cyan:#38bdf8; --red:#f87171;
+    --mono:"Cascadia Code",Consolas,"JetBrains Mono",monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:radial-gradient(1200px 600px at 50% -100px,#16223d 0%,var(--bg) 60%);
+    color:var(--text);
+    font-family:system-ui,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+    padding:30px 18px 70px; line-height:1.65;
+  }
+  body.shake{animation:shake .5s;}
+  @keyframes shake{
+    0%,100%{transform:translateX(0);} 20%{transform:translateX(-9px);}
+    40%{transform:translateX(8px);} 60%{transform:translateX(-6px);} 80%{transform:translateX(4px);}
+  }
+  .wrap{max-width:1200px; margin:0 auto;}
+
+  /* ---------- header ---------- */
+  h1{font-size:26px; letter-spacing:.5px;}
+  h1 .dot-word{color:var(--amber);}
+  .sub{color:var(--muted); margin-top:6px; font-size:14.5px;}
+  .ladder{
+    margin-top:12px; padding:8px 14px; border:1px dashed var(--line); border-radius:10px;
+    font-size:12.5px; color:var(--muted); background:rgba(255,255,255,.02);
+    font-family:var(--mono);
+  }
+  .ladder b{color:var(--cyan); font-weight:600;}
+  .ladder .bad{color:var(--red);}
+
+  /* ---------- journey rail ---------- */
+  .journey{margin-top:22px;}
+  .rail{display:flex; align-items:center; gap:6px; overflow-x:auto; padding:4px 2px 10px;}
+  .pill{
+    flex:none; font-size:11.5px; padding:4px 11px; border-radius:999px;
+    border:1px solid var(--line); color:var(--muted); white-space:nowrap; background:var(--panel2);
+  }
+  .pill.done{color:var(--green); border-color:rgba(34,197,94,.55);}
+  .pill.current{color:var(--amber); border-color:var(--amber); box-shadow:0 0 10px rgba(245,181,68,.25); font-weight:700;}
+  .sep{flex:none; width:14px; height:2px; background:var(--line);}
+
+  /* ---------- quest card ---------- */
+  .quest{
+    border:1px solid rgba(245,181,68,.45); border-left:4px solid var(--amber);
+    background:linear-gradient(90deg, rgba(245,181,68,.07), var(--panel2) 45%);
+    border-radius:12px; padding:14px 18px;
+  }
+  .quest.free{border-color:rgba(34,197,94,.45); border-left-color:var(--green);
+    background:linear-gradient(90deg, rgba(34,197,94,.07), var(--panel2) 45%);}
+  .quest-head{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .quest-stage{font-family:var(--mono); font-size:11px; color:var(--amber); letter-spacing:1px;}
+  .quest-title{font-size:16px; font-weight:700;}
+  .skip{margin-left:auto; font-size:12px; color:var(--muted); cursor:pointer; border:none; background:none; text-decoration:underline dotted;}
+  .skip:hover{color:var(--text);}
+  .q-row{display:flex; gap:12px; margin-top:9px; font-size:13.5px;}
+  .q-row .k{flex:none; width:76px; color:var(--muted); font-weight:600;}
+  .q-row .v{color:var(--text);}
+  .q-row .v b{color:var(--amber);}
+  .quest .go{margin-top:12px;}
+  .quest .go button{
+    font-size:13px; padding:7px 18px; border-color:var(--amber); color:var(--amber);
+    font-family:system-ui,"Microsoft YaHei",sans-serif; font-weight:700;
+  }
+  /* quiz */
+  .quiz{margin-top:6px;}
+  .qitem{margin-top:12px; padding-top:10px; border-top:1px dashed var(--line);}
+  .qitem .qtext{font-size:13.5px; font-weight:600;}
+  .opts{display:flex; flex-direction:column; gap:6px; margin-top:8px;}
+  .opt{
+    text-align:left; font-size:12.5px; font-family:system-ui,"Microsoft YaHei",sans-serif;
+    background:#182338; color:var(--text);
+  }
+  .opt.correct{border-color:var(--green); color:var(--green); background:rgba(34,197,94,.1);}
+  .opt.wrong{border-color:var(--red); color:var(--red); background:rgba(248,113,113,.08);}
+  .opt.dim{opacity:.4;}
+  .qexpl{font-size:12px; color:var(--muted); margin-top:6px;}
+
+  /* ---------- crash banner ---------- */
+  .crashbar{
+    margin-top:18px; border:1px solid rgba(248,113,113,.6); border-radius:12px;
+    background:linear-gradient(90deg, rgba(248,113,113,.16), rgba(248,113,113,.04));
+    padding:12px 18px; font-size:14px; color:#ffc9c9; display:none;
+  }
+  .crashbar.show{display:flex; align-items:center; gap:12px; flex-wrap:wrap;}
+  .crashbar .boom{font-size:22px;}
+  .crashbar b{color:#fff;}
+  .crashbar .fix{margin-left:auto;}
+
+  /* ---------- stage ---------- */
+  .stage-scroll{overflow-x:auto; margin-top:20px; padding-bottom:6px;}
+  .stage{
+    min-width:1080px;
+    display:grid;
+    grid-template-columns:1.02fr 74px 1.05fr 74px 1.18fr;
+    gap:0 8px; align-items:stretch;
+  }
+  .col-head{margin-bottom:10px; text-align:center;}
+  .col-head .nick{font-size:17px; font-weight:700;}
+  .col-head .real{font-family:var(--mono); font-size:11.5px; color:var(--cyan); letter-spacing:1px; text-transform:uppercase;}
+  .col-head .duty{font-size:12px; color:var(--muted); margin-top:2px;}
+  .col{
+    background:var(--panel2); border:1px solid var(--line); border-radius:14px;
+    padding:14px; display:flex; flex-direction:column; gap:12px; min-height:430px;
+  }
+  .c1 .nick{color:var(--cyan);} .c2 .nick{color:var(--amber);} .c3 .nick{color:var(--purple);}
+
+  .flow{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; padding-top:26px;}
+  .flow .cmd{font-family:var(--mono); font-size:11px; color:var(--amber); white-space:nowrap;}
+  .flow .glyph{font-size:22px; color:var(--line); line-height:1;}
+  .flow .note{font-size:11px; color:var(--muted); writing-mode:vertical-rl; letter-spacing:2px;}
+
+  /* ---------- code column ---------- */
+  .codebox{
+    background:#0a0f1d; border:1px solid var(--line); border-radius:10px;
+    padding:12px 10px; font-family:var(--mono); font-size:12px; line-height:1.9;
+    min-height:330px; white-space:pre-wrap; word-break:break-all;
+  }
+  .cline{padding:1px 6px; border-radius:5px; color:#b9c7e4;}
+  .cline .cm{color:#5b6f95;}
+  .cline.hot{background:rgba(245,181,68,.14); color:#ffe1a6; border-left:2px solid var(--amber);}
+  .cfoot{font-size:11.5px; color:var(--muted); margin-top:auto;}
+
+  /* ---------- stack cards ---------- */
+  .var-card{
+    background:var(--panel); border:1px solid var(--line); border-radius:11px;
+    padding:9px 12px; box-shadow:0 6px 18px rgba(0,0,0,.25); font-size:12.5px;
+  }
+  .var-card .vhead{display:flex; align-items:center; gap:7px; font-family:var(--mono); font-weight:700; font-size:13px;}
+  .var-card .vtype{font-size:10.5px; color:var(--muted); font-weight:400;}
+  .var-card .vscope{margin-left:auto; font-size:10px; color:var(--muted); font-family:var(--mono);}
+  .var-card .vtarget{font-size:11.5px; color:var(--muted); margin-top:3px; font-family:var(--mono);}
+  .var-card.uniq{border-color:rgba(56,189,248,.5);}      .var-card.uniq .vhead{color:var(--cyan);}
+  .var-card.shared{border-color:rgba(168,85,247,.55);}   .var-card.shared .vhead{color:var(--purple);}
+  .var-card.weak{border-style:dashed; border-color:rgba(147,167,201,.5);}
+  .var-card.raw{border-color:rgba(248,113,113,.4);}
+  .var-card.raw .vhead{color:var(--red);}
+  .var-card .dang{color:var(--red); font-size:11px; margin-top:2px;}
+  .pop{animation:pop .5s cubic-bezier(.2,.9,.3,1.35);}
+  @keyframes pop{from{transform:scale(.72); opacity:0;} to{transform:scale(1); opacity:1;}}
+  .burn{animation:burn .8s forwards;}
+  @keyframes burn{30%{transform:scale(1.04); box-shadow:0 0 22px rgba(248,113,113,.5);} 100%{opacity:0; transform:scale(.8);}}
+
+  /* ---------- heap column ---------- */
+  .obj-card{
+    background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:10px 13px; box-shadow:0 6px 18px rgba(0,0,0,.25);
+  }
+  .obj-head{display:flex; align-items:center; gap:8px; font-family:var(--mono); font-size:13.5px; font-weight:700;}
+  .obj-kind{font-size:10px; border:1px solid; border-radius:4px; padding:0 5px; font-family:system-ui,"Microsoft YaHei",sans-serif;}
+  .counter{
+    margin-left:auto; font-family:var(--mono); font-weight:700; font-size:12px;
+    border:1px solid var(--purple); color:var(--purple); border-radius:99px; padding:1px 9px;
+    background:rgba(168,85,247,.12);
+  }
+  .counter.flash{background:var(--purple); color:#fff;}
+  .obj-holders{font-size:11.5px; color:var(--muted); margin-top:5px; line-height:1.7;}
+  .obj-holders b{color:var(--text); font-weight:600; font-family:var(--mono);}
+  .obj-holders .weaklist{opacity:.75;}
+  .obj-card.shared{border-color:rgba(168,85,247,.5);}
+  .obj-card.uniq{border-color:rgba(56,189,248,.5);}
+  .obj-card.raw{border-color:rgba(248,113,113,.45);}
+  .inner-key{
+    font-size:11px; color:var(--muted); margin-top:4px; font-family:var(--mono);
+    border-top:1px dashed var(--line); padding-top:4px;
+  }
+  .inner-key .kw{color:var(--purple);} .inner-key .kk{color:var(--cyan);}
+
+  /* graveyard + memory bar */
+  .graveyard{margin-top:auto; border:1px dashed rgba(248,113,113,.4); border-radius:12px; padding:10px 12px;}
+  .grave-head{display:flex; align-items:center; gap:8px; font-size:12px; color:#e8a3a3; font-weight:700;}
+  .grave-items{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;}
+  .ghost{
+    font-family:var(--mono); font-size:11.5px; color:#9d8fb5; opacity:.75;
+    border:1px solid rgba(168,85,247,.25); border-radius:8px; padding:3px 9px; background:rgba(168,85,247,.06);
+  }
+  .membar{margin-top:10px;}
+  .memtrack{height:10px; border-radius:6px; background:#1a2440; border:1px solid var(--line); overflow:hidden;}
+  .memfill{height:100%; background:linear-gradient(90deg,var(--green),#7dd87d); transition:width .6s, background .6s;}
+  .memfill.warn{background:linear-gradient(90deg,#e08b3c,var(--amber));}
+  .memfill.bad{background:linear-gradient(90deg,#c04141,var(--red));}
+  .memtext{font-size:10.5px; color:var(--muted); margin-top:4px; font-family:var(--mono);}
+  .empty{color:var(--muted); font-size:12.5px; text-align:center; padding:30px 0;}
+
+  /* ---------- console ---------- */
+  .console{margin-top:26px; background:var(--panel2); border:1px solid var(--line); border-radius:14px; overflow:hidden;}
+  .console-head{
+    display:flex; align-items:center; gap:10px; padding:10px 16px;
+    border-bottom:1px solid var(--line); background:rgba(255,255,255,.02);
+    font-size:13px; color:var(--muted); flex-wrap:wrap;
+  }
+  .btns{display:flex; gap:8px; flex-wrap:wrap; margin-left:auto;}
+  button{
+    font-family:var(--mono); font-size:12px; color:var(--text);
+    background:#1d2a47; border:1px solid var(--line); border-radius:8px;
+    padding:6px 12px; cursor:pointer; transition:all .15s;
+  }
+  button:hover:not(:disabled){border-color:var(--amber); color:var(--amber); transform:translateY(-1px);}
+  button:disabled{opacity:.3; cursor:not-allowed;}
+  button.primary{border-color:var(--amber); color:var(--amber);}
+  button.fixloop{border-color:var(--green); color:var(--green);}
+  .logbox{padding:12px 16px; max-height:240px; overflow-y:auto; font-family:var(--mono); font-size:12.5px;}
+  .logline{margin-bottom:8px;}
+  .logline .cmd{color:var(--amber);}
+  .logline .expl{color:var(--muted); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:12px; margin-top:1px;}
+  .logline.info{color:var(--cyan); font-family:system-ui,"Microsoft YaHei",sans-serif;}
+  .logline.ok{color:var(--green); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:12.5px;}
+  .logline.err{color:var(--red); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:12.5px;}
+
+  /* ---------- why cards ---------- */
+  .why{margin-top:26px; display:grid; grid-template-columns:repeat(3,1fr); gap:12px;}
+  .why-card{background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:14px 16px; font-size:13px;}
+  .why-card h3{font-size:13.5px; margin-bottom:6px;}
+  .why-card p{color:var(--muted); font-size:12.5px;}
+  .why-card b{color:var(--text);}
+  .w1 h3{color:var(--cyan);} .w2 h3{color:var(--purple);} .w3 h3{color:var(--amber);}
+
+  footer{margin-top:26px; text-align:center; color:var(--muted); font-size:12px;}
+  @media (max-width:900px){ .why{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>C++ 智能指针：<span class="dot-word">谁拥有</span> · <span class="dot-word">谁销毁</span></h1>
+  <p class="sub">治「忘了 delete / 删两次 / 删早了还在用」—— 把"什么时候删"从人脑搬进类型系统。循序渐进：从裸指针的事故现场出发，一关一关走到毕业。</p>
+  <div class="ladder">
+    三种死法：<span class="bad">忘删→泄漏·慢死</span> ｜ <span class="bad">双删→立崩</span> ｜ <span class="bad">早删→随机崩</span>
+    &nbsp;‖&nbsp; 三个绰号：<b>主人 unique_ptr</b>（房本独占·过户不复印） · <b>室友 shared_ptr</b>（数人头·最后走的拆房） · <b>访客 weak_ptr</b>（不占名额·进门先敲门）
+  </div>
+
+  <!-- journey -->
+  <div class="journey">
+    <div class="rail" id="rail"></div>
+    <div class="quest" id="quest"></div>
+  </div>
+
+  <div class="crashbar" id="crashbar">
+    <span class="boom">💥</span>
+    <span id="crashtext"></span>
+    <button class="fix" id="b-revive">↺ 修复重启（重来本关）</button>
+  </div>
+
+  <div class="stage-scroll">
+  <div class="stage">
+
+    <!-- code -->
+    <div class="col c1">
+      <div class="col-head">
+        <div class="real">Code</div>
+        <div class="nick">故事板 · 代码</div>
+        <div class="duty">你点的每个按钮，都会在这里写下一行</div>
+      </div>
+      <div class="codebox" id="code"></div>
+      <div class="cfoot">作用域 <b>{ }</b> 是这台戏的舞台边界：出作用域 = 该层壳全部析构。</div>
+    </div>
+
+    <div class="flow">
+      <div class="cmd">持有 →</div>
+      <div class="glyph">➜</div>
+      <div class="note">壳指对象</div>
+    </div>
+
+    <!-- stack -->
+    <div class="col c2">
+      <div class="col-head">
+        <div class="real">Stack</div>
+        <div class="nick">栈 · 壳的家</div>
+        <div class="duty">智能指针本体住这里：出作用域到点自动死</div>
+      </div>
+      <div id="stackVars"></div>
+      <div class="cfoot" id="stackfoot"></div>
+    </div>
+
+    <div class="flow">
+      <div class="cmd">← 析构</div>
+      <div class="glyph">🔥</div>
+      <div class="note">拆不拆看类型</div>
+    </div>
+
+    <!-- heap -->
+    <div class="col c3">
+      <div class="col-head">
+        <div class="real">Heap</div>
+        <div class="nick">堆 · 对象的家</div>
+        <div class="duty">new 出来的住这里：没壳管它，就永远没人删</div>
+      </div>
+      <div id="heapLive"></div>
+      <div class="graveyard">
+        <div class="grave-head">👻 泄漏坟场 · 忘删的下场</div>
+        <div class="grave-items" id="graveyard"></div>
+        <div class="membar">
+          <div class="memtrack"><div class="memfill" id="memfill"></div></div>
+          <div class="memtext" id="memtext"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <!-- console -->
+  <div class="console">
+    <div class="console-head">
+      <span>🕹️ 模拟机 —— 点按钮 = 写代码，看代码长出来、壳和对象怎么动</span>
+      <div class="btns">
+        <button id="b-in">{ 进作用域</button>
+        <button id="b-out">} 出作用域</button>
+        <button id="b-new">new Widget（裸）</button>
+        <button id="b-del">delete p</button>
+        <button id="b-use">use(p)</button>
+        <button id="b-mku">make_unique</button>
+        <button id="b-move">u2 = std::move(u)</button>
+        <button id="b-cpy">u2 = u（试拷贝）</button>
+        <button id="b-mks">make_shared</button>
+        <button id="b-scp">s2 = s1</button>
+        <button id="b-wk">w = weak_ptr(s1)</button>
+        <button id="b-lock">w.lock()</button>
+        <button id="b-fixloop" class="fixloop">🔧 破局：child 的钥匙降级 weak</button>
+        <button id="b-reset">↺ 重来本关</button>
+      </div>
+    </div>
+    <div class="logbox" id="log"></div>
+  </div>
+
+  <!-- constraints -->
+  <div class="why">
+    <div class="why-card w1">
+      <h3>🛑 为什么主人禁止复印</h3>
+      <p>复印 unique_ptr = <b>两张房本管一套房</b> = 两个壳各删一次 = 双删。与其运行时崩，不如<b>编译期就红</b>——拷贝构造被 delete，程序根本编译不过。这就是"把何时删交给类型系统"的含义：事故在发生前就被消灭。</p>
+    </div>
+    <div class="why-card w2">
+      <h3>🔢 为什么室友要数人头</h3>
+      <p>多方都持有，<b>谁都不能擅自拆房</b>。每复印一把钥匙 +1、每把钥匙析构 −1，<b>减到 0 的最后一人负责拆</b>。代价：计数器（控制块）本身的内存 + 原子操作开销——所以它不该是默认选项，默认是零开销的主人。</p>
+    </div>
+    <div class="why-card w3">
+      <h3>🚪 为什么必须有访客</h3>
+      <p>两个对象互持钥匙 → 两边人头永不归零 → <b>双双泄漏</b>（第⑦关亲眼见）。还有一类需求："我只想看看，不该因为我看着你、你就不能死。" lock() = 敲门：房在，进门（临时拿钥匙）；房没了，返回 nullptr——<b>访客永远不会悬垂</b>。</p>
+    </div>
+  </div>
+
+  <footer>三样东西带回 ZCode 复述：三种死法（忘删·双删·早删）→ 三格地图（主人·室友·访客）→ 选型规则（说清唯一主人 unique ｜ 说不清 shared ｜ 只想看 weak）｜ 下一遍钻洞：控制块里有什么、make_shared 为什么好、enable_shared_from_this</footer>
+</div>
+
+<script>
+const C = {blue:'#3b82f6', green:'#22c55e', purple:'#a855f7', amber:'#f5b544', cyan:'#38bdf8', red:'#f87171'};
+const KEY = 'cpp-smart-pointers-journey';
+
+/* ============ 关卡定义 ============ */
+const STAGES = [
+  { nm:'起点·导览', stageTag:'STAGE 0 / 8', title:'先认地形：三块在哪',
+    start:'一张空场：demo() 作用域开着，栈上一个壳都没有，堆是空的。',
+    task:'看清三列各管什么：<b>代码</b>＝你做过的事，<b>栈</b>＝壳的家（壳到点自动死），<b>堆</b>＝对象的家（没人管生死）。然后点「开始」。',
+    watch:'下面模拟机的按钮，就是接下来你要亲手写的代码。',
+    pass:()=>flags.started },
+  { nm:'① 忘删', stageTag:'STAGE 1 / 8', title:'裸指针时代：事故一',
+    start:'demo() 里空无一物，模拟机只开了两个按钮。',
+    task:'按 <b>new Widget</b> 造一个裸指针，再按 <b>} 出作用域</b>。',
+    watch:'壳（p）随作用域消失——但堆上的 Widget <b>没人删</b>，变成 👻 进坟场，内存条上涨。',
+    done:'裸指针只是个地址，它析构什么也不做。忘删→泄漏，慢死。',
+    pass:()=>flags.leakSeen },
+  { nm:'② 双删·悬垂', stageTag:'STAGE 2 / 8', title:'裸指针时代：事故二三',
+    start:'demo() 里已有一个裸指针 p，指着堆上的 Widget#1。',
+    task:'按 <b>delete p</b>（正常拆房）。然后任选一种死法：再按一次 <b>delete p</b>（双删），或按 <b>use(p)</b>（访问已死的对象）。',
+    watch:'💥 整个程序当场崩溃。这就是另外两种死法：双删立崩、早删随机崩。',
+    done:'三种死法你全见过了。死因都是同一个：删的时机存在人脑里。',
+    pass:()=>flags.crashSeen },
+  { nm:'③ 主人登场', stageTag:'STAGE 3 / 8', title:'unique_ptr：房本独占',
+    start:'回到空场。',
+    task:'按 <b>make_unique</b>，再按 <b>} 出作用域</b>。',
+    watch:'壳 u 析构的瞬间，<b>自动 delete</b>：Widget 火化，没进坟场——你全程没写过 delete。',
+    done:'把"到点自动死"的栈机制接到堆对象上。这就是主人：壳死，房拆。',
+    pass:()=>flags.uniqAuto },
+  { nm:'④ 房本过户', stageTag:'STAGE 4 / 8', title:'move：不复印，只移交',
+    start:'demo() 里已有主人 u，持着 Widget#1 的房本。',
+    task:'按 <b>u2 = std::move(u)</b> 看过户；顺手按 <b>u2 = u（试拷贝）</b> 看编译器翻脸。最后 <b>} 出作用域</b>。',
+    watch:'move 后：u 变空壳(nullptr)，对象<b>没死只是换主人</b>。试拷贝：🛑 编译错误，程序根本跑不起来——双删被消灭在编译期。',
+    done:'所有权可以移交，不可以复制。移交后旧壳交出一切。',
+    pass:()=>flags.moveOut },
+  { nm:'⑤ 室友与人头', stageTag:'STAGE 5 / 8', title:'shared_ptr：数人头',
+    start:'空场。这一关要走出一条完整链。',
+    task:'按 <b>make_shared</b>（人头=1）→ <b>{ 进作用域</b> → <b>s2 = s1</b>（人头=2）→ <b>} 出作用域</b>（人头=1）→ 再 <b>} 出作用域</b>。',
+    watch:'每复印一把钥匙人头 +1，每层壳析构 −1；<b>减到 0 的最后一人关灯拆房</b>。',
+    done:'说不清归谁的对象，交给数人头：谁最后走，谁负责拆。',
+    pass:()=>flags.sharedZero },
+  { nm:'⑥ 访客敲门', stageTag:'STAGE 6 / 8', title:'weak_ptr：不占名额',
+    start:'demo() 里已有室友 s1 持着 Widget#1。',
+    task:'按 <b>w = weak_ptr(s1)</b>（注意人头<b>不变</b>）→ 按 <b>w.lock()</b>（敲门成功）→ <b>} 出作用域</b>（s1 析构，对象火化）→ 再按一次 <b>w.lock()</b>。',
+    watch:'w 是长寿命的观察者（住在 main 层）：对象活着时 lock 拿到临时钥匙；对象死后 lock 返回 nullptr——<b>不崩</b>。',
+    done:'访客永远不悬垂：不持钥匙，所以没有"钥匙还在房没了"的事故。',
+    pass:()=>flags.weakLockDead },
+  { nm:'⑦ 循环引用', stageTag:'STAGE 7 / 8', title:'两间房互相撑着',
+    start:'demo() 里已有 parent 和 child 两个对象，互持对方的钥匙（成员变量）。',
+    task:'先按 <b>} 出作用域</b>：亲眼看着<b>谁也死不掉</b>，双双进坟场。然后按 <b>🔧 破局</b> 重建场景，再 <b>} 出作用域</b> 看正确结局。',
+    watch:'互持版：两个壳都没了，人头各剩 1（被对方的成员撑着）→ 泄漏。破局版：child 的钥匙降级 weak → parent 壳死 → parent 火化 → 级联 child 火化。',
+    done:'weak 存在的头号理由：剪断循环。共享ownership用 shared，观察用 weak。',
+    pass:()=>flags.loopLeak && flags.loopFixed },
+  { nm:'⑧ 毕业测', stageTag:'STAGE 8 / 8', title:'毕业测：3 道题',
+    start:'三种死法、三种壳，你都亲手走了一遍。',
+    task:'答对下面 3 道题就毕业（答错可以重选）。',
+    watch:'每题答完有解释。',
+    done:'毕业！自由模式解锁。',
+    pass:()=>quiz.length===3 && quiz.every(v=>v && v.ok) },
+];
+
+const QUIZ = [
+  { q:'1 / 3 · loadConfig() 造好一个 Config 对象返回给调用方，从头到尾只有调用方拥有它。用哪个？',
+    opts:['shared_ptr<Config> —— 共享才安全','unique_ptr<Config> —— 说得清唯一主人，默认它','weak_ptr<Config> —— 返回方只想留个念想'],
+    ans:1,
+    expl:'说得清唯一主人 → unique_ptr，零开销。shared_ptr 的控制块和原子计数是白付的税。' },
+  { q:'2 / 3 · Web 服务器每来一个请求就 new 一个 Request，处理完从不 delete。这是哪种死法、长期后果？',
+    opts:['双删：当场崩溃','早删：悬垂指针随机崩','忘删：内存被一点点吃光，慢死'],
+    ans:2,
+    expl:'泄漏不崩，它是慢死——程序越来越肥，最后被系统掐掉。第①关你亲眼看过它进坟场。' },
+  { q:'3 / 3 · Parent 持有 shared_ptr<Child>，Child 也持有 shared_ptr<Parent>。出作用域后？',
+    opts:['两个都正常销毁','都死不掉：人头各剩 1 互相撑着，泄漏','编译不过：C++ 禁止这样写'],
+    ans:1,
+    expl:'人头永不归零 → 双双泄漏（第⑦关第一幕）。破法：把其中一边降级为 weak_ptr。' },
+];
+
+/* ============ 状态 ============ */
+let world = null;
+let flags = {};
+let stage = 0;
+let quiz = [null, null, null];
+const seen = new Set();
+const logLines = [];
+let hotKey = null;
+
+function addLog(cmd, type, expl){
+  logLines.unshift({cmd, type, expl});
+  if(logLines.length > 40) logLines.pop();
+}
+function fresh(key, cls){ if(seen.has(key)) return cls; seen.add(key); return cls + ' pop'; }
+
+/* ============ 世界 ============ */
+function blankWorld(){
+  return {
+    seq: 0,
+    heap: {},                 // id -> obj
+    scopes: [ {name:'main()', vars:[]}, {name:'demo()', vars:[]} ],
+    code: [],
+    crashed: false, crashReason: '',
+    loopFixedMode: false,
+  };
+}
+function pushCode(text, comment){
+  world.code.push({t:text, c:comment||''});
+  hotKey = 'code-' + (world.code.length-1);
+}
+function newObj(name, kind, extra){
+  const id = ++world.seq;
+  world.heap[id] = Object.assign({id, name, kind, count:0, alive:true, leaked:false, inner:[]}, extra||{});
+  return world.heap[id];
+}
+function nextName(base){
+  const taken = new Set();
+  world.scopes.forEach(s=>s.vars.forEach(v=>taken.add(v.name)));
+  if(!taken.has(base)) return base;
+  let i = 2;
+  while(taken.has(base + i)) i++;
+  return base + i;
+}
+function addVar(scopeIdx, name, type, target){
+  const v = {name, type, target};
+  world.scopes[scopeIdx].vars.push(v);
+  return v;
+}
+function topScope(){ return world.scopes.length - 1; }
+
+/* ============ 每关预置 ============ */
+function seedStage(n){
+  world = blankWorld();
+  seen.clear(); logLines.length = 0; hotKey = null;
+  pushCode('void demo()', '');
+  pushCode('{', '');
+  if(n === 2){
+    const o = newObj('Widget', 'raw');
+    addVar(1, 'p', 'raw', o.id);
+    pushCode('    Widget* p = new Widget();', '裸指针：一张写着地址的纸条');
+    addLog('（预置）Widget* p = new Widget();', 'cmd', 'demo() 里已经有一个裸指针 p。它是你的——怎么删、何时删，全看你。');
+  } else if(n === 4){
+    const o = newObj('Widget', 'uniq');
+    addVar(1, 'u', 'uniq', o.id);
+    pushCode('    auto u = std::make_unique<Widget>();', '房本：u 是唯一主人');
+    addLog('（预置）auto u = make_unique<Widget>();', 'cmd', 'demo() 里已有主人 u，持着 Widget#1 的房本。');
+  } else if(n === 6){
+    const o = newObj('Widget', 'shared', {count:1});
+    addVar(1, 's1', 'shared', o.id);
+    pushCode('    auto s1 = std::make_shared<Widget>();', '钥匙：室友 s1');
+    addLog('（预置）auto s1 = make_shared<Widget>();', 'cmd', 'demo() 里已有室友 s1（人头=1）。观察者 w 将住在 main 层——活得比 demo() 久。');
+  } else if(n === 7){
+    const P = newObj('Parent', 'shared', {count:2});
+    const Ch = newObj('Child', 'shared', {count:2});
+    P.inner.push({type:'shared', target:Ch.id});   // Parent 的成员持有 Child
+    Ch.inner.push({type:'shared', target:P.id});   // Child 的成员持有 Parent
+    addVar(1, 'parent', 'shared', P.id);
+    addVar(1, 'child', 'shared', Ch.id);
+    pushCode('    auto parent = std::make_shared<Parent>();', '');
+    pushCode('    auto child  = std::make_shared<Child>();', '');
+    pushCode('    parent->kid = child;', '成员钥匙：+1');
+    pushCode('    child->mom = parent;', '成员钥匙：+1 ← 循环形成');
+    addLog('（预置）parent ⇄ child 互持钥匙', 'cmd', '两个对象各自的人头=2：自己的壳 + 对方成员里的那把。出作用域后会发生什么，你猜。');
+  } else if(n === 7.5){
+    // 破局版（由 fixloop 按钮进入）
+    world.loopFixedMode = true;
+    const P = newObj('Parent', 'shared', {count:1});
+    const Ch = newObj('Child', 'shared', {count:2});
+    P.inner.push({type:'shared', target:Ch.id});
+    Ch.inner.push({type:'weak',   target:P.id});   // ← 降级：weak 不撑人头
+    addVar(1, 'parent', 'shared', P.id);
+    addVar(1, 'child', 'shared', Ch.id);
+    pushCode('    auto parent = std::make_shared<Parent>();', '');
+    pushCode('    auto child  = std::make_shared<Child>();', '');
+    pushCode('    parent->kid = child;', '成员钥匙：+1');
+    pushCode('    child->mom = weak_ptr(parent);', '👁️ 访客钥匙：不占名额');
+    addLog('（重建）child->mom = weak_ptr(parent)', 'cmd', '同一场景，只改了一行：child 持有的那把钥匙降级成访客。Parent 的人头现在=1（只有 parent 壳）。再出作用域试试。');
+  } else {
+    addLog(null, 'info', n===0 ? '起点：空场。跟着引导卡，一关一关走。' : '本关起点已就绪，按任务卡行动。');
+  }
+}
+
+/* ============ 持久化 ============ */
+function saveState(){
+  try{ localStorage.setItem(KEY, JSON.stringify({stage, quiz, flags})); }catch(e){}
+}
+function loadState(){
+  try{
+    const d = JSON.parse(localStorage.getItem(KEY));
+    if(!d) return false;
+    stage = d.stage||0; quiz = Array.isArray(d.quiz)?d.quiz:[null,null,null];
+    flags = d.flags||{};
+    return true;
+  }catch(e){ return false; }
+}
+
+/* ============ 关卡推进 ============ */
+function progress(){
+  let moved = false;
+  while(stage < STAGES.length && STAGES[stage].pass()){
+    const s = STAGES[stage];
+    addLog(null, 'ok', '✅ ' + s.nm + ' 通过：' + (s.done || ''));
+    stage++; moved = true;
+    if(stage < STAGES.length) seedStage(stage);
+  }
+  if(stage >= STAGES.length){
+    addLog(null, 'ok', '🏁 毕业！整条链你都亲手走通了。自由模式解锁——随便按，做实验。');
+  }
+  if(moved){ renderQuest(); saveState(); }
+}
+
+/* ============ 动作 ============ */
+function crash(reason, cmdText){
+  world.crashed = true; world.crashReason = reason;
+  flags.crashSeen = true;
+  addLog(cmdText, 'err', '💥 崩溃：' + reason);
+  document.body.classList.remove('shake'); void document.body.offsetWidth;
+  document.body.classList.add('shake');
+  renderAll();
+}
+
+function doNew(){
+  if(world.crashed) return;
+  const name = nextName('p');
+  const o = newObj('Widget', 'raw');
+  addVar(topScope(), name, 'raw', o.id);
+  pushCode('    Widget* ' + name + ' = new Widget();', '裸指针：一张写着地址的纸条');
+  addLog('Widget* ' + name + ' = new Widget();', 'cmd', '堆上造了个 Widget，栈上拿到一个地址。谁负责 delete？只有你自己知道。');
+  renderAll(); progress();
+}
+function lastRawVar(){
+  for(let i = topScope(); i >= 0; i--){
+    const vs = world.scopes[i].vars.filter(v=>v.type==='raw');
+    if(vs.length) return vs[vs.length-1];
+  }
+  return null;
+}
+function doDel(){
+  if(world.crashed) return;
+  const v = lastRawVar();
+  if(!v){ addLog(null,'info','没有裸指针可删。'); renderAll(); return; }
+  const o = world.heap[v.target];
+  if(o.alive){
+    o.alive = false;
+    pushCode('    delete ' + v.name + ';', '');
+    addLog('delete ' + v.name + ';', 'cmd', 'Widget 正常销毁。但注意：' + v.name + ' 这张纸条还写着那个地址——它现在指向一块已经拆掉的地。');
+  } else {
+    crash('double delete：同一块内存释放两次，堆结构损坏，当场崩。', 'delete ' + v.name + ';');
+  }
+  renderAll(); progress();
+}
+function doUse(){
+  if(world.crashed) return;
+  const v = lastRawVar();
+  if(!v){ addLog(null,'info','没有裸指针可用。'); renderAll(); return; }
+  const o = world.heap[v.target];
+  pushCode('    use(' + v.name + ');', '');
+  if(o.alive){
+    addLog('use(' + v.name + ');', 'ok', '✅ 正常访问 ' + o.name + '#' + o.id + '。');
+  } else {
+    crash('悬垂指针（dangling）：访问已销毁的对象。运气好读到垃圾数据，运气差直接 segfault——所以叫"随机崩"。', 'use(' + v.name + ');');
+  }
+  renderAll(); progress();
+}
+function doMku(){
+  if(world.crashed) return;
+  const name = nextName('u');
+  const o = newObj('Widget', 'uniq');
+  addVar(topScope(), name, 'uniq', o.id);
+  pushCode('    auto ' + name + ' = std::make_unique<Widget>();', '房本：' + name + ' 是唯一主人');
+  addLog('auto ' + name + ' = make_unique<Widget>();', 'cmd', '同样的堆对象，但这次它有房本了。' + name + ' 死的时候会自动 delete——不需要任何人记得。');
+  renderAll(); progress();
+}
+function doMove(){
+  if(world.crashed) return;
+  const sv = world.scopes.flatMap(s=>s.vars).find(v=>v.type==='uniq' && v.target!==null);
+  if(!sv){ addLog(null,'info','没有持着对象的主人可移交（先 make_unique，或别 move 两次）。'); renderAll(); return; }
+  const name = nextName('u2');
+  const o = world.heap[sv.target];
+  sv.target = null;
+  addVar(topScope(), name, 'uniq', o.id);
+  flags.moveDone = true;
+  pushCode('    auto ' + name + ' = std::move(' + sv.name + ');', '房本过户：' + sv.name + ' 变空壳');
+  addLog('auto ' + name + ' = std::move(' + sv.name + ');', 'cmd', '过户完成：对象没死，只是换了主人。' + sv.name + ' 交出一切，变成 nullptr 空壳（再解引用它会崩，编译器也会警告你用它）。');
+  renderAll(); progress();
+}
+function doCpy(){
+  if(world.crashed) return;
+  const sv = world.scopes.flatMap(s=>s.vars).find(v=>v.type==='uniq');
+  if(!sv){ addLog(null,'info','先 make_unique 一个主人，再试拷贝它。'); renderAll(); return; }
+  pushCode('    auto u2 = ' + sv.name + ';', '❌ 编译不过');
+  addLog('auto u2 = ' + sv.name + ';', 'err', '🛑 编译错误：attempting to reference a deleted function —— unique_ptr 的拷贝构造 = delete。两张房本=同一套房拆两次=双删。事故被消灭在编译期，程序根本跑不起来。这就是把"何时删"交给类型系统。');
+  renderAll(); progress();
+}
+function doMks(){
+  if(world.crashed) return;
+  const name = nextName('s1');
+  const o = newObj('Widget', 'shared', {count:1});
+  addVar(topScope(), name, 'shared', o.id);
+  pushCode('    auto ' + name + ' = std::make_shared<Widget>();', '钥匙：人头=1');
+  addLog('auto ' + name + ' = make_shared<Widget>();', 'cmd', '这间房上了计数器：当前人头=1（' + name + ' 持一把钥匙）。');
+  renderAll(); progress();
+}
+function doScp(){
+  if(world.crashed) return;
+  const src = world.scopes.flatMap(s=>s.vars).find(v=>v.type==='shared');
+  if(!src){ addLog(null,'info','先 make_shared 一个室友。'); renderAll(); return; }
+  const name = nextName('s2');
+  const o = world.heap[src.target];
+  o.count++;
+  if(o.count>=2) flags.sharedPeak = true;
+  addVar(topScope(), name, 'shared', o.id);
+  pushCode('    auto ' + name + ' = ' + src.name + ';', '钥匙+1，记账');
+  addLog('auto ' + name + ' = ' + src.name + ';', 'cmd', 'shared_ptr 允许复印——每把钥匙都在计数器上记账。人头=' + o.count + '。');
+  renderAll(); progress();
+}
+function doWk(){
+  if(world.crashed) return;
+  const src = world.scopes.flatMap(s=>s.vars).find(v=>v.type==='shared');
+  if(!src){ addLog(null,'info','weak_ptr 要从一个 shared_ptr 生成（先 make_shared）。'); renderAll(); return; }
+  const name = nextName('w');
+  const o = world.heap[src.target];
+  addVar(0, name, 'weak', o.id);   // 长寿命观察者：住 main 层
+  pushCode('    std::weak_ptr<Widget> ' + name + ' = ' + src.name + ';', '访客：不占名额（' + name + ' 住在 main，活得比 demo 久）');
+  addLog('weak_ptr<Widget> ' + name + ' = ' + src.name + ';', 'cmd', '访客登记：人头<b>不变</b>（还是 ' + o.count + '）——weak 不撑人头，所以也不阻止拆房。');
+  renderAll(); progress();
+}
+function doLock(){
+  if(world.crashed) return;
+  const w = world.scopes.flatMap(s=>s.vars).find(v=>v.type==='weak');
+  if(!w){ addLog(null,'info','先 w = weak_ptr(s1) 造一个访客。'); renderAll(); return; }
+  const o = world.heap[w.target];
+  pushCode('    if (auto tmp = ' + w.name + '.lock()) { … }', '敲门');
+  if(o.alive){
+    addLog('if (auto tmp = ' + w.name + '.lock())', 'ok', '🚪 敲门有人：lock() 返回一个临时 shared_ptr（人头临时 ' + o.count + '→' + (o.count+1) + '→' + o.count + '，tmp 活期间对象保证不死）。安全访问完，tmp 析构，人头还回去。');
+  } else {
+    flags.weakLockDead = true;
+    addLog('if (auto tmp = ' + w.name + '.lock())', 'ok', '🚪 敲门无人应：对象已经销毁，lock() 返回 nullptr。注意——<b>你没有崩</b>。裸指针这时是悬垂炸弹，weak 永远安全：不持钥匙，就没有"钥匙还在房没了"。');
+  }
+  renderAll(); progress();
+}
+function destroyShared(id){
+  const o = world.heap[id];
+  if(!o || !o.alive) return;
+  o.count--;
+  if(o.count === 0){
+    o.alive = false;
+    addLog(null, 'cmd', '🔥 ' + o.name + '#' + o.id + ' 人头归零，最后一人关灯：对象销毁。');
+    o.inner.forEach(m=>{ if(m.type==='shared') destroyShared(m.target); });
+  }
+}
+function doScopeOut(){
+  if(world.crashed) return;
+  if(world.scopes.length <= 1){ addLog(null,'info','main() 是最外层，不能再出了。'); renderAll(); return; }
+  const s = world.scopes.pop();
+  pushCode('}', '出作用域：本层壳全部析构');
+  addLog('}', 'cmd', '出作用域 —— ' + s.name + ' 层的壳按倒序析构：');
+  for(let i = s.vars.length-1; i >= 0; i--){
+    const v = s.vars[i];
+    if(v.target === null){ addLog(null,'info','· ' + v.name + '（空壳）析构：无事发生。'); continue; }
+    const o = world.heap[v.target];
+    if(v.type === 'uniq'){
+      o.alive = false;
+      addLog(null,'cmd','· ' + v.name + ' 析构 → <b>自动 delete</b>：' + o.name + '#' + o.id + ' 火化。');
+      flags.uniqAuto = true;
+      if(flags.moveDone) flags.moveOut = true;
+    } else if(v.type === 'shared'){
+      const before = o.count;
+      destroyShared(o.id);
+      if(o.count > 0){
+        addLog(null,'info','· ' + v.name + ' 析构 → 人头 ' + before + '→' + o.count + '，还有人持有，房不拆。');
+      } else {
+        if(flags.sharedPeak) flags.sharedZero = true;
+      }
+    } else if(v.type === 'raw'){
+      addLog(null,'info','· ' + v.name + ' 析构 —— 裸指针析构<b>什么也不做</b>。');
+    } else if(v.type === 'weak'){
+      addLog(null,'info','· ' + v.name + '（访客）析构：无副作用。');
+    }
+  }
+  sweepLeaks();
+  renderAll(); progress();
+}
+function doScopeIn(){
+  if(world.crashed) return;
+  world.scopes.push({name:'block_' + (world.scopes.length), vars:[]});
+  pushCode('{', '新作用域');
+  addLog('{', 'cmd', '进入新作用域。这层里造的壳，出门时全部析构。');
+  renderAll(); progress();
+}
+function sweepLeaks(){
+  const holders = new Set();
+  world.scopes.forEach(s=>s.vars.forEach(v=>{ if(v.type!=='weak' && v.target!==null) holders.add(v.target); }));
+  Object.values(world.heap).forEach(o=>{
+    if(!o.alive || o.leaked) return;
+    if(o.kind === 'raw' && !holders.has(o.id)){
+      o.leaked = true; flags.leakSeen = true;
+      addLog(null,'err','⚠️ ' + o.name + '#' + o.id + ' 成了孤儿：没有任何指针够得着它，delete 永远不会发生 → 泄漏，进坟场。');
+    }
+    if(o.kind === 'shared' && o.count > 0 && !holders.has(o.id)){
+      o.leaked = true; flags.loopLeak = true;
+      addLog(null,'err','⚠️ ' + o.name + '#' + o.id + ' 壳都析构了，人头还剩 ' + o.count + '（被对方的成员钥匙撑着）→ 拆不掉，泄漏。');
+    }
+  });
+}
+function doFixloop(){
+  if(world.crashed) return;
+  flags.loopFixed = true;
+  seedStage(7.5);
+  renderAll(); progress();
+}
+function doReset(){
+  seedStage(stage === STAGES.length ? 0 : stage);
+  progress();   // 若本关达成条件已见过（如已崩溃过），重置后直接推进
+  renderAll();
+}
+
+/* ============ 渲染 ============ */
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');}
+
+function renderRail(){
+  const el = document.getElementById('rail');
+  let html = '';
+  STAGES.forEach((s,i)=>{
+    let cls = 'pill';
+    if(stage >= STAGES.length || i < stage) cls += ' done';
+    else if(i === stage) cls += ' current';
+    const mark = (stage >= STAGES.length || i < stage) ? '✓ ' : '';
+    html += `<span class="${cls}">${mark}${esc(s.nm)}</span>`;
+    if(i < STAGES.length-1) html += '<span class="sep"></span>';
+  });
+  html += '<span class="sep"></span><span class="pill' + (stage>=STAGES.length?' current':'') + '">🏁 自由模式</span>';
+  el.innerHTML = html;
+}
+
+function quizHTML(){
+  return '<div class="quiz">' + QUIZ.map((it,i)=>{
+    const st = quiz[i];
+    const opts = it.opts.map((o,j)=>{
+      let cls = 'opt';
+      if(st){
+        if(j === it.ans) cls += ' correct';
+        else if(st.pick === j) cls += ' wrong';
+        else cls += ' dim';
+      }
+      const mark = st ? (j===it.ans ? ' ✅' : (st.pick===j ? ' ❌' : '')) : '';
+      return `<button class="${cls}" data-q="${i}" data-o="${j}" ${st && st.ok ? 'disabled':''}>${esc(o)}${mark}</button>`;
+    }).join('');
+    const expl = st ? `<div class="qexpl">${st.ok ? '✅' : '❌ 不对，再选一次。'} ${esc(it.expl)}</div>` : '';
+    return `<div class="qitem"><div class="qtext">${esc(it.q)}</div><div class="opts">${opts}</div>${expl}</div>`;
+  }).join('') + '</div>';
+}
+
+function renderQuest(){
+  const el = document.getElementById('quest');
+  if(stage >= STAGES.length){
+    el.className = 'quest free pop';
+    el.innerHTML = `
+      <div class="quest-head">
+        <span class="quest-stage" style="color:var(--green)">GRADUATED</span>
+        <span class="quest-title">🏁 终点：这条链你走通了</span>
+        <button class="skip" id="b-restart">↺ 从起点再走一遍</button>
+      </div>
+      <div class="q-row"><span class="k">📍 起点</span><span class="v">裸指针时代：忘删·双删·早删三种死法全靠人脑记。</span></div>
+      <div class="q-row"><span class="k">🏁 终点</span><span class="v">主人 unique（房本独占·move 过户·壳死自动拆）→ 室友 shared（数人头·最后走的拆房）→ 访客 weak（不占名额·lock 敲门·剪断循环）。</span></div>
+      <div class="q-row"><span class="k">🎮 现在</span><span class="v">自由模式：随便按。建议实验：make_unique 后 move 再 move；shared 复印到人头=3 再层层出作用域；双删再来一次。</span></div>
+      <div class="q-row"><span class="k">💬 回 ZCode</span><span class="v">合上页面复述三样东西：<b>三种死法 → 三格地图 → 选型规则</b>。说顺了喊"咔哒"。</span></div>`;
+    const rb = document.getElementById('b-restart');
+    if(rb) rb.onclick = ()=>{ localStorage.removeItem(KEY); flags={}; stage=0; quiz=[null,null,null]; seedStage(0); renderAll(); };
+    return;
+  }
+  const s = STAGES[stage];
+  el.className = 'quest';
+  el.innerHTML = `
+    <div class="quest-head">
+      <span class="quest-stage">${esc(s.stageTag)}</span>
+      <span class="quest-title">${esc(s.title)}</span>
+      <button class="skip" id="b-skip">跳过引导，直接自由模式 →</button>
+    </div>
+    <div class="q-row"><span class="k">📍 起点</span><span class="v">${s.start}</span></div>
+    <div class="q-row"><span class="k">🎯 任务</span><span class="v">${s.task}</span></div>
+    <div class="q-row"><span class="k">👀 看什么</span><span class="v">${s.watch}</span></div>
+    ${stage===0 ? '<div class="go"><button class="primary" id="b-begin">开始第 1 关 ▶</button></div>' : ''}
+    ${stage===STAGES.length-1 ? quizHTML() : ''}`;
+  const begin = document.getElementById('b-begin');
+  if(begin) begin.onclick = ()=>{ flags.started = true; progress(); renderAll(); };
+  const skip = document.getElementById('b-skip');
+  if(skip) skip.onclick = ()=>{ stage = STAGES.length; seedStage(0); renderAll(); };
+  el.querySelectorAll('.opt').forEach(btn=>{
+    btn.onclick = ()=>{
+      const i = +btn.dataset.q, j = +btn.dataset.o;
+      if(quiz[i] && quiz[i].ok) return;
+      quiz[i] = {pick:j, ok: j===QUIZ[i].ans};
+      renderQuest(); renderRail(); progress(); saveState();
+    };
+  });
+}
+
+function renderCode(){
+  const el = document.getElementById('code');
+  const lines = world.code.slice(-16);
+  const base = world.code.length - lines.length;
+  el.innerHTML = lines.map((l,i)=>{
+    const idx = base + i;
+    const cm = l.c ? `    <span class="cm">// ${esc(l.c)}</span>` : '';
+    const cls = 'cline' + (idx === world.code.length-1 ? ' hot' : '');
+    return `<div class="${cls}">${esc(l.t)}${cm}</div>`;
+  }).join('');
+}
+
+const TYPE_META = {
+  uniq:   {icon:'📜', label:'unique_ptr', cls:'uniq',   typeText:'unique_ptr<Widget> · 房本主人'},
+  shared: {icon:'🔑', label:'shared_ptr', cls:'shared', typeText:'shared_ptr<Widget> · 钥匙室友'},
+  weak:   {icon:'🚪', label:'weak_ptr',   cls:'weak',   typeText:'weak_ptr<Widget> · 门外访客'},
+  raw:    {icon:'📍', label:'raw',        cls:'raw',    typeText:'Widget* · 裸指针（无房本）'},
+};
+function renderStack(){
+  const el = document.getElementById('stackVars');
+  const foot = document.getElementById('stackfoot');
+  const vars = [];
+  world.scopes.forEach((s,si)=>s.vars.forEach(v=>vars.push({v, scopeName:s.name, si})));
+  if(!vars.length){
+    el.innerHTML = '<div class="empty">（栈上没有壳）<br>造一个：new / make_unique / make_shared</div>';
+    foot.innerHTML = '';
+    return;
+  }
+  el.innerHTML = vars.map(({v, scopeName})=>{
+    const m = TYPE_META[v.type];
+    let target;
+    if(v.target === null){
+      target = '→ <span style="color:var(--amber)">nullptr（空壳，房本已过户）</span>';
+    } else {
+      const o = world.heap[v.target];
+      target = o.alive ? '→ ' + o.name + '#' + o.id : '→ <span style="color:var(--red)">' + o.name + '#' + o.id + '（已拆！悬垂）</span>';
+    }
+    const dang = (v.type==='raw' && v.target!==null && !world.heap[v.target].alive) ? '<div class="dang">⚠️ 悬垂：地址还在，房已拆</div>' : '';
+    return `<div class="var-card ${m.cls} ${fresh('var-'+v.name,'')}">
+      <div class="vhead">${m.icon} ${esc(v.name)} <span class="vtype">${m.typeText}</span><span class="vscope">@ ${esc(scopeName)}</span></div>
+      <div class="vtarget">${target}</div>${dang}
+    </div>`;
+  }).join('');
+  foot.innerHTML = '当前作用域：' + world.scopes.map(s=>esc(s.name)).join(' › ');
+}
+
+function renderHeap(){
+  const live = document.getElementById('heapLive');
+  const objs = Object.values(world.heap).filter(o=>o.alive && !o.leaked);
+  if(!objs.length){
+    live.innerHTML = '<div class="empty">（堆是空的）<br>对象由 new / make_* 诞生</div>';
+  } else {
+    live.innerHTML = objs.map(o=>{
+      const holders = [], weakers = [];
+      world.scopes.forEach(s=>s.vars.forEach(v=>{
+        if(v.target === o.id){ (v.type==='weak'?weakers:holders).push(v.name); }
+      }));
+      o.inner.forEach(m=>{
+        const t = world.heap[m.target];
+        if(m.type==='shared') holders.push(o.name + ' 的成员→' + t.name);
+        else weakers.push(o.name + ' 的成员→' + t.name + '（访客）');
+      });
+      const kindMeta = o.kind==='uniq' ? '📜 房本·unique' : o.kind==='shared' ? '🔑 人头·shared' : '📍 裸·无主';
+      const counter = o.kind==='shared' ? `<span class="counter" id="ctr-${o.id}">人头 ${o.count}</span>` : '';
+      const holderLine = holders.length ? `持有人：<b>${esc(holders.join('、'))}</b>` : '持有人：<b style="color:var(--red)">（无）</b>';
+      const weakLine = weakers.length ? `<div class="weaklist">门外访客：${esc(weakers.join('、'))}</div>` : '';
+      const innerLine = o.inner.length ? `<div class="inner-key">${o.inner.map(m=>{
+        const t = world.heap[m.target];
+        return m.type==='shared' ? `<span class="kw">🔑 持有</span> ${t.name}#${t.id}` : `<span class="kk">👁️ 观察</span> ${t.name}#${t.id}`;
+      }).join(' ｜ ')}</div>` : '';
+      return `<div class="obj-card ${o.kind} ${fresh('obj-'+o.id,'')}">
+        <div class="obj-head">📦 ${o.name} #${o.id} <span class="obj-kind" style="border-color:inherit">${kindMeta}</span>${counter}</div>
+        <div class="obj-holders">${holderLine}${weakLine}</div>${innerLine}
+      </div>`;
+    }).join('');
+  }
+  // graveyard
+  const gy = document.getElementById('graveyard');
+  const ghosts = Object.values(world.heap).filter(o=>o.leaked);
+  gy.innerHTML = ghosts.length
+    ? ghosts.map(o=>`<span class="ghost">👻 ${o.name}#${o.id}${o.kind==='shared' ? '（互相撑着）' : '（忘删）'}</span>`).join('')
+    : '<span style="font-size:11.5px;color:var(--muted)">干干净净，暂无泄漏。</span>';
+  // memory bar
+  const leaked = ghosts.length;
+  const pct = Math.min(8 + leaked * 17, 95);
+  const fill = document.getElementById('memfill');
+  fill.style.width = pct + '%';
+  fill.className = 'memfill' + (leaked===0 ? '' : leaked===1 ? ' warn' : ' bad');
+  document.getElementById('memtext').textContent = leaked===0
+    ? '堆内存 8% · 无泄漏'
+    : '堆内存 ' + pct + '% · 泄漏 ' + leaked + ' 个对象 · ' + (leaked===1 ? '慢死进行中…' : '慢死加速中…');
+}
+
+function renderLog(){
+  document.getElementById('log').innerHTML = logLines.map(l=>{
+    if(l.type==='info') return `<div class="logline info">ℹ️ ${l.expl}</div>`;
+    if(l.type==='ok')   return `<div class="logline ok">${l.expl}</div>`;
+    if(l.type==='err')  return `<div class="logline err">🛑 ${l.expl}</div>`;
+    return `<div class="logline"><div class="cmd">$ ${l.cmd}</div><div class="expl">→ ${l.expl}</div></div>`;
+  }).join('');
+}
+
+function renderCrash(){
+  const bar = document.getElementById('crashbar');
+  const txt = document.getElementById('crashtext');
+  if(world && world.crashed){
+    bar.classList.add('show');
+    txt.innerHTML = '<b>程序崩溃（segfault）</b> —— ' + esc(world.crashReason) + '　点右侧按钮修复重启。';
+  } else {
+    bar.classList.remove('show');
+  }
+}
+
+function updateButtons(){
+  const st = stage >= STAGES.length ? 'free' : String(stage);
+  const plan = {
+    '0':  {in:0,out:0,ne:0,del:0,use:0,mku:0,move:0,cpy:0,mks:0,scp:0,wk:0,lock:0,fix:0},
+    '1':  {in:0,out:1,ne:1,del:0,use:0,mku:0,move:0,cpy:0,mks:0,scp:0,wk:0,lock:0,fix:0},
+    '2':  {in:0,out:0,ne:0,del:1,use:1,mku:0,move:0,cpy:0,mks:0,scp:0,wk:0,lock:0,fix:0},
+    '3':  {in:0,out:1,ne:0,del:0,use:0,mku:1,move:0,cpy:0,mks:0,scp:0,wk:0,lock:0,fix:0},
+    '4':  {in:0,out:1,ne:0,del:0,use:0,mku:1,move:1,cpy:1,mks:0,scp:0,wk:0,lock:0,fix:0},
+    '5':  {in:1,out:1,ne:0,del:0,use:0,mku:0,move:0,cpy:0,mks:1,scp:1,wk:0,lock:0,fix:0},
+    '6':  {in:0,out:1,ne:0,del:0,use:0,mku:0,move:0,cpy:0,mks:0,scp:0,wk:1,lock:1,fix:0},
+    '7':  {in:0,out:1,ne:0,del:0,use:0,mku:0,move:0,cpy:0,mks:0,scp:0,wk:0,lock:0,fix:(world && world.loopFixedMode)?0:1},
+    '8':  {in:0,out:0,ne:0,del:0,use:0,mku:0,move:0,cpy:0,mks:0,scp:0,wk:0,lock:0,fix:0},
+    'free':{in:1,out:1,ne:1,del:1,use:1,mku:1,move:1,cpy:1,mks:1,scp:1,wk:1,lock:1,fix:0},
+  }[st] || {};
+  const crashed = world && world.crashed;
+  document.getElementById('b-in').disabled    = crashed || !plan.in;
+  document.getElementById('b-out').disabled   = crashed || !plan.out;
+  document.getElementById('b-new').disabled   = crashed || !plan.ne;
+  document.getElementById('b-del').disabled   = crashed || !plan.del;
+  document.getElementById('b-use').disabled   = crashed || !plan.use;
+  document.getElementById('b-mku').disabled   = crashed || !plan.mku;
+  document.getElementById('b-move').disabled  = crashed || !plan.move;
+  document.getElementById('b-cpy').disabled   = crashed || !plan.cpy;
+  document.getElementById('b-mks').disabled   = crashed || !plan.mks;
+  document.getElementById('b-scp').disabled   = crashed || !plan.scp;
+  document.getElementById('b-wk').disabled    = crashed || !plan.wk;
+  document.getElementById('b-lock').disabled  = crashed || !plan.lock;
+  document.getElementById('b-fixloop').disabled = crashed || !plan.fix;
+}
+
+function renderAll(){
+  renderRail(); renderQuest(); renderCode(); renderStack(); renderHeap(); renderLog(); renderCrash(); updateButtons();
+  saveState();
+}
+
+/* ============ 绑定 ============ */
+document.getElementById('b-in').onclick    = doScopeIn;
+document.getElementById('b-out').onclick   = doScopeOut;
+document.getElementById('b-new').onclick   = doNew;
+document.getElementById('b-del').onclick   = doDel;
+document.getElementById('b-use').onclick   = doUse;
+document.getElementById('b-mku').onclick   = doMku;
+document.getElementById('b-move').onclick  = doMove;
+document.getElementById('b-cpy').onclick   = doCpy;
+document.getElementById('b-mks').onclick   = doMks;
+document.getElementById('b-scp').onclick   = doScp;
+document.getElementById('b-wk').onclick    = doWk;
+document.getElementById('b-lock').onclick  = doLock;
+document.getElementById('b-fixloop').onclick = doFixloop;
+document.getElementById('b-reset').onclick = doReset;
+document.getElementById('b-revive').onclick = doReset;
+
+/* ============ 启动 ============ */
+if(!loadState()){ flags = {}; stage = 0; quiz = [null,null,null]; }
+else{ addLog(null, 'ok', '欢迎回来：进度已恢复（第 ' + Math.min(stage+1, STAGES.length) + ' / ' + STAGES.length + ' 关）。↺ 可从起点再走一遍。'); }
+seedStage(stage === STAGES.length ? 0 : stage);
+renderAll();
+</script>
+</body>
+</html>

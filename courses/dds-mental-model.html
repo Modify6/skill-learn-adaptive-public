@@ -1,0 +1,1600 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DDS 中间件 —— 去中心化数据总线 · QoS 双方签合同</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#151f36; --panel2:#0f1729;
+    --line:#26334d; --text:#dde6f5; --muted:#a6b9d9;
+    --blue:#3b82f6; --green:#22c55e; --purple:#a855f7;
+    --amber:#f5b544; --cyan:#38bdf8; --red:#f87171;
+    --mono:"Cascadia Code",Consolas,"JetBrains Mono",monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:radial-gradient(1200px 600px at 50% -100px,#16223d 0%,var(--bg) 60%);
+    color:var(--text);
+    font-family:system-ui,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+    padding:30px 18px 70px; line-height:1.65;
+  }
+  .wrap{max-width:1240px; margin:0 auto;}
+
+  /* ---------- header ---------- */
+  h1{font-size:26px; letter-spacing:.5px;}
+  h1 .dot-word{color:var(--amber);}
+  .sub{color:var(--muted); margin-top:6px; font-size:14.5px;}
+  .ladder{
+    margin-top:12px; padding:8px 14px; border:1px dashed var(--line); border-radius:10px;
+    font-size:12.5px; color:var(--muted); background:rgba(255,255,255,.02);
+    font-family:var(--mono);
+  }
+  .ladder b{color:var(--cyan); font-weight:600;}
+  .ladder .bad{color:var(--red);}
+
+  /* ---------- dependency tree (前置依赖阶梯树) ---------- */
+  .dep-tree{
+    margin-top:14px; background:linear-gradient(180deg,#121d36 0%,#0c1527 100%);
+    border:1px solid #283a5e; border-radius:12px; padding:12px 16px;
+  }
+  .dep-title{font-size:13px; font-weight:700; color:var(--amber); letter-spacing:.5px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:4px;}
+  .dep-layers{
+    display:grid;
+    grid-template-columns:repeat(4, 1fr);
+    gap:8px;
+    align-items:stretch;
+  }
+  .dep-card{
+    background:#18253f; border:1px solid var(--line); border-radius:8px;
+    padding:9px 11px; font-size:11.5px; transition:all .2s; display:flex; flex-direction:column;
+  }
+  .dep-card:hover{border-color:var(--cyan); transform:translateY(-1px);}
+  .dep-card .dep-lvl{font-size:10px; font-family:var(--mono); color:var(--muted); font-weight:700; margin-bottom:2px;}
+  .dep-card .dep-name{font-size:12.5px; font-weight:700; color:var(--text);}
+  .dep-card .dep-desc{font-size:10.5px; color:var(--muted); margin-top:4px; line-height:1.45; flex:1;}
+  .dep-card.l1{border-left:3px solid var(--blue);}
+  .dep-card.l1 .dep-lvl{color:var(--blue);}
+  .dep-card.l2{border-left:3px solid var(--purple);}
+  .dep-card.l2 .dep-lvl{color:var(--purple);}
+  .dep-card.l3{border-left:3px solid var(--cyan);}
+  .dep-card.l3 .dep-lvl{color:var(--cyan);}
+  .dep-card.l4{border-left:3px solid var(--amber); background:rgba(245,181,68,.08); border-color:rgba(245,181,68,.4);}
+  .dep-card.l4 .dep-lvl{color:var(--amber);}
+  @media (max-width:960px){
+    .dep-layers{grid-template-columns:repeat(2, 1fr);}
+  }
+  @media (max-width:540px){
+    .dep-layers{grid-template-columns:1fr;}
+  }
+
+  /* ---------- landing table (机制落地表) ---------- */
+  .ltable{margin-top:12px; border:1px solid var(--line); border-radius:10px; overflow:hidden; font-size:12px;}
+  .ltable table{width:100%; border-collapse:collapse;}
+  .ltable th{
+    background:rgba(255,255,255,.03); color:var(--muted); font-size:11px; font-weight:600;
+    padding:6px 10px; text-align:left; border-bottom:1px solid var(--line); letter-spacing:1px;
+  }
+  .ltable td{padding:6px 10px; border-bottom:1px solid rgba(38,51,77,.5); vertical-align:top;}
+  .ltable tr:last-child td{border-bottom:none;}
+  .ltable .nick{color:var(--amber); font-weight:700; font-family:var(--mono); white-space:nowrap;}
+  .ltable .real{color:var(--cyan); font-family:var(--mono);}
+  .ltable .phys{color:var(--text);}
+  .ltable .life{color:var(--muted);}
+
+  /* ---------- journey rail ---------- */
+  .journey{margin-top:22px;}
+  .rail{display:flex; align-items:center; gap:5px; overflow-x:auto; padding:4px 2px 10px;}
+  .pill{
+    flex:none; font-size:11px; padding:4px 9px; border-radius:999px;
+    border:1px solid var(--line); color:var(--muted); white-space:nowrap; background:var(--panel2);
+    cursor:pointer;
+  }
+  .pill.done{color:var(--green); border-color:rgba(34,197,94,.55);}
+  .pill.current{color:var(--amber); border-color:var(--amber); box-shadow:0 0 10px rgba(245,181,68,.25); font-weight:700;}
+  .sep{flex:none; width:10px; height:2px; background:var(--line);}
+
+  /* ---------- quest card ---------- */
+  .quest{
+    border:1px solid rgba(245,181,68,.45); border-left:4px solid var(--amber);
+    background:linear-gradient(90deg, rgba(245,181,68,.07), var(--panel2) 45%);
+    border-radius:12px; padding:14px 18px;
+  }
+  .quest.free{border-color:rgba(34,197,94,.45); border-left-color:var(--green);
+    background:linear-gradient(90deg, rgba(34,197,94,.07), var(--panel2) 45%);}
+  .quest-head{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .quest-stage{font-family:var(--mono); font-size:11px; color:var(--amber); letter-spacing:1px;}
+  .quest-title{font-size:16px; font-weight:700;}
+  .skip{font-size:12px; color:var(--muted); cursor:pointer; border:none; background:none; text-decoration:underline dotted; padding:0;}
+  .skip:hover{color:var(--text);}
+  .replay-btn{
+    font-size:11px; padding:3px 8px; border-radius:6px; background:#182338;
+    color:var(--cyan); border:1px solid var(--line); cursor:pointer; margin-left:auto;
+  }
+  .replay-btn:hover{border-color:var(--cyan); background:#1e2d48;}
+  .q-row{display:flex; gap:12px; margin-top:9px; font-size:13.5px;}
+  .q-row .k{flex:none; width:88px; color:var(--muted); font-weight:600;}
+  .q-row .v{color:var(--text);}
+  .q-row .v b{color:var(--amber);}
+  .quest .go{margin-top:12px;}
+  .quest .go button{
+    font-size:13px; padding:7px 18px; border-color:var(--amber); color:var(--amber);
+    font-family:system-ui,"Microsoft YaHei",sans-serif; font-weight:700;
+  }
+
+  /* quiz */
+  .quiz{margin-top:6px;}
+  .qitem{margin-top:12px; padding-top:10px; border-top:1px dashed var(--line);}
+  .qitem .qtext{font-size:13.5px; font-weight:600;}
+  .opts{display:flex; flex-direction:column; gap:6px; margin-top:8px;}
+  .opt{
+    text-align:left; font-size:12.5px; font-family:var(--mono),system-ui,sans-serif;
+    background:#182338; color:var(--text); border:1px solid var(--line); border-radius:6px;
+    padding:8px 12px; cursor:pointer;
+  }
+  .opt.correct{border-color:var(--green); color:var(--green); background:rgba(34,197,94,.1);}
+  .opt.wrong{border-color:var(--red); color:var(--red); background:rgba(248,113,113,.08);}
+  .opt.dim{opacity:.4;}
+  .qexpl{font-size:12px; color:var(--muted); margin-top:6px;}
+
+  /* ---------- stage (3 columns) ---------- */
+  .stage-scroll{overflow-x:auto; margin-top:20px; padding-bottom:6px;}
+  .stage{
+    min-width:1120px;
+    display:grid;
+    grid-template-columns:1.05fr 1.35fr 1fr;
+    gap:0 12px; align-items:stretch;
+  }
+  .col-head{margin-bottom:10px; text-align:center;}
+  .col-head .nick{font-size:17px; font-weight:700;}
+  .col-head .real{font-family:var(--mono); font-size:11.5px; color:var(--cyan); letter-spacing:1px; text-transform:uppercase;}
+  .col-head .duty{font-size:12px; color:var(--muted); margin-top:2px;}
+  .col{
+    background:var(--panel2); border:1px solid var(--line); border-radius:14px;
+    padding:14px; display:flex; flex-direction:column; gap:12px; min-height:510px;
+  }
+  .c1 .nick{color:var(--cyan);} .c2 .nick{color:var(--amber);} .c3 .nick{color:var(--green);}
+
+  /* Column 1: Code & Wire Frame */
+  .codebox-wrap{
+    background:#080d18; border:1px solid var(--line); border-radius:10px;
+    overflow:hidden; display:flex; flex-direction:column; flex:1; min-height:240px;
+  }
+  .codebox-topbar{
+    background:#0f172a; padding:6px 12px; border-bottom:1px solid var(--line);
+    display:flex; align-items:center; justify-content:space-between;
+    font-size:11px; font-family:var(--mono); color:var(--muted);
+  }
+  .codebox-dots{display:flex; gap:5px;}
+  .codebox-dot{width:8px; height:8px; border-radius:50%;}
+  .dot-r{background:#f87171;} .dot-y{background:#f5b544;} .dot-g{background:#22c55e;}
+  .codebox{
+    padding:12px; font-family:var(--mono); font-size:11.5px;
+    white-space:pre; overflow:auto; tab-size:4;
+    line-height:1.7; flex:1; color:#dde6f5;
+  }
+  .codebox .cm{color:#78909c; font-style:italic;}
+  .codebox .kw{color:#c792ea; font-weight:700;}
+  .codebox .fn{color:#82aaff; font-weight:700;}
+  .codebox .str{color:#c3e88d;}
+  .codebox .type{color:#ffcb6b;}
+  .codebox .val{color:#f78c6c;}
+
+  .rtps-packet{
+    background:#0d1527; border:1px solid var(--line); border-radius:10px; padding:10px;
+    font-size:11px; font-family:var(--mono);
+  }
+  .packet-title{color:var(--cyan); font-weight:700; margin-bottom:6px; display:flex; justify-content:space-between;}
+  .packet-header{background:#16233d; border-radius:6px; padding:6px 8px; margin-bottom:6px; border:1px solid #233457;}
+  .packet-submsg{background:#1a2b4a; border-left:3px solid var(--amber); padding:6px 8px; border-radius:4px; margin-top:4px;}
+  .packet-submsg.ack{border-left-color:var(--cyan);}
+  .packet-submsg.spdp{border-left-color:var(--purple);}
+
+  /* Column 2: Visual Topology & Bus */
+  .topo-box{display:flex; flex-direction:column; gap:10px; flex:1;}
+  .domain-banner{
+    background:#101a2f; border:1px dashed var(--line); border-radius:8px;
+    padding:6px 10px; font-size:11.5px; font-family:var(--mono); color:var(--muted);
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .domain-banner b{color:var(--cyan);}
+  .domain-banner .badge{padding:2px 6px; border-radius:4px; font-size:10px; background:#1b2947; color:var(--amber);}
+
+  .nodes-stage{
+    display:grid; grid-template-columns:1fr 1fr; gap:10px; position:relative;
+  }
+  .node-card{
+    background:#111c33; border:1px solid var(--line); border-radius:10px; padding:10px;
+    display:flex; flex-direction:column; gap:6px; font-size:11.5px; position:relative;
+  }
+  .node-card.joined{border-color:rgba(56,189,248,.4); box-shadow:0 0 10px rgba(56,189,248,.1);}
+  .node-card.late{border-style:dashed; opacity:.5;}
+  .node-card.late.active{opacity:1; border-style:solid; border-color:var(--purple); box-shadow:0 0 12px rgba(168,85,247,.2);}
+  .node-head{display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--line); padding-bottom:4px;}
+  .node-title{font-weight:700; color:var(--text); font-family:var(--mono); font-size:12px;}
+  .node-guid{font-size:9.5px; color:var(--muted); font-family:var(--mono);}
+
+  .entity-slot{
+    background:#0b1324; border-radius:6px; padding:6px 8px; border:1px solid rgba(255,255,255,.05);
+    display:flex; flex-direction:column; gap:4px;
+  }
+  .entity-slot .e-title{font-weight:700; font-size:11px; font-family:var(--mono); display:flex; justify-content:space-between;}
+  .entity-slot .e-title.dw{color:var(--amber);}
+  .entity-slot .e-title.dr{color:var(--green);}
+  .entity-slot .e-topic{font-size:10.5px; color:var(--cyan); font-family:var(--mono);}
+  .entity-slot .e-qos{font-size:9.5px; color:var(--muted); font-family:var(--mono);}
+
+  /* Bus Channel & Wire Flow */
+  .bus-area{
+    background:#080e1b; border:1px solid var(--line); border-radius:10px; padding:10px;
+    min-height:140px; display:flex; flex-direction:column; gap:8px; position:relative; overflow:hidden;
+  }
+  .bus-header{font-size:11px; font-weight:700; color:var(--muted); display:flex; justify-content:space-between; font-family:var(--mono);}
+  .wire-channel{
+    display:flex; align-items:center; justify-content:space-between; padding:8px 12px;
+    border-radius:8px; background:#121d33; border:1px solid var(--line); position:relative;
+  }
+  .wire-channel.linked{border-color:var(--green); background:rgba(34,197,94,.06);}
+  .wire-channel.incompatible{border-color:var(--red); background:rgba(248,113,113,.08);}
+  .channel-name{font-family:var(--mono); font-size:11.5px; color:var(--text); font-weight:600;}
+  .qos-pill{
+    font-size:10px; font-family:var(--mono); padding:2px 6px; border-radius:4px;
+    border:1px solid var(--line); background:#18253f; color:var(--muted);
+  }
+  .qos-pill.pass{border-color:var(--green); color:var(--green);}
+  .qos-pill.fail{border-color:var(--red); color:var(--red); background:rgba(248,113,113,.15);}
+
+  .flow-track{
+    height:24px; background:#0e1628; border-radius:6px; display:flex; align-items:center;
+    padding:0 8px; position:relative; overflow:hidden; border:1px dashed #1c2b47;
+  }
+  .packet-particle{
+    position:absolute; width:18px; height:18px; border-radius:4px;
+    background:var(--amber); color:#000; font-size:9px; font-weight:900;
+    display:flex; align-items:center; justify-content:center; font-family:var(--mono);
+    box-shadow:0 0 8px var(--amber); transition:left 0.8s ease-in-out;
+  }
+  .packet-particle.ack{background:var(--cyan); box-shadow:0 0 8px var(--cyan);}
+  .packet-particle.spdp{background:var(--purple); box-shadow:0 0 8px var(--purple); color:#fff;}
+  .packet-particle.lost{background:var(--red); box-shadow:0 0 8px var(--red); color:#fff;}
+
+  /* Column 3: Live Inspector & Metrics */
+  .run-box{display:flex; flex-direction:column; gap:10px; flex:1;}
+  .run-panel{
+    background:#0d1527; border:1px solid var(--line); border-radius:10px;
+    padding:10px 12px; font-size:11.5px; font-family:var(--mono);
+  }
+  .run-title{
+    color:var(--cyan); font-weight:700; font-size:11.5px; margin-bottom:6px;
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .peer-table{width:100%; border-collapse:collapse; margin-top:4px;}
+  .peer-table th{color:var(--muted); font-size:10px; text-align:left; padding:3px 4px; border-bottom:1px solid var(--line);}
+  .peer-table td{padding:4px; font-size:10.5px; border-bottom:1px solid rgba(38,51,77,.4);}
+  .peer-table .active-peer{color:var(--green);}
+
+  .qos-contract-box{
+    background:#111b31; border:1px solid var(--line); border-radius:8px; padding:8px;
+    display:flex; flex-direction:column; gap:4px;
+  }
+  .contract-row{display:flex; justify-content:space-between; align-items:center; font-size:11px;}
+  .contract-row .rule{color:var(--muted);}
+  .contract-row .stat{font-weight:700;}
+  .contract-row .stat.ok{color:var(--green);}
+  .contract-row .stat.err{color:var(--red);}
+
+  /* Stats Bar */
+  .stats-bar{
+    display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;
+    margin-top:auto; padding-top:10px; border-top:1px dashed var(--line);
+  }
+  .stat-item{background:#0e172a; padding:6px 6px; border-radius:6px; border:1px solid var(--line); text-align:center;}
+  .stat-val{font-size:13px; font-weight:700; color:var(--text); font-family:var(--mono);}
+  .stat-val.good{color:var(--green);}
+  .stat-val.warn{color:var(--amber);}
+  .stat-val.bad{color:var(--red);}
+  .stat-lbl{font-size:10px; color:var(--muted);}
+
+  /* ---------- console ---------- */
+  .console{margin-top:24px; background:var(--panel2); border:1px solid var(--line); border-radius:14px; overflow:hidden;}
+  .console-head{
+    display:flex; align-items:center; gap:10px; padding:10px 16px;
+    border-bottom:1px solid var(--line); background:rgba(255,255,255,.02);
+    font-size:13px; color:var(--muted); flex-wrap:wrap;
+  }
+  .btns{display:flex; gap:8px; flex-wrap:wrap; margin-left:auto;}
+  button{
+    font-family:var(--mono); font-size:12px; color:var(--text);
+    background:#1d2a47; border:1px solid var(--line); border-radius:8px;
+    padding:6px 12px; cursor:pointer; transition:all .15s;
+  }
+  button:hover:not(:disabled){border-color:var(--amber); color:var(--amber); transform:translateY(-1px);}
+  button:disabled{opacity:.3; cursor:not-allowed;}
+  button.primary{border-color:var(--amber); color:var(--amber);}
+  button.action-btn{border-color:var(--cyan); color:var(--cyan);}
+  button.fix-btn{border-color:var(--green); color:var(--green);}
+  button.danger-btn{border-color:var(--red); color:var(--red);}
+  .clear-btn{font-size:11px; padding:4px 8px; color:var(--muted); background:#151f34; border:1px solid var(--line);}
+  .clear-btn.armed{border-color:var(--red); color:var(--red); background:#28151f;}
+
+  .logbox{padding:12px 16px; max-height:240px; overflow-y:auto; font-family:var(--mono); font-size:12.5px;}
+  .logline{margin-bottom:8px;}
+  .logline .cmd{color:var(--amber);}
+  .logline .expl{color:var(--muted); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:12px; margin-top:1px;}
+  .logline .expl b{color:var(--amber); font-weight:600;}
+  .logline.info{color:var(--cyan); font-family:system-ui,"Microsoft YaHei",sans-serif;}
+  .logline.ok{color:var(--green); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:12.5px;}
+  .logline.err{color:var(--red); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:12.5px;}
+
+  /* ---------- details cards ---------- */
+  .why{margin-top:22px; display:grid; grid-template-columns:repeat(3,1fr); gap:12px;}
+  .why-card{background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:14px 16px; font-size:13px;}
+  .why-card h3{font-size:13.5px; margin-bottom:6px;}
+  .why-card p{color:var(--muted); font-size:12.5px;}
+  .why-card b{color:var(--text);}
+  .w1 h3{color:var(--cyan);} .w2 h3{color:var(--amber);} .w3 h3{color:var(--green);}
+
+  footer{margin-top:26px; text-align:center; color:var(--muted); font-size:12px;}
+  @media (max-width:900px){ .why{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>DDS 中间件：<span class="dot-word">去中心化数据总线</span> · <span class="dot-word">QoS 双方签合同</span></h1>
+  <p class="sub">治「ROS 2 通信黑盒 —— 节点怎么自动找到彼此？Incompatible QoS 为什么静默断联？UDP 丢包如何透明重传？晚加入节点怎样拿到地图？」。基于 Fast DDS / Cyclone DDS 通用 RTPS 核心协议。</p>
+
+  <!-- 阶梯速查 -->
+  <div class="ladder">
+    <b>【DDS 三大基石】</b>
+    1. <b>去中心化发现 (RTPS)</b>：SPDP 多播打招呼 + SEDP 单播换端点，无单点故障（对立面：ROS 1 roscore 挂了全瘫痪） ·
+    2. <b>QoS 双方签合同 (RxO)</b>：Offered ≥ Requested，一方要可靠一方只给尽力则拒绝建立管道 ·
+    3. <b>透明可靠性</b>：跑在 UDP 之上，靠 RTPS 序列号与 ACKNACK 实现无感重传
+  </div>
+
+  <!-- 前置依赖阶梯树 (知识定位导航仪) -->
+  <div class="dep-tree">
+    <div class="dep-title">
+      <span>🗺️ 【DDS 前置依赖阶梯树 · 知识体系定位导航】</span>
+      <span style="font-size:11px; font-weight:normal; color:var(--muted); font-family:var(--mono);">自底向上依赖 · 逐层建立地基</span>
+    </div>
+    <div class="dep-layers">
+      <div class="dep-card l1">
+        <div class="dep-lvl">① OS 与传输基石</div>
+        <div class="dep-name">UDP vs TCP 物理本质</div>
+        <div class="dep-desc">为什么机器人高频控制不敢用 TCP 队头阻塞？为什么 UDP + 应用层重传是正解？</div>
+      </div>
+      <div class="dep-card l2">
+        <div class="dep-lvl">② 局域网传输</div>
+        <div class="dep-name">单播 vs 多播 (Multicast)</div>
+        <div class="dep-desc">向 239.255.0.1 广播喊话：无中心寻人、自动感知邻居上线的物理网络基石</div>
+      </div>
+      <div class="dep-card l3">
+        <div class="dep-lvl">③ 拓扑架构</div>
+        <div class="dep-name">去中心化 P2P 数据总线</div>
+        <div class="dep-desc">告别 Broker (roscore/MQTT) 单点脆弱，全网对等自组网与局部容灾</div>
+      </div>
+      <div class="dep-card l4">
+        <div class="dep-lvl">④ 当前目标</div>
+        <div class="dep-name">DDS 中间件协议</div>
+        <div class="dep-desc">RTPS 状态机 (SPDP/SEDP) + QoS 契约双方会审 (RxO) + 动态数据管道</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 机制落地对照表 -->
+  <div class="ltable">
+    <table>
+      <thead>
+        <tr>
+          <th>心智模型 (绰号)</th>
+          <th>DDS 真名</th>
+          <th>物理/网络本质</th>
+          <th>ROS 2 封装层对应物</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="nick">隔离小区</td>
+          <td class="real">Domain (ID: 0~232)</td>
+          <td class="phys">UDP 端口映射分区 (Port = 7400 + 250*Domain + ...)</td>
+          <td class="life"><code>export ROS_DOMAIN_ID=0</code></td>
+        </tr>
+        <tr>
+          <td class="nick">办事处驻军</td>
+          <td class="real">DomainParticipant</td>
+          <td class="phys">持有网络网卡、UDP 监听 Socket 与实体 GUID 的进程句柄</td>
+          <td class="life"><code>rclcpp::Node</code> 底层的通信代表</td>
+        </tr>
+        <tr>
+          <td class="nick">数据广播频道</td>
+          <td class="real">Topic + TypeSupport</td>
+          <td class="phys">唯一字符串标识 + IDL 二进制序列化描述器 (CDR 编码)</td>
+          <td class="life"><code>/cmd_vel</code> (geometry_msgs::msg::Twist)</td>
+        </tr>
+        <tr>
+          <td class="nick">专职发件台</td>
+          <td class="real">DataWriter</td>
+          <td class="phys">将 C++ 结构体压入环形发送缓冲区，打上递增序列号 (SeqNum)</td>
+          <td class="life"><code>node->create_publisher&lt;T&gt;()</code></td>
+        </tr>
+        <tr>
+          <td class="nick">专职收件箱</td>
+          <td class="real">DataReader</td>
+          <td class="phys">绑定本地端口监听，维护接收队列，触发上层应用回调</td>
+          <td class="life"><code>node->create_subscription&lt;T&gt;()</code></td>
+        </tr>
+        <tr>
+          <td class="nick">大喇叭寻人</td>
+          <td class="real">SPDP (Participant Discovery)</td>
+          <td class="phys">向局域网广播/多播 <code>239.255.0.1:7400</code> 广播自身 GUID 与 IP</td>
+          <td class="life">节点刚启动时自动向局域网宣称自己上线</td>
+        </tr>
+        <tr>
+          <td class="nick">交换名片</td>
+          <td class="real">SEDP (Endpoint Discovery)</td>
+          <td class="phys">双方单播交换各自拥有的 Topic、读写方向及 QoS 策略字典</td>
+          <td class="life">话题订阅与发布端的后台自动对暗号</td>
+        </tr>
+        <tr>
+          <td class="nick">准入资格合同</td>
+          <td class="real">QoS (Quality of Service)</td>
+          <td class="phys">RxO 判定：Requested(订阅方要求) ≤ Offered(发布方承诺)</td>
+          <td class="life"><code>rmw_qos_profile_sensor_data</code> 等配置</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 关卡轨道 -->
+  <div class="journey">
+    <div class="rail" id="rail"></div>
+  </div>
+
+  <!-- 任务卡 -->
+  <div class="quest" id="quest"></div>
+
+  <!-- 三列舞台 -->
+  <div class="stage-scroll">
+    <div class="stage">
+
+      <!-- Column 1: C++ / ROS 2 代码与 RTPS 封包 -->
+      <div class="col c1">
+        <div class="col-head">
+          <div class="nick">代码与网络报文</div>
+          <div class="real">C++ Code & RTPS Wire Packet</div>
+          <div class="duty">观察 C++ API 如何映射到底层 UDP / RTPS 子报文</div>
+        </div>
+
+        <div class="codebox-wrap">
+          <div class="codebox-topbar">
+            <div class="codebox-dots">
+              <span class="codebox-dot dot-r"></span>
+              <span class="codebox-dot dot-y"></span>
+              <span class="codebox-dot dot-g"></span>
+            </div>
+            <span id="codebox-filename">ros2_node.cpp</span>
+            <span style="font-size:10px; color:var(--muted); font-family:var(--mono);">C++17</span>
+          </div>
+          <div class="codebox" id="codebox"></div>
+        </div>
+
+        <div class="rtps-packet" id="rtps-box">
+          <div class="packet-title">
+            <span>📡 RTPS 报文透视 (Wire Packet)</span>
+            <span id="packet-status" style="color:var(--amber);">空闲 (IDLE)</span>
+          </div>
+          <div class="packet-header">
+            <b>[UDP]</b> <span id="udp-info">Src: 192.168.1.10:7410 → Dst: 239.255.0.1:7400</span><br>
+            <b>[RTPS]</b> Protocol: "RTPS/2.3" | Vendor: eProsima FastDDS | GUIDPrefix: <span id="guid-prefix">01.0f.4c...</span>
+          </div>
+          <div id="submessages-area">
+            <div class="packet-submsg spdp">
+              <b>SubMsg: INFO_TS</b> (Timestamp: 1729000000.123)<br>
+              <b>SubMsg: DATA(p)</b> SPDP 参与者宣告 (Peer: ChassisNode, DefaultUnicast: 7411)
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Column 2: 全局数据空间与节点拓扑 -->
+      <div class="col c2">
+        <div class="col-head">
+          <div class="nick">去中心化总线拓扑</div>
+          <div class="real">Global Data Space & Nodes</div>
+          <div class="duty">观察无中心自动发现、QoS 合同管线与物理数据流向</div>
+        </div>
+
+        <div class="topo-box">
+          <!-- 域指示条 -->
+          <div class="domain-banner">
+            <span>🌐 <b>Domain 0</b> (UDP 端口段: 7400~7650)</span>
+            <span class="badge" id="discovery-status">未启动发现</span>
+          </div>
+
+          <!-- 节点分布 -->
+          <div class="nodes-stage">
+            <!-- Node A: 机器人底盘 -->
+            <div class="node-card" id="node-a">
+              <div class="node-head">
+                <span class="node-title">🤖 Node A: Chassis</span>
+                <span class="node-guid">GUID: 01.0f.01...</span>
+              </div>
+              <div class="entity-slot" id="slot-a">
+                <div class="e-title dw"><span>DataWriter (发布端)</span><span id="dw-state">未创建</span></div>
+                <div class="e-topic">Topic: /cmd_vel [Twist]</div>
+                <div class="e-qos" id="dw-qos-desc">QoS: Reliability=???, Durability=???</div>
+              </div>
+            </div>
+
+            <!-- Node B: 导航算法 -->
+            <div class="node-card" id="node-b">
+              <div class="node-head">
+                <span class="node-title">🧠 Node B: Navigation</span>
+                <span class="node-guid">GUID: 01.0f.02...</span>
+              </div>
+              <div class="entity-slot" id="slot-b">
+                <div class="e-title dr"><span>DataReader (订阅端)</span><span id="dr-state">未创建</span></div>
+                <div class="e-topic">Topic: /cmd_vel [Twist]</div>
+                <div class="e-qos" id="dr-qos-desc">QoS: Reliability=???, Durability=???</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Node C: 晚加入节点 (RViz 监视器) -->
+          <div class="node-card late" id="node-c">
+            <div class="node-head">
+              <span class="node-title">🖥️ Node C: RViz2 (晚加入)</span>
+              <span class="node-guid" id="guid-c">离线 (未启动)</span>
+            </div>
+            <div class="entity-slot">
+              <div class="e-title dr"><span>DataReader (订阅端)</span><span id="node-c-state">等待上线</span></div>
+              <div class="e-topic">Topic: /map [OccupancyGrid]</div>
+              <div class="e-qos">QoS: Durability = TRANSIENT_LOCAL</div>
+            </div>
+          </div>
+
+          <!-- 逻辑总线与管道 -->
+          <div class="bus-area">
+            <div class="bus-header">
+              <span>🔀 逻辑虚拟数据管道 (Topic Channel)</span>
+              <span id="channel-status" style="color:var(--muted);">未连接</span>
+            </div>
+
+            <div class="wire-channel" id="wire-chan">
+              <div class="channel-name">/cmd_vel (线速度 v, 角速度 w)</div>
+              <div class="qos-pill" id="qos-tag">QoS: 未协商</div>
+            </div>
+
+            <div class="flow-track" id="flow-track">
+              <span style="font-size:10px; color:var(--muted); font-family:var(--mono);">[UDP 传输介质 / 队列缓冲区]</span>
+              <div class="packet-particle" id="fly-packet" style="left:-40px;">#1</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Column 3: 实时运行状态与监控账目 -->
+      <div class="col c3">
+        <div class="col-head">
+          <div class="nick">现场监控与合同检查</div>
+          <div class="real">Runtime Inspector & QoS Ledger</div>
+          <div class="duty">实时核验邻居表、端点匹配矩阵与 QoS 合同</div>
+        </div>
+
+        <div class="run-box">
+          <!-- 发现邻居表 -->
+          <div class="run-panel">
+            <div class="run-title">
+              <span>👥 SPDP 局域网邻居表</span>
+              <span id="peer-count" style="color:var(--cyan);">0 活跃</span>
+            </div>
+            <table class="peer-table">
+              <thead>
+                <tr><th>GUID 前缀</th><th>节点名</th><th>单播地址</th><th>状态</th></tr>
+              </thead>
+              <tbody id="peer-tbody">
+                <tr><td colspan="4" style="color:var(--muted); text-align:center;">暂无邻居 (等待 SPDP 广播)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- QoS 双方合同检查 (RxO) -->
+          <div class="run-panel">
+            <div class="run-title">
+              <span>📜 QoS 合同 (RxO 兼容性判定)</span>
+              <span id="contract-verdict" style="color:var(--muted);">未对齐</span>
+            </div>
+            <div class="qos-contract-box">
+              <div class="contract-row">
+                <span class="rule">Reliability 规则:</span>
+                <span id="rxo-rel" class="stat">Offered(?) >= Req(?)</span>
+              </div>
+              <div class="contract-row">
+                <span class="rule">Durability 规则:</span>
+                <span id="rxo-dur" class="stat">Offered(?) >= Req(?)</span>
+              </div>
+              <div class="contract-row">
+                <span class="rule">通信管道判定:</span>
+                <span id="rxo-pipe" class="stat" style="color:var(--muted);">BLOCKED</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 历史缓冲区透视 (History Cache) -->
+          <div class="run-panel">
+            <div class="run-title">
+              <span>💾 DataWriter 本地历史缓存</span>
+              <span id="cache-depth">Depth: 1</span>
+            </div>
+            <div id="history-items" style="font-size:10.5px; color:var(--muted); margin-top:4px;">
+              [缓存为空]
+            </div>
+          </div>
+
+          <!-- 统计账目 -->
+          <div class="stats-bar">
+            <div class="stat-item">
+              <div class="stat-val" id="st-peers">0</div>
+              <div class="stat-lbl">在线邻居</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-val" id="st-pkts">0</div>
+              <div class="stat-lbl">已发帧数</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-val" id="st-retries">0</div>
+              <div class="stat-lbl">重传次数</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 控制台与操作面板 -->
+  <div class="console">
+    <div class="console-head">
+      <span>控制台 · DDS 事件驱动器</span>
+      <div class="btns">
+        <button id="btn-rearm" class="clear-btn" onclick="handleClearClick()">⟲ 清除全部进度</button>
+      </div>
+    </div>
+    <div class="console-head" style="background:rgba(0,0,0,.2); border-bottom:1px solid var(--line);">
+      <span style="font-size:12px; color:var(--muted);" id="action-hint">动作按钮已按当前关卡就绪：</span>
+      <div class="btns" id="action-btns"></div>
+    </div>
+    <div class="logbox" id="logbox"></div>
+  </div>
+
+  <!-- 底部三格原理剖析 (Constraint-First) -->
+  <div class="why">
+    <div class="why-card w1">
+      <h3>① 为什么 DDS 必须去中心化？</h3>
+      <p><b>痛点</b>：ROS 1 严重依赖 <code>roscore</code>（中心 Master 字典）。一旦 Master 进程挂掉、网线松脱或高频心跳超时，全机器人所有通信直接休克，且无法做多机器人自组网。<br>
+      <b>解法</b>：DDS 基于 <b>RTPS 协议</b>，利用 UDP 多播在局域网内自主打招呼，各节点各自在内存维护邻居字典。没有哪一个节点是中心，任何节点挂掉只影响它自己！</p>
+    </div>
+    <div class="why-card w2">
+      <h3>② 为什么 QoS 必须双方签合同 (RxO)？</h3>
+      <p><b>痛点</b>：如果发布者只能保证“尽力发（Best Effort，丢了不管）”，而控制算法订阅者却假设“数据一定百分之百不丢（Reliable）”，就会发生算法逻辑假死或机器人失控的隐蔽 Bug。<br>
+      <b>解法</b>：<b>Requested ≤ Offered</b> 原则。如果订阅方的可靠性要求超过了发布方的承诺，DDS 在 SEDP 握手阶段就会强行拒绝建立通道，并爆出 <code>Incompatible QoS</code> 警告，杜绝半吊子通信！</p>
+    </div>
+    <div class="why-card w3">
+      <h3>③ 为什么跑在 UDP 上还能可靠？</h3>
+      <p><b>痛点</b>：TCP 握手开销大、头部重，且有严重的队头阻塞（Head-of-Line Blocking），不适合机器人高频控制；但裸 UDP 会丢包乱序。<br>
+      <b>解法</b>：DDS 底层用 UDP 广播与单播换取低延迟与多播能力，在应用层用 <b>RTPS 序列号 + HEARTBEAT + ACKNACK</b> 机制实现可靠重传。丢哪包补哪包，不阻塞其它无依赖消息！</p>
+    </div>
+  </div>
+
+  <footer>
+    DDS Mental Model · 个人自适应学习系统专用交付物 · 遵循「机制直述 + 课程化 + 可重玩机制」标准
+  </footer>
+
+</div>
+
+<script>
+/* ==================== 状态机与持久化 ==================== */
+const STORAGE_KEY = 'dds_mental_model_v1';
+
+let currentStage = 0;
+let clearClickCount = 0;
+let clearTimer = null;
+
+// 游戏世界全局状态
+let world = {
+  domainId: 0,
+  spdpActive: false,
+  nodeACreated: false,
+  nodeBCreated: false,
+  nodeCCreated: false,
+  dwCreated: false,
+  drCreated: false,
+  dwQosRel: 'BEST_EFFORT', // 故意埋雷
+  dwQosDur: 'VOLATILE',
+  drQosRel: 'RELIABLE',    // 强求可靠
+  drQosDur: 'VOLATILE',
+  qosCompatible: false,
+  channelConnected: false,
+  peers: [],
+  historyCache: [],
+  sentPackets: 0,
+  retryCount: 0,
+  flowing: false
+};
+
+// 关卡配置
+const STAGES = [
+  {
+    title: "起点：局域网分布式机器人通信之困",
+    tag: "00 起点",
+    desc: "没有 roscore 中心服务器，两个物理进程（底盘 Node A 与导航 Node B）如何互相感知？",
+    obs: "注意左侧 C++ 代码与拓扑，此时节点尚未加入 Domain，无法通信。",
+    pass: "理解去中心化的起点背景，准备入网建域。",
+    initBtn: { text: "创建 DomainParticipant 入网", fn: "doCreateParticipants" }
+  },
+  {
+    title: "大喇叭打招呼 —— SPDP 参与者多播发现",
+    tag: "01 SPDP 发现",
+    desc: "Node A 启动后，向局域网默认多播地址发送 SPDP 周期包，宣告自己的存在。",
+    obs: "看中间拓扑与右侧邻居表：UDP 7400 端口多播雷达波，Node B 收到并登记 Node A 的 GUID 与单播端口。",
+    pass: "双方无需中心服务器即可自动互相感知，邻居表建立。",
+    initBtn: { text: "触发 SPDP 广播打招呼", fn: "doTriggerSPDP" }
+  },
+  {
+    title: "实体装配 —— 创建 Topic 与读写器 (DW/DR)",
+    tag: "02 实体装配",
+    desc: "两端创建各自的 DDS 实体：Node A 创建 DataWriter，Node B 创建 DataReader，挂接话题 /cmd_vel。",
+    obs: "两端出现了 DataWriter 与 DataReader，但注意此时双方 QoS 配置不一致！",
+    pass: "发布与订阅端实体在内存就绪，准备交换端点信息。",
+    initBtn: { text: "创建 DataWriter & DataReader", fn: "doCreateEntities" }
+  },
+  {
+    title: "交换名片 —— SEDP 端点握手与 QoS 踩坑",
+    tag: "03 SEDP 握手",
+    desc: "通过 SEDP 单播交换端点元数据。DDS 严格执行 RxO (Requested <= Offered) 审查。",
+    obs: "看右侧 QoS 合同报红！Publisher 设了 BEST_EFFORT，Subscriber 却要求 RELIABLE！管道被强行阻断！",
+    pass: "亲自目睹 ROS 2 最经典的通信断联惨案：Incompatible QoS 拒绝连接。",
+    initBtn: { text: "执行 SEDP 端点握手 (触发 QoS 审查)", fn: "doSEDPHandshake" }
+  },
+  {
+    title: "签署合同 —— 修正 QoS 策略使双方兼容",
+    tag: "04 QoS 修复",
+    desc: "将发布者的可靠性策略升级为 RELIABLE (Offered: RELIABLE >= Requested: RELIABLE)。",
+    obs: "合同指示灯变绿，RxO 判定通过，逻辑数据管道正式接通！",
+    pass: "双方达成一致的 QoS 契约，通信管道激活。",
+    initBtn: { text: "升级 Publisher QoS 为 RELIABLE", fn: "doFixQoS" }
+  },
+  {
+    title: "透明可靠传输 —— UDP 传输与 RTPS 序列号",
+    tag: "05 数据传输",
+    desc: "Node A 向 /cmd_vel 发送速度指令数据帧 #1 与 #2，打上单调递增 SeqNum。",
+    obs: "观察 RTPS DATA 子报文流经网络，Node B 成功接收并消费。",
+    pass: "数据在无中心网络中稳定传输。",
+    initBtn: { text: "发送数据包 (正常传输)", fn: "doSendPacketNormal" }
+  },
+  {
+    title: "丢包自愈 —— ACKNACK 机制与透明重传",
+    tag: "06 丢包重传",
+    desc: "模拟弱网环境：数据包 #3 遭遇 UDP 物理丢包！Node B 发现序列号空洞，发起反向 ACKNACK 要求重发。",
+    obs: "Node A 收到 ACKNACK，直接从本地 History 缓冲区翻出包 #3 重新单播送达！",
+    pass: "体会 DDS 是如何在 UDP 的低延迟基础之上，靠应用层协议实现可靠自愈的。",
+    initBtn: { text: "模拟弱网丢包与 ACKNACK 重传", fn: "doSimulatePacketLoss" }
+  },
+  {
+    title: "晚加入节点救星 —— Durability 历史回放",
+    tag: "07 晚加入回放",
+    desc: "Node C (RViz) 在地图已经发布后才刚刚启动上线！开启 TRANSIENT_LOCAL 后，发布端主动推历史最新消息。",
+    obs: "看 Node C 上线，DataWriter 的本地历史缓存主动推送最新地图数据，Node C 瞬间点亮！",
+    pass: "掌握 Durability 的真正价值：解决分布式系统组件启动时序不同步的痛点。",
+    initBtn: { text: "启动 Node C 并回放历史数据", fn: "doLateJoinDurability" }
+  },
+  {
+    title: "毕业小测：3 道经典 DDS / ROS 2 架构决策题",
+    tag: "08 毕业小测",
+    desc: "检测你对 DDS 核心机制的理解深度，完成 3 道场景决策。",
+    obs: "根据场景限制，选择正确的 QoS 策略与排错方案。",
+    pass: "3 题全对即可通关毕业，解锁自由沙盒。",
+    initBtn: null
+  },
+  {
+    title: "终点：DDS 自由沙盒模式 (Free Play)",
+    tag: "09 自由模式",
+    desc: "自由调节节点、注入丢包、切换 QoS 策略，随时复现各种通信场景！",
+    obs: "通过右上角「↺ 重玩本关」可倒带回任一阶段，或随时重刷小测巩固索引。",
+    pass: "自由探索 DDS 拓扑与底层协议行为。",
+    initBtn: null
+  }
+];
+
+/* ==================== 视图与控制台渲染 ==================== */
+function addLog(cmd, type, expl) {
+  const box = document.getElementById('logbox');
+  const div = document.createElement('div');
+  div.className = `logline ${type}`;
+  div.innerHTML = `<span class="cmd">&gt; ${cmd}</span><div class="expl">${expl}</div>`;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+function renderRail() {
+  const rail = document.getElementById('rail');
+  rail.innerHTML = '';
+  STAGES.forEach((st, idx) => {
+    const pill = document.createElement('div');
+    pill.className = `pill ${idx < currentStage ? 'done' : ''} ${idx === currentStage ? 'current' : ''}`;
+    pill.innerText = st.tag;
+    pill.onclick = () => { buildToStage(idx); };
+    rail.appendChild(pill);
+    if(idx < STAGES.length - 1){
+      const sep = document.createElement('div');
+      sep.className = 'sep';
+      rail.appendChild(sep);
+    }
+  });
+}
+
+function renderQuest() {
+  const q = document.getElementById('quest');
+  const st = STAGES[currentStage];
+
+  if(currentStage === 8) {
+    // 渲染小测
+    renderQuizQuest(q);
+    return;
+  }
+
+  if(currentStage === 9) {
+    q.className = 'quest free';
+    q.innerHTML = `
+      <div class="quest-head">
+        <span class="quest-stage" style="color:var(--green);">STAGE 09 · 自由模式</span>
+        <span class="quest-title">${st.title}</span>
+        <button class="replay-btn" onclick="buildToStage(currentStage)">↺ 重置沙盒</button>
+      </div>
+      <div class="q-row"><span class="k">🎯 当前状态</span><span class="v">DDS 核心机制已全部解锁：无中心 SPDP 发现、SEDP 握手、RxO 契约、UDP 可靠重传、Durability 回放。</span></div>
+      <div class="q-row"><span class="k">👀 自由试验</span><span class="v">使用下方控制台自由发包、注入丢包或测试 QoS 行为。</span></div>
+      <div class="go">
+        <button onclick="doSendPacketNormal()" style="border-color:var(--cyan); color:var(--cyan);">发送单包</button>
+        <button onclick="doSimulatePacketLoss()" style="border-color:var(--amber); color:var(--amber); margin-left:8px;">注入丢包并重传</button>
+        <button onclick="doToggleQoSDemo()" style="border-color:var(--purple); color:var(--purple); margin-left:8px;">制造 QoS 冲突测试</button>
+      </div>
+    `;
+    renderActionBtns();
+    return;
+  }
+
+  q.className = 'quest';
+  q.innerHTML = `
+    <div class="quest-head">
+      <span class="quest-stage">STAGE 0${currentStage} / 09</span>
+      <span class="quest-title">${st.title}</span>
+      <button class="replay-btn" onclick="buildToStage(currentStage)">↺ 重玩本关</button>
+      <button class="skip" onclick="skipStage()">跳至下一关 &gt;</button>
+    </div>
+    <div class="q-row"><span class="k">📍 任务背景</span><span class="v">${st.desc}</span></div>
+    <div class="q-row"><span class="k">👀 核心观察</span><span class="v">${st.obs}</span></div>
+    <div class="q-row"><span class="k">✅ 通关机制</span><span class="v">${st.pass}</span></div>
+    ${st.initBtn ? `
+      <div class="go">
+        <button onclick="${st.initBtn.fn}()">${st.initBtn.text}</button>
+      </div>
+    ` : ''}
+  `;
+  renderActionBtns();
+}
+
+function renderActionBtns() {
+  const container = document.getElementById('action-btns');
+  container.innerHTML = '';
+  const st = STAGES[currentStage];
+  if(st && st.initBtn) {
+    const b = document.createElement('button');
+    b.className = 'action-btn';
+    b.innerText = st.initBtn.text;
+    b.onclick = () => { window[st.initBtn.fn](); };
+    container.appendChild(b);
+  }
+}
+
+/* ==================== 小测 (Stage 8) ==================== */
+const QUIZ_DATA = [
+  {
+    q: "1. 在自动驾驶系统中，100Hz 的高频激光雷达点云 (/lidar_points)，最合理的 QoS Reliability 应该选什么？",
+    opts: [
+      { t: "A. RELIABLE：即使阻塞，也必须保证每一帧雷达点云都不丢", c: false, expl: "错误！100Hz 点云单包巨大，如果网络抖动卡住重传，会引起严重队头阻塞，导致算法处理严重滞后发生车祸！" },
+      { t: "B. BEST_EFFORT：尽力交付，丢了一帧马上有下一帧补上，实时性第一", c: true, expl: "正确！高频传感器数据的核心原则是实时性 > 完整性。新数据不断涌入，旧数据重传毫无价值。" },
+      { t: "C. TRANSIENT：必须永久保存在磁盘上", c: false, expl: "错误！TRANSIENT 是持久性策略，而且点云不该持久化堵爆内存。" }
+    ]
+  },
+  {
+    q: "2. 新启动 RViz2 观察机器人建图，发现 /map 话题死活收不到地图（一片黑），可能的原因是？",
+    opts: [
+      { t: "A. Map 节点的 Publisher 设为 VOLATILE，而 RViz 是后上线的，错过了之前发布的地图帧", c: true, expl: "正确！地图发布频率极低（几十秒一次甚至静态）。必须将 Durability 设为 TRANSIENT_LOCAL，Publisher 才会把历史地图回放给后加入的 RViz！" },
+      { t: "B. ROS 2 没有安装 roscore 导致节点找不到彼此", c: false, expl: "错误！ROS 2 基于 DDS，彻底去掉了 roscore，不要被 ROS 1 思维带偏。" },
+      { t: "C. UDP 端口号冲突，导致数据包被操作系统防火墙吞了", c: false, expl: "错误！同一 Domain 内不同实体端口按照规则计算，通常不会随机冲突。" }
+    ]
+  },
+  {
+    q: "3. 机器人上有 Node 1 (ROS_DOMAIN_ID=1) 与 Node 2 (ROS_DOMAIN_ID=2)，它们能通信吗？底层为什么？",
+    opts: [
+      { t: "A. 能通信，因为都在同一台电脑的局域网内", c: false, expl: "错误！同一局域网并不代表能通信。" },
+      { t: "B. 不能通信，因为 Domain ID 决定了 UDP 监听端口计算公式，它们监听的完全是不同的网络端口", c: true, expl: "正确！Domain ID 是物理端口隔离机制。Domain 1 与 Domain 2 互不发 SPDP 广播，在物理层面上如同处于两张完全不同的网！" },
+      { t: "C. 能通信，但需要配置相同的 Topic 名称", c: false, expl: "错误！不在同一个 Domain，连 SPDP 发现都进不去，根本走不到 Topic 匹配。" }
+    ]
+  }
+];
+
+let quizAnswers = {};
+
+function renderQuizQuest(container) {
+  container.className = 'quest';
+  let html = `
+    <div class="quest-head">
+      <span class="quest-stage" style="color:var(--amber);">STAGE 08 · 毕业小测</span>
+      <span class="quest-title">DDS 核心机制考核 (3 题全对毕业)</span>
+      <button class="replay-btn" onclick="buildToStage(8)">↺ 重置做题</button>
+    </div>
+    <div class="quiz">
+  `;
+
+  QUIZ_DATA.forEach((qitem, qidx) => {
+    html += `
+      <div class="qitem">
+        <div class="qtext">${qitem.q}</div>
+        <div class="opts">
+    `;
+    qitem.opts.forEach((opt, oidx) => {
+      const selected = quizAnswers[qidx] === oidx;
+      let cls = 'opt';
+      if(quizAnswers[qidx] !== undefined) {
+        if(opt.c) cls += ' correct';
+        else if(selected) cls += ' wrong';
+        else cls += ' dim';
+      }
+      html += `<button class="${cls}" onclick="answerQuiz(${qidx}, ${oidx})">${opt.t}</button>`;
+    });
+    if(quizAnswers[qidx] !== undefined) {
+      const chosen = qitem.opts[quizAnswers[qidx]];
+      html += `<div class="qexpl">${chosen.expl}</div>`;
+    }
+    html += `</div></div>`;
+  });
+
+  html += `</div>`;
+  container.innerHTML = html;
+}
+
+function answerQuiz(qidx, oidx) {
+  quizAnswers[qidx] = oidx;
+  renderQuest();
+
+  // 检查是否全对
+  const allCorrect = QUIZ_DATA.every((q, idx) => quizAnswers[idx] !== undefined && q.opts[quizAnswers[idx]].c);
+  if(allCorrect) {
+    addLog('毕业小测全对通过！', 'ok', '恭喜通关！你已经真正掌握了 DDS 的去中心化发现机制、QoS 合同 (RxO) 原则与底层 RTPS 传输哲学！即将解锁自由沙盒。');
+    setTimeout(() => {
+      currentStage = 9;
+      saveState();
+      render();
+    }, 1200);
+  }
+}
+
+/* ==================== 舞台与三列渲染 ==================== */
+function render() {
+  renderRail();
+  renderQuest();
+  renderCodebox();
+  renderTopology();
+  renderInspector();
+  saveState();
+}
+
+function renderCodebox() {
+  const box = document.getElementById('codebox');
+  let code = '';
+
+  if(currentStage === 0) {
+    code = `
+<span class="cm">// ===== Stage 0: 零中心网络初始状态 =====</span>
+<span class="kw">#include</span> <span class="str">&lt;rclcpp/rclcpp.hpp&gt;</span>
+<span class="kw">#include</span> <span class="str">&lt;geometry_msgs/msg/twist.hpp&gt;</span>
+
+<span class="cm">// 此时没有任何中心服务 (roscore is dead)</span>
+<span class="cm">// 节点尚未初始化 DomainParticipant</span>
+<span class="type">int</span> <span class="fn">main</span>(<span class="type">int</span> argc, <span class="type">char</span>** argv) {
+    rclcpp::<span class="fn">init</span>(argc, argv);
+    <span class="cm">// 等待调用 rclcpp::Node::make_shared() ...</span>
+    <span class="kw">return</span> <span class="val">0</span>;
+}
+    `;
+  } else if(currentStage === 1) {
+    code = `
+<span class="cm">// ===== Stage 1: 创建 Participant & SPDP 广播 =====</span>
+<span class="cm">// ROS 2 Node 在底层对应一个 DomainParticipant</span>
+<span class="kw">auto</span> node_a = rclcpp::Node::<span class="fn">make_shared</span>(<span class="str">"chassis_node"</span>);
+
+<span class="cm">// 底层 Fast DDS 动作：</span>
+<span class="cm">// 1. 计算 Domain 0 的 UDP 多播端口: 7400</span>
+<span class="cm">// 2. 生成本地唯一 GUID: 01.0f.4c.d2.11...</span>
+<span class="cm">// 3. 向 239.255.0.1:7400 发送 SPDP 报文！</span>
+    `;
+  } else if(currentStage === 2) {
+    code = `
+<span class="cm">// ===== Stage 2: 实体装配 (DW & DR) =====</span>
+<span class="cm">// Node A 创建速度控制发布者:</span>
+<span class="kw">auto</span> qos_a = rclcpp::<span class="fn">QoS</span>(rclcpp::<span class="fn">KeepLast</span>(<span class="val">10</span>)).<span class="fn">best_effort</span>();
+<span class="kw">auto</span> pub = node_a-&gt;<span class="fn">create_publisher</span>&lt;geometry_msgs::msg::Twist&gt;(
+    <span class="str">"/cmd_vel"</span>, qos_a);
+
+<span class="cm">// Node B 创建速度控制订阅者:</span>
+<span class="kw">auto</span> qos_b = rclcpp::<span class="fn">QoS</span>(rclcpp::<span class="fn">KeepLast</span>(<span class="val">10</span>)).<span class="fn">reliable</span>();
+<span class="kw">auto</span> sub = node_b-&gt;<span class="fn">create_subscription</span>&lt;geometry_msgs::msg::Twist&gt;(
+    <span class="str">"/cmd_vel"</span>, qos_b, &amp;on_cmd_vel);
+    `;
+  } else if(currentStage === 3) {
+    code = `
+<span class="cm">// ===== Stage 3: SEDP 握手与 QoS 审查 (RxO 拒绝!) =====</span>
+<span class="cm">// SEDP 协议单播交换端点配置：</span>
+<span class="cm">// Offered (发布方提供):   Reliability = BEST_EFFORT</span>
+<span class="cm">// Requested (订阅方要求): Reliability = RELIABLE</span>
+
+<span class="cm">// 发生 Incompatible QoS 警告！</span>
+<span class="kw">if</span> (Offered &lt; Requested) {
+    <span class="fn">RCLCPP_WARN</span>(<span class="str">"Incompatible QoS! Cannot connect pipe!"</span>);
+    <span class="kw">return</span> DISALLOWED; <span class="cm">// 拒绝建立物理数据通道</span>
+}
+    `;
+  } else if(currentStage === 4) {
+    code = `
+<span class="cm">// ===== Stage 4: 修复 QoS 契约对齐 =====</span>
+<span class="cm">// 将 Publisher 的 QoS 升级为 reliable:</span>
+<span class="kw">auto</span> qos_fixed = rclcpp::<span class="fn">QoS</span>(rclcpp::<span class="fn">KeepLast</span>(<span class="val">10</span>)).<span class="fn">reliable</span>();
+<span class="kw">auto</span> pub_fixed = node_a-&gt;<span class="fn">create_publisher</span>&lt;Twist&gt;(
+    <span class="str">"/cmd_vel"</span>, qos_fixed);
+
+<span class="cm">// Offered (RELIABLE) &gt;= Requested (RELIABLE) -&gt; 契约达成！</span>
+<span class="cm">// 物理 UDP 传输管道正式打开！</span>
+    `;
+  } else if(currentStage >= 5) {
+    code = `
+<span class="cm">// ===== Stage 5+: 实时数据流与透明重传 =====</span>
+geometry_msgs::msg::Twist msg;
+msg.linear.x = <span class="val">1.5</span>;
+msg.angular.z = <span class="val">0.2</span>;
+
+<span class="cm">// 发布者写入全局数据空间:</span>
+pub_fixed-&gt;<span class="fn">publish</span>(msg);
+
+<span class="cm">// 底层 Fast DDS 动作：</span>
+<span class="cm">// 1. 序列化为 CDR 二进制流</span>
+<span class="cm">// 2. 打上单调递增 SeqNum (#1, #2, #3...)</span>
+<span class="cm">// 3. 若丢包，自动通过 ACKNACK 从本地缓存重发！</span>
+    `;
+  }
+
+  box.innerHTML = code.trim();
+}
+
+function renderTopology() {
+  const nodeA = document.getElementById('node-a');
+  const nodeB = document.getElementById('node-b');
+  const nodeC = document.getElementById('node-c');
+  const dwState = document.getElementById('dw-state');
+  const drState = document.getElementById('dr-state');
+  const dwQosDesc = document.getElementById('dw-qos-desc');
+  const drQosDesc = document.getElementById('dr-qos-desc');
+  const discStatus = document.getElementById('discovery-status');
+  const wireChan = document.getElementById('wire-chan');
+  const qosTag = document.getElementById('qos-tag');
+  const chanStatus = document.getElementById('channel-status');
+
+  if(world.nodeACreated) {
+    nodeA.classList.add('joined');
+  } else {
+    nodeA.classList.remove('joined');
+  }
+
+  if(world.nodeBCreated) {
+    nodeB.classList.add('joined');
+  } else {
+    nodeB.classList.remove('joined');
+  }
+
+  if(world.dwCreated) {
+    dwState.innerText = '已创建';
+    dwState.style.color = 'var(--green)';
+    dwQosDesc.innerText = `QoS: Rel=${world.dwQosRel}, Dur=${world.dwQosDur}`;
+  } else {
+    dwState.innerText = '未创建';
+    dwState.style.color = 'var(--muted)';
+  }
+
+  if(world.drCreated) {
+    drState.innerText = '已创建';
+    drState.style.color = 'var(--green)';
+    drQosDesc.innerText = `QoS: Rel=${world.drQosRel}, Dur=${world.drQosDur}`;
+  } else {
+    drState.innerText = '未创建';
+    drState.style.color = 'var(--muted)';
+  }
+
+  if(world.spdpActive) {
+    discStatus.innerText = 'SPDP 局域网已感知 (2 节点)';
+    discStatus.style.color = 'var(--green)';
+  } else {
+    discStatus.innerText = '未启动发现';
+    discStatus.style.color = 'var(--amber)';
+  }
+
+  // 管道连接状态
+  if(world.channelConnected) {
+    wireChan.className = 'wire-channel linked';
+    chanStatus.innerText = '已握手 (通道通畅)';
+    chanStatus.style.color = 'var(--green)';
+    qosTag.className = 'qos-pill pass';
+    qosTag.innerText = `QoS 契约兼容: RELIABLE`;
+  } else if(currentStage === 3) {
+    wireChan.className = 'wire-channel incompatible';
+    chanStatus.innerText = '阻断 (Incompatible QoS)';
+    chanStatus.style.color = 'var(--red)';
+    qosTag.className = 'qos-pill fail';
+    qosTag.innerText = `RxO 冲突: Offered(BEST_EFFORT) < Req(RELIABLE)`;
+  } else {
+    wireChan.className = 'wire-channel';
+    chanStatus.innerText = '未连接';
+    chanStatus.style.color = 'var(--muted)';
+    qosTag.className = 'qos-pill';
+    qosTag.innerText = `QoS: 未协商`;
+  }
+
+  // Node C 状态
+  if(world.nodeCCreated) {
+    nodeC.className = 'node-card late active';
+    document.getElementById('node-c-state').innerText = '已接入 (收到历史地图)';
+    document.getElementById('node-c-state').style.color = 'var(--green)';
+    document.getElementById('guid-c').innerText = 'GUID: 01.0f.03... (已同步)';
+  } else {
+    nodeC.className = 'node-card late';
+    document.getElementById('node-c-state').innerText = '等待上线';
+    document.getElementById('node-c-state').style.color = 'var(--muted)';
+    document.getElementById('guid-c').innerText = '离线 (未启动)';
+  }
+}
+
+function renderInspector() {
+  const peerCount = document.getElementById('peer-count');
+  const peerTbody = document.getElementById('peer-tbody');
+  const verdict = document.getElementById('contract-verdict');
+  const rxoRel = document.getElementById('rxo-rel');
+  const rxoDur = document.getElementById('rxo-dur');
+  const rxoPipe = document.getElementById('rxo-pipe');
+  const cacheBox = document.getElementById('history-items');
+  const stPeers = document.getElementById('st-peers');
+  const stPkts = document.getElementById('st-pkts');
+  const stRetries = document.getElementById('st-retries');
+
+  stPeers.innerText = world.peers.length;
+  stPkts.innerText = world.sentPackets;
+  stRetries.innerText = world.retryCount;
+
+  if(world.peers.length > 0) {
+    peerCount.innerText = `${world.peers.length} 活跃`;
+    let rows = '';
+    world.peers.forEach(p => {
+      rows += `<tr>
+        <td style="color:var(--cyan);">${p.guid}</td>
+        <td><b>${p.name}</b></td>
+        <td>${p.ip}</td>
+        <td class="active-peer">ALIVE</td>
+      </tr>`;
+    });
+    peerTbody.innerHTML = rows;
+  } else {
+    peerCount.innerText = '0 活跃';
+    peerTbody.innerHTML = `<tr><td colspan="4" style="color:var(--muted); text-align:center;">暂无邻居 (等待 SPDP 广播)</td></tr>`;
+  }
+
+  // 合同展示
+  if(currentStage >= 4 && world.qosCompatible) {
+    verdict.innerText = 'PASSED (合同成立)';
+    verdict.style.color = 'var(--green)';
+    rxoRel.innerText = `Offered(${world.dwQosRel}) >= Req(${world.drQosRel})`;
+    rxoRel.className = 'stat ok';
+    rxoDur.innerText = `Offered(${world.dwQosDur}) >= Req(${world.drQosDur})`;
+    rxoDur.className = 'stat ok';
+    rxoPipe.innerText = 'ACTIVE (已开通)';
+    rxoPipe.className = 'stat ok';
+  } else if(currentStage === 3) {
+    verdict.innerText = 'REJECTED (合同撕毁)';
+    verdict.style.color = 'var(--red)';
+    rxoRel.innerText = `Offered(${world.dwQosRel}) < Req(${world.drQosRel})`;
+    rxoRel.className = 'stat err';
+    rxoDur.innerText = `Offered(${world.dwQosDur}) >= Req(${world.drQosDur})`;
+    rxoDur.className = 'stat ok';
+    rxoPipe.innerText = 'BLOCKED (拒绝连接)';
+    rxoPipe.className = 'stat err';
+  } else {
+    verdict.innerText = '未对齐';
+    verdict.style.color = 'var(--muted)';
+    rxoRel.innerText = '待审查';
+    rxoRel.className = 'stat';
+    rxoDur.innerText = '待审查';
+    rxoDur.className = 'stat';
+    rxoPipe.innerText = 'IDLE';
+    rxoPipe.className = 'stat';
+  }
+
+  // 历史缓存
+  if(world.historyCache.length > 0) {
+    cacheBox.innerHTML = world.historyCache.map(c => `
+      <div style="padding:2px 0; border-bottom:1px dashed #203152;">
+        <b style="color:var(--amber);">SeqNum #${c.seq}</b>: [${c.data}]
+        <span style="color:var(--cyan); float:right;">${c.status}</span>
+      </div>
+    `).join('');
+  } else {
+    cacheBox.innerHTML = '[缓存为空]';
+  }
+}
+
+/* ==================== 关卡动作执行器 ==================== */
+function doCreateParticipants() {
+  if(world.flowing) return;
+  world.nodeACreated = true;
+  world.nodeBCreated = true;
+  addLog('rclcpp::Node::make_shared()', 'ok', '【创建参与者】Node A (底盘) 与 Node B (导航) 初始化完成。两节点各自申请了本地 UDP 通信套接字，并派生唯一 GUID。');
+  currentStage = 1;
+  render();
+}
+
+function doTriggerSPDP() {
+  if(world.flowing) return;
+  world.flowing = true;
+
+  // 模拟 SPDP 多播动画
+  const p = document.getElementById('fly-packet');
+  p.className = 'packet-particle spdp';
+  p.innerText = 'SPDP';
+  p.style.left = '20px';
+
+  addLog('SPDP 多播打招呼 (239.255.0.1:7400)', 'info', 'Node A 周期性向局域网默认多播地址发送 RTPS 参与者宣告报文。');
+
+  setTimeout(() => {
+    p.style.left = '85%';
+    setTimeout(() => {
+      p.style.left = '-40px';
+      world.spdpActive = true;
+      world.peers = [
+        { guid: '01.0f.01...', name: 'chassis_node', ip: '192.168.1.10:7411' },
+        { guid: '01.0f.02...', name: 'nav_node', ip: '192.168.1.15:7412' }
+      ];
+      addLog('SPDP 邻居表入库成功', 'ok', '【无中心自主感知】Node B 收到宣告，将 Node A 登记到内存邻居表；Node B 紧接着单播回复自身信息。双方完全无需 roscore 即可完成互相发现！');
+      world.flowing = false;
+      currentStage = 2;
+      render();
+    }, 800);
+  }, 100);
+}
+
+function doCreateEntities() {
+  if(world.flowing) return;
+  world.dwCreated = true;
+  world.drCreated = true;
+  world.dwQosRel = 'BEST_EFFORT'; // 故意设错
+  world.drQosRel = 'RELIABLE';
+  addLog('create_publisher & create_subscription', 'ok', '【实体装配】两端创建了对话题 /cmd_vel 的读写器实体。注意：发布端 QoS 设为 BEST_EFFORT，订阅端设为 RELIABLE。');
+  currentStage = 3;
+  render();
+}
+
+function doSEDPHandshake() {
+  if(world.flowing) return;
+  world.qosCompatible = false;
+  world.channelConnected = false;
+  addLog('SEDP 端点握手 (RxO 审查)', 'err', '【Incompatible QoS 警报！】订阅方要求 Reliable，但发布方仅提供 Best Effort。Requested <= Offered 判定失败！DDS 拒绝建立通信管道！');
+  currentStage = 4;
+  render();
+}
+
+function doFixQoS() {
+  if(world.flowing) return;
+  world.dwQosRel = 'RELIABLE';
+  world.qosCompatible = true;
+  world.channelConnected = true;
+  addLog('升级 Publisher QoS = RELIABLE', 'ok', '【合同签署成功】Offered (RELIABLE) >= Requested (RELIABLE)。RxO 审查通过！逻辑虚拟数据通道瞬间建立！');
+  currentStage = 5;
+  render();
+}
+
+function doSendPacketNormal() {
+  if(world.flowing) return;
+  world.flowing = true;
+
+  world.sentPackets += 1;
+  const seq = world.sentPackets;
+  world.historyCache.push({ seq: seq, data: 'v=1.5, w=0.2', status: '已存入' });
+
+  const p = document.getElementById('fly-packet');
+  p.className = 'packet-particle';
+  p.innerText = `#${seq}`;
+  p.style.left = '20px';
+
+  addLog(`DataWriter::publish() → SeqNum #${seq}`, 'info', `数据打包为 RTPS DATA 子报文，压入本地历史缓存并经 UDP 单播发出。`);
+
+  setTimeout(() => {
+    p.style.left = '85%';
+    setTimeout(() => {
+      p.style.left = '-40px';
+      addLog(`DataReader 收到 SeqNum #${seq}`, 'ok', `【正常消费】Node B 顺利收到包 #${seq}，序列号连续，触发上层控制算法回调。`);
+      world.flowing = false;
+      if(currentStage === 5) {
+        currentStage = 6;
+      }
+      render();
+    }, 800);
+  }, 100);
+}
+
+function doSimulatePacketLoss() {
+  if(world.flowing) return;
+  world.flowing = true;
+
+  world.sentPackets += 1;
+  const seq = world.sentPackets;
+  world.historyCache.push({ seq: seq, data: 'v=2.0, w=-0.1', status: '缓存中' });
+
+  const p = document.getElementById('fly-packet');
+  p.className = 'packet-particle lost';
+  p.innerText = `#${seq}`;
+  p.style.left = '20px';
+
+  addLog(`DataWriter 发出 SeqNum #${seq}`, 'info', `正在网络上传输...`);
+
+  setTimeout(() => {
+    p.style.left = '50%';
+    setTimeout(() => {
+      p.style.display = 'none';
+      addLog(`💥 [模拟网络丢包] 包 #${seq} 在 UDP 传输途中丢失！`, 'err', 'UDP 是不可靠协议，物理交换机丢弃了该报文！');
+
+      // Node B 触发 ACKNACK
+      setTimeout(() => {
+        addLog(`DataReader 发现序列号空洞！发出 ACKNACK(请求 #${seq})`, 'info', '【发现空洞】订阅端维护的接收队列发现跳号，立即通过 RTPS 单播反向发送 ACKNACK 报文催促补发。');
+
+        // 反向发包
+        p.className = 'packet-particle ack';
+        p.innerText = 'ACK';
+        p.style.display = 'flex';
+        p.style.left = '85%';
+
+        setTimeout(() => {
+          p.style.left = '20px';
+          setTimeout(() => {
+            // Node A 重传
+            world.retryCount += 1;
+            addLog(`DataWriter 从本地 History Cache 翻出 #${seq} 并重传！`, 'ok', `【透明自愈】发布端收到 ACKNACK，直接从环形历史缓冲区中取出旧包单播重发！`);
+            p.className = 'packet-particle';
+            p.innerText = `#${seq}`;
+            setTimeout(() => {
+              p.style.left = '85%';
+              setTimeout(() => {
+                p.style.left = '-40px';
+                addLog(`DataReader 补全了丢失的 #${seq} 包！`, 'ok', '【自愈完成】丢失的控制包被无缝补齐，且没有影响到其它独立通信，应用层完全无感！');
+                world.flowing = false;
+                if(currentStage === 6) {
+                  currentStage = 7;
+                }
+                render();
+              }, 800);
+            }, 100);
+          }, 800);
+        }, 100);
+      }, 800);
+    }, 600);
+  }, 100);
+}
+
+function doLateJoinDurability() {
+  if(world.flowing) return;
+  world.flowing = true;
+
+  world.nodeCCreated = true;
+  world.peers.push({ guid: '01.0f.03...', name: 'rviz2_display', ip: '192.168.1.20:7415' });
+
+  addLog('Node C (RViz2) 晚加入启动上线', 'info', '【晚加入事件】发布者很久前就已经发布了地图数据 (/map)，此时 Node C 才刚刚上线。');
+
+  setTimeout(() => {
+    addLog('TRANSIENT_LOCAL 历史回放触发', 'ok', '【历史推送】由于 Durability 设为 TRANSIENT_LOCAL，Node A 发现新订阅者上线后，主动把历史缓存中最新的一张地图回放给 Node C！');
+    const p = document.getElementById('fly-packet');
+    p.className = 'packet-particle';
+    p.innerText = 'MAP';
+    p.style.left = '20px';
+
+    setTimeout(() => {
+      p.style.left = '85%';
+      setTimeout(() => {
+        p.style.left = '-40px';
+        addLog('Node C 成功接收到历史地图数据！', 'ok', '【完美解决时序不同步】RViz 画面瞬间点亮，彻底避免了 ROS 1 中必须重启节点才能重新获取静态地图的痛点！');
+        world.flowing = false;
+        currentStage = 8;
+        render();
+      }, 800);
+    }, 100);
+  }, 600);
+}
+
+function doToggleQoSDemo() {
+  world.dwQosRel = (world.dwQosRel === 'BEST_EFFORT' ? 'RELIABLE' : 'BEST_EFFORT');
+  world.qosCompatible = (world.dwQosRel === 'RELIABLE');
+  world.channelConnected = world.qosCompatible;
+  if(world.qosCompatible) {
+    addLog(`切换 QoS 为 RELIABLE`, 'ok', 'QoS 契约兼容，管道通畅。');
+  } else {
+    addLog(`切换 QoS 为 BEST_EFFORT`, 'err', '制造了 Incompatible QoS 冲突，通信通道中断！');
+  }
+  render();
+}
+
+function skipStage() {
+  if(currentStage < 8) {
+    currentStage += 1;
+    render();
+  }
+}
+
+/* ==================== 可重玩与持久化机制 ==================== */
+function saveState() {
+  const data = {
+    currentStage: currentStage,
+    quizAnswers: quizAnswers
+  };
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch(e) {}
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw) {
+      const data = JSON.parse(raw);
+      if(data && typeof data.currentStage === 'number') {
+        buildToStage(data.currentStage);
+        if(data.quizAnswers) quizAnswers = data.quizAnswers;
+        return true;
+      }
+    }
+  } catch(e) {}
+  return false;
+}
+
+// 核心可重玩实现：精准还原到指定关卡刚到达时的纯净状态
+function buildToStage(target) {
+  currentStage = target;
+
+  // 重置世界状态
+  world.spdpActive = false;
+  world.nodeACreated = false;
+  world.nodeBCreated = false;
+  world.nodeCCreated = false;
+  world.dwCreated = false;
+  world.drCreated = false;
+  world.dwQosRel = 'BEST_EFFORT';
+  world.dwQosDur = 'VOLATILE';
+  world.drQosRel = 'RELIABLE';
+  world.drQosDur = 'VOLATILE';
+  world.qosCompatible = false;
+  world.channelConnected = false;
+  world.peers = [];
+  world.historyCache = [];
+  world.sentPackets = 0;
+  world.retryCount = 0;
+  world.flowing = false;
+
+  const p = document.getElementById('fly-packet');
+  if(p) { p.style.left = '-40px'; p.style.display = 'flex'; }
+
+  // 根据目标阶段重放前置事实
+  if(target >= 1) {
+    world.nodeACreated = true;
+    world.nodeBCreated = true;
+  }
+  if(target >= 2) {
+    world.spdpActive = true;
+    world.peers = [
+      { guid: '01.0f.01...', name: 'chassis_node', ip: '192.168.1.10:7411' },
+      { guid: '01.0f.02...', name: 'nav_node', ip: '192.168.1.15:7412' }
+    ];
+  }
+  if(target >= 3) {
+    world.dwCreated = true;
+    world.drCreated = true;
+  }
+  if(target >= 4) {
+    // 经历了第 3 关冲突
+    world.dwQosRel = 'BEST_EFFORT';
+    world.drQosRel = 'RELIABLE';
+    world.qosCompatible = false;
+  }
+  if(target >= 5) {
+    world.dwQosRel = 'RELIABLE';
+    world.qosCompatible = true;
+    world.channelConnected = true;
+  }
+  if(target >= 6) {
+    world.sentPackets = 2;
+    world.historyCache = [
+      { seq: 1, data: 'v=1.5, w=0.2', status: '已存入' },
+      { seq: 2, data: 'v=1.8, w=0.1', status: '已存入' }
+    ];
+  }
+  if(target >= 7) {
+    world.sentPackets = 3;
+    world.retryCount = 1;
+    world.historyCache.push({ seq: 3, data: 'v=2.0, w=-0.1', status: '重传成功' });
+  }
+  if(target >= 8) {
+    world.nodeCCreated = true;
+    world.peers.push({ guid: '01.0f.03...', name: 'rviz2_display', ip: '192.168.1.20:7415' });
+  }
+  if(target >= 9) {
+    // 自由模式解锁
+  }
+
+  addLog(`↺ 进度跳转`, 'info', `已将系统状态重放并同步至第 0${target} 关「${STAGES[target].title}」。`);
+  render();
+}
+
+function handleClearClick() {
+  clearClickCount++;
+  const btn = document.getElementById('btn-rearm');
+  if(clearClickCount === 1) {
+    btn.className = 'clear-btn armed';
+    btn.innerText = '⚠️ 再点一次确认清空全部进度';
+    clearTimer = setTimeout(() => {
+      clearClickCount = 0;
+      btn.className = 'clear-btn';
+      btn.innerText = '⟲ 清除全部进度';
+    }, 3000);
+  } else if(clearClickCount >= 2) {
+    clearTimeout(clearTimer);
+    clearClickCount = 0;
+    btn.className = 'clear-btn';
+    btn.innerText = '⟲ 清除全部进度';
+    try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+    quizAnswers = {};
+    document.getElementById('logbox').innerHTML = '';
+    buildToStage(0);
+    addLog('已清除全部学习记录与进度', 'ok', '系统状态与断点续走已彻底清空，已回到起点。');
+  }
+}
+
+window.world = world;
+window.STAGES = STAGES;
+window.getCurrentStage = () => currentStage;
+window.setCurrentStage = (s) => { currentStage = s; };
+window.buildToStage = buildToStage;
+window.doCreateParticipants = doCreateParticipants;
+window.doTriggerSPDP = doTriggerSPDP;
+window.doCreateEntities = doCreateEntities;
+window.doSEDPHandshake = doSEDPHandshake;
+window.doFixQoS = doFixQoS;
+window.doSendPacketNormal = doSendPacketNormal;
+window.doSimulatePacketLoss = doSimulatePacketLoss;
+window.doLateJoinDurability = doLateJoinDurability;
+window.doToggleQoSDemo = doToggleQoSDemo;
+window.handleClearClick = handleClearClick;
+
+// 页面初始化
+window.addEventListener('DOMContentLoaded', () => {
+  if(!loadState()) {
+    buildToStage(0);
+    addLog('欢迎来到 DDS 中间件交互认知系统', 'info', '已就绪。点击任务卡中的按钮即可逐关探索！');
+  }
+});
+</script>
+</body>
+</html>

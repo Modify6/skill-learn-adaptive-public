@@ -1,0 +1,1247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>单播 vs 广播 vs 多播 —— 局域网物理寻人与多播频道机制</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#151f36; --panel2:#0f1729;
+    --line:#26334d; --text:#dde6f5; --muted:#a6b9d9;
+    --blue:#3b82f6; --green:#22c55e; --purple:#a855f7;
+    --amber:#f5b544; --cyan:#38bdf8; --red:#f87171;
+    --mono:"Cascadia Code",Consolas,"JetBrains Mono",monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:radial-gradient(1200px 600px at 50% -100px,#16223d 0%,var(--bg) 60%);
+    color:var(--text);
+    font-family:system-ui,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+    padding:30px 18px 70px; line-height:1.65;
+  }
+  .wrap{max-width:1240px; margin:0 auto;}
+
+  /* ---------- header ---------- */
+  h1{font-size:26px; letter-spacing:.5px;}
+  h1 .dot-word{color:var(--amber);}
+  .sub{color:var(--muted); margin-top:6px; font-size:14.5px;}
+
+  /* ---------- hierarchy badge ---------- */
+  .ladder-badge{
+    display:inline-flex; align-items:center; gap:8px; margin-top:10px; padding:4px 10px;
+    background:#162442; border:1px solid #2e446d; border-radius:6px; font-size:12px;
+    color:var(--purple); font-family:var(--mono); font-weight:600;
+  }
+
+  /* ---------- landing table ---------- */
+  .ltable{margin-top:14px; border:1px solid var(--line); border-radius:10px; overflow:hidden; font-size:12px;}
+  .ltable table{width:100%; border-collapse:collapse;}
+  .ltable th{
+    background:rgba(255,255,255,.03); color:var(--muted); font-size:11px; font-weight:600;
+    padding:6px 10px; text-align:left; border-bottom:1px solid var(--line); letter-spacing:1px;
+  }
+  .ltable td{padding:6px 10px; border-bottom:1px solid rgba(38,51,77,.5); vertical-align:top;}
+  .ltable tr:last-child td{border-bottom:none;}
+  .ltable .nick{color:var(--amber); font-weight:700; font-family:var(--mono); white-space:nowrap;}
+  .ltable .real{color:var(--cyan); font-family:var(--mono);}
+  .ltable .phys{color:var(--text);}
+  .ltable .life{color:var(--muted);}
+
+  /* ---------- journey rail ---------- */
+  .journey{margin-top:20px;}
+  .rail{display:flex; align-items:center; gap:5px; overflow-x:auto; padding:4px 2px 10px;}
+  .pill{
+    flex:none; font-size:11px; padding:4px 9px; border-radius:999px;
+    border:1px solid var(--line); color:var(--muted); white-space:nowrap; background:var(--panel2);
+    cursor:pointer;
+  }
+  .pill.done{color:var(--green); border-color:rgba(34,197,94,.55);}
+  .pill.current{color:var(--amber); border-color:var(--amber); box-shadow:0 0 10px rgba(245,181,68,.25); font-weight:700;}
+  .sep{flex:none; width:10px; height:2px; background:var(--line);}
+
+  /* ---------- quest card ---------- */
+  .quest{
+    border:1px solid rgba(245,181,68,.45); border-left:4px solid var(--amber);
+    background:linear-gradient(90deg, rgba(245,181,68,.07), var(--panel2) 45%);
+    border-radius:12px; padding:14px 18px;
+  }
+  .quest.free{border-color:rgba(34,197,94,.45); border-left-color:var(--green);
+    background:linear-gradient(90deg, rgba(34,197,94,.07), var(--panel2) 45%);}
+  .quest-head{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .quest-stage{font-family:var(--mono); font-size:11px; color:var(--amber); letter-spacing:1px;}
+  .quest-title{font-size:16px; font-weight:700;}
+  .skip{font-size:12px; color:var(--muted); cursor:pointer; border:none; background:none; text-decoration:underline dotted; padding:0;}
+  .skip:hover{color:var(--text);}
+  .replay-btn{
+    font-size:11px; padding:3px 8px; border-radius:6px; background:#182338;
+    color:var(--cyan); border:1px solid var(--line); cursor:pointer; margin-left:auto;
+  }
+  .replay-btn:hover{border-color:var(--cyan); background:#1e2d48;}
+  .q-row{display:flex; gap:12px; margin-top:9px; font-size:13.5px;}
+  .q-row .k{flex:none; width:88px; color:var(--muted); font-weight:600;}
+  .q-row .v{color:var(--text);}
+  .q-row .v b{color:var(--amber);}
+  .quest .go{margin-top:12px;}
+  .quest .go button{
+    font-size:13px; padding:7px 18px; border-color:var(--amber); color:var(--amber);
+    font-family:system-ui,"Microsoft YaHei",sans-serif; font-weight:700;
+  }
+
+  /* quiz */
+  .quiz{margin-top:6px;}
+  .qitem{margin-top:12px; padding-top:10px; border-top:1px dashed var(--line);}
+  .qitem .qtext{font-size:13.5px; font-weight:600;}
+  .opts{display:flex; flex-direction:column; gap:6px; margin-top:8px;}
+  .opt{
+    text-align:left; font-size:12.5px; font-family:var(--mono),system-ui,sans-serif;
+    background:#182338; color:var(--text); border:1px solid var(--line); border-radius:6px;
+    padding:8px 12px; cursor:pointer;
+  }
+  .opt.correct{border-color:var(--green); color:var(--green); background:rgba(34,197,94,.1);}
+  .opt.wrong{border-color:var(--red); color:var(--red); background:rgba(248,113,113,.08);}
+  .opt.dim{opacity:.4;}
+  .qexpl{font-size:12px; color:var(--muted); margin-top:6px;}
+
+  /* ---------- stage (3 columns) ---------- */
+  .stage-scroll{overflow-x:auto; margin-top:20px; padding-bottom:6px;}
+  .stage{
+    min-width:1120px;
+    display:grid;
+    grid-template-columns:1fr 1.45fr 1fr;
+    gap:0 12px; align-items:stretch;
+  }
+  .col-head{margin-bottom:10px; text-align:center;}
+  .col-head .nick{font-size:17px; font-weight:700;}
+  .col-head .real{font-family:var(--mono); font-size:11.5px; color:var(--cyan); letter-spacing:1px; text-transform:uppercase;}
+  .col-head .duty{font-size:12px; color:var(--muted); margin-top:2px;}
+  .col{
+    background:var(--panel2); border:1px solid var(--line); border-radius:14px;
+    padding:14px; display:flex; flex-direction:column; gap:12px; min-height:510px;
+  }
+  .c1 .nick{color:var(--cyan);} .c2 .nick{color:var(--amber);} .c3 .nick{color:var(--green);}
+
+  /* Column 1: Code Box */
+  .codebox-wrap{
+    background:#080d18; border:1px solid var(--line); border-radius:10px;
+    overflow:hidden; display:flex; flex-direction:column; flex:1; min-height:240px;
+  }
+  .codebox-topbar{
+    background:#0f172a; padding:6px 12px; border-bottom:1px solid var(--line);
+    display:flex; align-items:center; justify-content:space-between;
+    font-size:11px; font-family:var(--mono); color:var(--muted);
+  }
+  .codebox-dots{display:flex; gap:5px;}
+  .codebox-dot{width:8px; height:8px; border-radius:50%;}
+  .dot-r{background:#f87171;} .dot-y{background:#f5b544;} .dot-g{background:#22c55e;}
+  .codebox{
+    padding:12px; font-family:var(--mono); font-size:11.5px;
+    white-space:pre; overflow:auto; tab-size:4;
+    line-height:1.7; flex:1; color:#dde6f5;
+  }
+  .codebox .cm{color:#78909c; font-style:italic;}
+  .codebox .kw{color:#c792ea; font-weight:700;}
+  .codebox .fn{color:#82aaff; font-weight:700;}
+  .codebox .str{color:#c3e88d;}
+  .codebox .type{color:#ffcb6b;}
+  .codebox .val{color:#f78c6c;}
+
+  .addr-panel{
+    background:#0d1527; border:1px solid var(--line); border-radius:10px; padding:10px;
+    font-size:11px; font-family:var(--mono);
+  }
+  .addr-title{color:var(--cyan); font-weight:700; margin-bottom:6px; display:flex; justify-content:space-between;}
+
+  /* Column 2: Switch & LAN Topology */
+  .lan-box{display:flex; flex-direction:column; gap:10px; flex:1;}
+  .switch-hub{
+    background:#101b33; border:2px solid #23375d; border-radius:10px; padding:10px;
+    display:flex; flex-direction:column; gap:6px; position:relative;
+  }
+  .switch-title{
+    font-size:11.5px; font-weight:700; font-family:var(--mono); color:var(--cyan);
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .ports-bar{display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; margin-top:4px;}
+  .port-jack{
+    background:#0b1324; border:1px solid var(--line); border-radius:6px; padding:6px;
+    text-align:center; font-family:var(--mono); font-size:10px; position:relative;
+  }
+  .port-jack.active{border-color:var(--green); background:rgba(34,197,94,.1); color:var(--green);}
+  .port-jack.broadcast-fire{border-color:var(--red); background:rgba(248,113,113,.2); color:var(--red); box-shadow:0 0 10px rgba(248,113,113,.3);}
+  .port-jack.filter-drop{border-color:#334155; opacity:.4;}
+
+  .devices-grid{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .dev-card{
+    background:#111c33; border:1px solid var(--line); border-radius:10px; padding:8px 10px;
+    display:flex; flex-direction:column; gap:4px; font-size:11px; position:relative;
+  }
+  .dev-card.sender{border-color:var(--cyan); box-shadow:0 0 8px rgba(56,189,248,.15);}
+  .dev-card.target{border-color:var(--green); box-shadow:0 0 8px rgba(34,197,94,.15);}
+  .dev-card.storm{border-color:var(--red); background:rgba(248,113,113,.1); box-shadow:0 0 12px rgba(248,113,113,.25);}
+  .dev-card.silent{opacity:.6;}
+  .dev-head{display:flex; justify-content:space-between; align-items:center; font-family:var(--mono); font-size:11px; font-weight:700;}
+  .dev-ip{font-family:var(--mono); font-size:10px; color:var(--muted);}
+  .dev-mcast-status{font-size:10px; font-family:var(--mono); padding:2px 4px; border-radius:4px; margin-top:2px; display:inline-block;}
+  .mcast-joined{background:rgba(168,85,247,.2); color:var(--purple); border:1px solid rgba(168,85,247,.4);}
+  .mcast-none{background:#182236; color:var(--muted);}
+
+  /* Flow Track */
+  .packet-runway{
+    height:36px; background:#080e1b; border:1px solid var(--line); border-radius:8px;
+    position:relative; overflow:hidden; display:flex; align-items:center; padding:0 10px;
+  }
+  .flying-pkt{
+    position:absolute; width:58px; height:22px; border-radius:4px; font-family:var(--mono);
+    font-size:9.5px; font-weight:700; display:flex; align-items:center; justify-content:center;
+    background:var(--amber); color:#000; box-shadow:0 0 10px var(--amber);
+    transition:left 0.8s ease-in-out;
+  }
+  .flying-pkt.mcast{background:var(--purple); color:#fff; box-shadow:0 0 10px var(--purple);}
+  .flying-pkt.bcast{background:var(--red); color:#fff; box-shadow:0 0 12px var(--red);}
+  .flying-pkt.unicast{background:var(--cyan); color:#000; box-shadow:0 0 10px var(--cyan);}
+
+  /* Column 3: Switch Table & Interrupt Monitor */
+  .igmp-box{display:flex; flex-direction:column; gap:10px; flex:1;}
+  .igmp-panel{
+    background:#0d1527; border:1px solid var(--line); border-radius:10px;
+    padding:10px; font-size:11px; font-family:var(--mono); flex:1; display:flex; flex-direction:column;
+  }
+  .igmp-title{color:var(--cyan); font-weight:700; margin-bottom:6px; display:flex; justify-content:space-between;}
+  .igmp-table{width:100%; border-collapse:collapse; margin-top:4px;}
+  .igmp-table th{color:var(--muted); font-size:9.5px; text-align:left; padding:3px 4px; border-bottom:1px solid var(--line);}
+  .igmp-table td{padding:4px; font-size:10px; border-bottom:1px solid rgba(38,51,77,.4);}
+
+  .cpu-meter-box{
+    background:#101a2f; border:1px solid var(--line); border-radius:8px; padding:8px 10px;
+    display:flex; flex-direction:column; gap:6px;
+  }
+  .cpu-row{display:flex; justify-content:space-between; align-items:center; font-size:10.5px; font-family:var(--mono);}
+  .cpu-bar-wrap{width:110px; height:6px; background:#182338; border-radius:3px; overflow:hidden;}
+  .cpu-bar{height:100%; width:5%; background:var(--green); transition:width .3s;}
+  .cpu-bar.high{background:var(--red);}
+
+  /* Stats Bar */
+  .stats-bar{
+    display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;
+    margin-top:auto; padding-top:10px; border-top:1px dashed var(--line);
+  }
+  .stat-item{background:#0e172a; padding:6px 6px; border-radius:6px; border:1px solid var(--line); text-align:center;}
+  .stat-val{font-size:13px; font-weight:700; color:var(--text); font-family:var(--mono);}
+  .stat-val.good{color:var(--green);}
+  .stat-val.warn{color:var(--amber);}
+  .stat-val.bad{color:var(--red);}
+  .stat-lbl{font-size:10px; color:var(--muted);}
+
+  /* ---------- console ---------- */
+  .console{margin-top:24px; background:var(--panel2); border:1px solid var(--line); border-radius:14px; overflow:hidden;}
+  .console-head{
+    display:flex; align-items:center; gap:10px; padding:10px 16px;
+    border-bottom:1px solid var(--line); background:rgba(255,255,255,.02);
+    font-size:13px; color:var(--muted); flex-wrap:wrap;
+  }
+  .btns{display:flex; gap:8px; flex-wrap:wrap; margin-left:auto;}
+  button{
+    font-family:var(--mono); font-size:12px; color:var(--text);
+    background:#1d2a47; border:1px solid var(--line); border-radius:8px;
+    padding:6px 12px; cursor:pointer; transition:all .15s;
+  }
+  button:hover:not(:disabled){border-color:var(--amber); color:var(--amber); transform:translateY(-1px);}
+  button:disabled{opacity:.3; cursor:not-allowed;}
+  button.primary{border-color:var(--amber); color:var(--amber);}
+  button.action-btn{border-color:var(--cyan); color:var(--cyan);}
+  .clear-btn{font-size:11px; padding:4px 8px; color:var(--muted); background:#151f34; border:1px solid var(--line);}
+  .clear-btn.armed{border-color:var(--red); color:var(--red); background:#28151f;}
+
+  .logbox{padding:12px 16px; max-height:220px; overflow-y:auto; font-family:var(--mono); font-size:12px;}
+  .logline{margin-bottom:6px;}
+  .logline .cmd{color:var(--amber); font-weight:700;}
+  .logline .expl{color:var(--muted); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:11.5px; margin-top:1px;}
+  .logline.ok{color:var(--green);}
+  .logline.err{color:var(--red);}
+  .logline.info{color:var(--cyan);}
+
+  /* ---------- details cards ---------- */
+  .why{margin-top:22px; display:grid; grid-template-columns:repeat(3,1fr); gap:12px;}
+  .why-card{background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:14px 16px; font-size:13px;}
+  .why-card h3{font-size:13.5px; margin-bottom:6px;}
+  .why-card p{color:var(--muted); font-size:12px;}
+  .why-card b{color:var(--text);}
+  .w1 h3{color:var(--cyan);} .w2 h3{color:var(--amber);} .w3 h3{color:var(--green);}
+
+  footer{margin-top:26px; text-align:center; color:var(--muted); font-size:12px;}
+  @media (max-width:900px){ .why{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>单播 vs 广播 vs 多播：<span class="dot-word">局域网物理寻人</span> · <span class="dot-word">对讲机频道机制</span></h1>
+  <p class="sub">治「连对方 IP 和端口都不知道，第一枪怎么开？」：透视单播的死板硬编码、广播的无差别风暴灾难，与多播（Multicast）利用交换机硬件静默过滤实现零配置自动寻人的物理本质。</p>
+
+  <div class="ladder-badge">
+    🧱 DDS 知识体系依赖阶梯 · 第 2 层地基专属课（自底向上 · 逐层建立实体感）
+  </div>
+
+  <!-- 机制落地对照表 -->
+  <div class="ltable">
+    <table>
+      <thead>
+        <tr>
+          <th>心智模型 (绰号)</th>
+          <th>网络真名</th>
+          <th>物理发包与交换机行为</th>
+          <th>局限性 vs 核心价值</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="nick">写死门牌号</td>
+          <td class="real">单播 (Unicast)</td>
+          <td class="phys">目的 IP 填死（如 192.168.1.105），交换机查 MAC 表单线发送</td>
+          <td class="life">无法用于新设备开机自动发现；IP 一变通信全死</td>
+        </tr>
+        <tr>
+          <td class="nick">防空警报大喇叭</td>
+          <td class="real">广播 (Broadcast)</td>
+          <td class="phys">目的 IP 填 255.255.255.255，交换机强行复制发给每一个网口</td>
+          <td class="life">打印机/手机网卡全被动触发硬件中断；极易引发局域网瘫痪风暴</td>
+        </tr>
+        <tr>
+          <td class="nick">无线对讲机公共频道</td>
+          <td class="real">多播/组播 (Multicast)</td>
+          <td class="phys">目的 IP 填 239.255.0.1，交换机 (IGMP Snooping) 仅推给加群端口</td>
+          <td class="life">零配置无中心自动寻人；未加群设备硬件层静默过滤，零打扰</td>
+        </tr>
+        <tr>
+          <td class="nick">调对频道防串台</td>
+          <td class="real">DomainID 端口分区</td>
+          <td class="phys">Port = 7400 + 250*DomainID，同一局域网下按端口硬核隔离</td>
+          <td class="life">多机器人同场作业互不干扰的物理根基</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 关卡轨道 -->
+  <div class="journey">
+    <div class="rail" id="rail"></div>
+  </div>
+
+  <!-- 任务卡 -->
+  <div class="quest" id="quest"></div>
+
+  <!-- 三列舞台 -->
+  <div class="stage-scroll">
+    <div class="stage">
+
+      <!-- Column 1: C 语言 API 与系统调用 -->
+      <div class="col c1">
+        <div class="col-head">
+          <div class="nick">系统调用与配置</div>
+          <div class="real">Socket & Multicast API</div>
+          <div class="duty">观察 C 语言如何将网卡加入组播群</div>
+        </div>
+
+        <div class="codebox-wrap">
+          <div class="codebox-topbar">
+            <div class="codebox-dots">
+              <span class="codebox-dot dot-r"></span>
+              <span class="codebox-dot dot-y"></span>
+              <span class="codebox-dot dot-g"></span>
+            </div>
+            <span id="codebox-filename">multicast_node.c</span>
+            <span style="font-size:10px; color:var(--muted); font-family:var(--mono);">POSIX C</span>
+          </div>
+          <div class="codebox" id="codebox"></div>
+        </div>
+
+        <div class="addr-panel">
+          <div class="addr-title">
+            <span>📡 IP 地址段物理分类</span>
+            <span id="ip-type-badge" style="color:var(--purple);">D 类多播 (224~239)</span>
+          </div>
+          <div style="font-size:10.5px; color:var(--muted); line-height:1.6;" id="ip-desc">
+            <b>239.255.0.1</b>: 本地管理多播地址 (无实体主机)，仅在当前物理交换机/局域网内回荡，不流向公网外网。
+          </div>
+        </div>
+      </div>
+
+      <!-- Column 2: 局域网物理拓扑与交换机 -->
+      <div class="col c2">
+        <div class="col-head">
+          <div class="nick">局域网物理交换机拓扑</div>
+          <div class="real">Switch & Device Network</div>
+          <div class="duty">观察报文物理流向与硬件静默过滤</div>
+        </div>
+
+        <div class="lan-box">
+          <!-- 物理交换机 -->
+          <div class="switch-hub">
+            <div class="switch-title">
+              <span>🖧 物理交换机 (Switch with IGMP Snooping)</span>
+              <span id="switch-mode-badge" style="font-size:10px; color:var(--cyan);">IGMP: 开启</span>
+            </div>
+            <div class="ports-bar">
+              <div class="port-jack active" id="port-1">
+                <span>端口 1</span><br><b style="font-size:9px;">电脑 Controller</b>
+              </div>
+              <div class="port-jack" id="port-2">
+                <span>端口 2</span><br><b style="font-size:9px;">机器人 Chassis</b>
+              </div>
+              <div class="port-jack filter-drop" id="port-3">
+                <span>端口 3</span><br><b style="font-size:9px;">办公室打印机</b>
+              </div>
+              <div class="port-jack filter-drop" id="port-4">
+                <span>端口 4</span><br><b style="font-size:9px;">同事手机</b>
+              </div>
+            </div>
+          </div>
+
+          <!-- 报文飞行轨道 -->
+          <div class="packet-runway">
+            <span style="font-size:10px; color:var(--muted); font-family:var(--mono);">[物理网线光电信号]</span>
+            <div class="flying-pkt" id="fly-pkt" style="left:-70px;">PACKET</div>
+          </div>
+
+          <!-- 物理设备分布 -->
+          <div class="devices-grid">
+            <!-- Dev 1: Controller -->
+            <div class="dev-card sender" id="dev-1">
+              <div class="dev-head">
+                <span>💻 电脑 Controller</span>
+                <span style="color:var(--cyan);">发送源</span>
+              </div>
+              <div class="dev-ip">IP: 192.168.1.10:8000</div>
+              <div class="dev-mcast-status mcast-joined" id="dev-1-mcast">已加入: 239.255.0.1</div>
+            </div>
+
+            <!-- Dev 2: Robot Chassis -->
+            <div class="dev-card" id="dev-2">
+              <div class="dev-head">
+                <span>🤖 机器人 Chassis</span>
+                <span id="dev-2-role" style="color:var(--muted);">目标设备</span>
+              </div>
+              <div class="dev-ip" id="dev-2-ip">IP: 192.168.1.105:7400</div>
+              <div class="dev-mcast-status mcast-joined" id="dev-2-mcast">已加入: 239.255.0.1</div>
+            </div>
+
+            <!-- Dev 3: Printer -->
+            <div class="dev-card silent" id="dev-3">
+              <div class="dev-head">
+                <span>🖨️ 办公室打印机</span>
+                <span style="color:var(--muted);">无关设备</span>
+              </div>
+              <div class="dev-ip">IP: 192.168.1.50:9100</div>
+              <div class="dev-mcast-status mcast-none" id="dev-3-mcast">未加入组播</div>
+            </div>
+
+            <!-- Dev 4: Phone -->
+            <div class="dev-card silent" id="dev-4">
+              <div class="dev-head">
+                <span>📱 同事手机</span>
+                <span style="color:var(--muted);">无关设备</span>
+              </div>
+              <div class="dev-ip">IP: 192.168.1.88:5353</div>
+              <div class="dev-mcast-status mcast-none" id="dev-4-mcast">未加入组播</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Column 3: 交换机转发表与硬件中断账本 -->
+      <div class="col c3">
+        <div class="col-head">
+          <div class="nick">交换机转发表与中断</div>
+          <div class="real">IGMP Table & CPU Load</div>
+          <div class="duty">核验组播转发表与无关设备 CPU 中断</div>
+        </div>
+
+        <div class="igmp-box">
+          <!-- IGMP Snooping 转发表 -->
+          <div class="igmp-panel">
+            <div class="igmp-title">
+              <span>📋 交换机 IGMP Snooping 转发表</span>
+              <span id="igmp-status" style="color:var(--purple);">1 组活跃</span>
+            </div>
+            <table class="igmp-table">
+              <thead>
+                <tr><th>组播频道 IP</th><th>映射 MAC</th><th>允许出站端口</th></tr>
+              </thead>
+              <tbody id="igmp-tbody">
+                <tr>
+                  <td style="color:var(--purple); font-weight:700;">239.255.0.1</td>
+                  <td>01:00:5e:7f:00:01</td>
+                  <td style="color:var(--green); font-weight:700;">端口 1, 2</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- 设备 CPU 中断负荷监控 -->
+          <div class="cpu-meter-box">
+            <div style="font-size:11px; font-weight:700; color:var(--text); margin-bottom:4px;">
+              ⚡ 设备网卡硬件中断负荷 (NIC Interrupt)
+            </div>
+            <div class="cpu-row">
+              <span>机器人小车 (Chassis):</span>
+              <div class="cpu-bar-wrap"><div class="cpu-bar" id="cpu-robot" style="width:10%;"></div></div>
+            </div>
+            <div class="cpu-row">
+              <span>办公室打印机 (Printer):</span>
+              <div class="cpu-bar-wrap"><div class="cpu-bar" id="cpu-printer" style="width:0%;"></div></div>
+            </div>
+            <div class="cpu-row">
+              <span>同事手机 (Phone):</span>
+              <div class="cpu-bar-wrap"><div class="cpu-bar" id="cpu-phone" style="width:0%;"></div></div>
+            </div>
+          </div>
+
+          <!-- 统计仪表盘 -->
+          <div class="stats-bar">
+            <div class="stat-item">
+              <div class="stat-val" id="st-sent">0</div>
+              <div class="stat-lbl">已发报文</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-val" id="st-victim">0</div>
+              <div class="stat-lbl">受扰无关设备</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-val" id="st-storm">0</div>
+              <div class="stat-lbl">风暴告警</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 控制台 -->
+  <div class="console">
+    <div class="console-head">
+      <span>控制台 · 局域网传输事件驱动器</span>
+      <div class="btns">
+        <button id="btn-rearm" class="clear-btn" onclick="handleClearClick()">⟲ 清除全部进度</button>
+      </div>
+    </div>
+    <div class="console-head" style="background:rgba(0,0,0,.2); border-bottom:1px solid var(--line);">
+      <span style="font-size:12px; color:var(--muted);">当前关卡专属动作：</span>
+      <div class="btns" id="action-btns"></div>
+    </div>
+    <div class="logbox" id="logbox"></div>
+  </div>
+
+  <!-- 底部三格原理剖析 -->
+  <div class="why">
+    <div class="why-card w1">
+      <h3>① 为什么多播 IP 没有对应任何物理机器？</h3>
+      <p><b>D 类地址的虚拟性</b>：<code>224.0.0.0 ~ 239.255.255.255</code> 是逻辑频道号，不是某块具体网卡的门牌号。<br>
+      <b>映射法则</b>：多播 IP 会通过算法折叠映射到一个特定的组播 MAC 地址（以 <code>01:00:5e</code> 开头）。网卡芯片只认这个特殊 MAC 过滤器！</p>
+    </div>
+    <div class="why-card w2">
+      <h3>② 为什么智能交换机能做到“静默过滤”？</h3>
+      <p><b>痛点</b>：笨交换机遇到不认识的多播包，会退化成广播全网乱发。<br>
+      <b>解法</b>：现代交换机内置 <b>IGMP Snooping（组播侦听）</b>。当小车向网线发送 IGMP 加入报告时，交换机在硬件芯片里记住小车接在几号口，后续只往该口送数据，其他人零打扰！</p>
+    </div>
+    <div class="why-card w3">
+      <h3>③ 为什么 Domain ID 能成为终极防串台防火墙？</h3>
+      <p><b>端口硬隔离</b>：DDS 多播发现端口 = <code>7400 + 250*DomainID</code>。<br>
+      <b>物理现象</b>：Domain 0 在听 7400，Domain 1 在听 7650。同一个房间两台小车即使多播组相同，操作系统的 UDP 栈一看端口没开，在网卡驱动层当场无情丢弃！</p>
+    </div>
+  </div>
+
+  <footer>
+    Unicast vs Multicast Mental Model · 个人自适应学习系统专用交付物 · 遵循「机制直述 + 课程化 + 可重玩机制」标准
+  </footer>
+
+</div>
+
+<script>
+/* ==================== 状态机与持久化 ==================== */
+const STORAGE_KEY = 'unicast_multicast_mental_model_v1';
+
+let currentStage = 0;
+let clearClickCount = 0;
+let clearTimer = null;
+
+let world = {
+  mode: 'UNICAST_FAIL', // 'UNICAST_FAIL' | 'BROADCAST_STORM' | 'MULTICAST_OK' | 'DOMAIN_ISOLATE'
+  sentCount: 0,
+  victimCount: 0,
+  stormCount: 0,
+  robotIp: '192.168.1.105',
+  robotDomain: 0,
+  controllerDomain: 0,
+  flowing: false
+};
+
+const STAGES = [
+  {
+    title: "起点：局域网两眼一抹黑",
+    tag: "00 起点",
+    desc: "机器人小车刚插上电源连上路由器，被分配了动态 IP。电脑端根本不知道小车的 IP，无法开工。",
+    obs: "看左侧代码：如果用单播，必须预先手写 IP。但现在不知道 IP，第一枪往哪里开？",
+    pass: "确立起点困境：单播无法用于动态自动寻人。",
+    initBtn: { text: "尝试单播硬编码旧 IP (必然失败)", fn: "doUnicastFail" }
+  },
+  {
+    title: "单播之困 —— 硬编码 IP 的死穴",
+    tag: "01 单播之困",
+    desc: "代码里写死了旧 IP 192.168.1.200，但小车今天的真实 IP 是 192.168.1.105！发包石沉大海。",
+    obs: "报文飞到半路被路由器丢弃！小车根本收不到。每次 IP 变动都需要人工改代码重编译，极度脆弱。",
+    pass: "建立物理画面：单播只能点对点私信，不能做开局自动感知。",
+    initBtn: { text: "尝试广播 (255.255.255.255) 喊话", fn: "doBroadcastStorm" }
+  },
+  {
+    title: "广播之灾 —— 255.255.255.255 轰炸全网",
+    tag: "02 广播之灾",
+    desc: "电脑向全网广播 255.255.255.255。交换机无脑复制，发给所有网口！",
+    obs: "看中间主机：打印机和同事手机全亮起红灯！右下角受扰设备飙升，打印机 CPU 被迫中断！",
+    pass: "彻底看清广播风暴的物理破坏力：工业现场严禁随意乱开广播。",
+    initBtn: { text: "切换为多播 (加入 239.255.0.1 频道)", fn: "doMulticastSuccess" }
+  },
+  {
+    title: "对讲机对准频道 —— 多播 (Multicast) 精准寻人",
+    tag: "03 多播诞生",
+    desc: "小车与电脑同时通过 setsockopt() 加入对讲机公共频道 239.255.0.1。电脑向频道发包。",
+    obs: "看交换机端口 2 亮绿灯，而端口 3 (打印机) 和端口 4 (手机) 依然暗淡，零打扰静默过滤！",
+    pass: "体会多播的真正神奇之处：发送方不知道对方 IP，却能精准只让听众收到！",
+    initBtn: { text: "两端交换单播名片 (完成 SPDP 握手)", fn: "doExchangeUnicast" }
+  },
+  {
+    title: "结识互换名片 —— 从多播自动过渡到单播",
+    tag: "04 互换名片",
+    desc: "小车收到多播打招呼后，知道了电脑的单播 IP，立刻单播回信把自己的真实 IP 告知电脑。",
+    obs: "双方在内存中建立起邻居表，完成了无中心自动发现（DDS SPDP 的核心精髓）！",
+    pass: "理解多播只用于第一步敲门，后续大量业务数据转回单播直连以省带宽。",
+    initBtn: { text: "测试 DomainID 隔离 (调错频道实验)", fn: "doDomainIsolate" }
+  },
+  {
+    title: "物理隔离 —— Domain ID 端口防串台实验",
+    tag: "05 域隔离",
+    desc: "将小车改到 Domain 1 (监听端口 7650)。电脑仍在 Domain 0 (发往端口 7400)。",
+    obs: "同一 Wi-Fi、同一组播 IP，但因为端口不对，小车网卡驱动直接丢弃！绝对不会串车！",
+    pass: "解密 export ROS_DOMAIN_ID=1 的底层物理数学原理。",
+    initBtn: { text: "进入毕业小测", fn: "doEnterQuiz" }
+  },
+  {
+    title: "毕业小测：3 道局域网物理传输与多播决策题",
+    tag: "06 毕业小测",
+    desc: "检测你对单播、广播、多播物理本质的理解深度，完成 3 道场景决策。",
+    obs: "根据物理机制，做出正确的局域网通信选型决策。",
+    pass: "3 题全对即标志第 2 层地基彻底夯实！",
+    initBtn: null
+  },
+  {
+    title: "终点：局域网物理寻人自由沙盒 (Free Play)",
+    tag: "07 自由模式",
+    desc: "自由调节发包模式（单播、广播、多播、Domain 隔离），随时注入风暴并观察交换机行为！",
+    obs: "可随时重刷小测或倒带回任一关卡。",
+    pass: "自由探索局域网物理传输机制。",
+    initBtn: null
+  }
+];
+
+/* ==================== 视图与控制台渲染 ==================== */
+function addLog(cmd, type, expl) {
+  const box = document.getElementById('logbox');
+  const div = document.createElement('div');
+  div.className = `logline ${type}`;
+  div.innerHTML = `<span class="cmd">&gt; ${cmd}</span><div class="expl">${expl}</div>`;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+function renderRail() {
+  const rail = document.getElementById('rail');
+  rail.innerHTML = '';
+  STAGES.forEach((st, idx) => {
+    const pill = document.createElement('div');
+    pill.className = `pill ${idx < currentStage ? 'done' : ''} ${idx === currentStage ? 'current' : ''}`;
+    pill.innerText = st.tag;
+    pill.onclick = () => { buildToStage(idx); };
+    rail.appendChild(pill);
+    if(idx < STAGES.length - 1){
+      const sep = document.createElement('div');
+      sep.className = 'sep';
+      rail.appendChild(sep);
+    }
+  });
+}
+
+function renderQuest() {
+  const q = document.getElementById('quest');
+  const st = STAGES[currentStage];
+
+  if(currentStage === 6) {
+    renderQuizQuest(q);
+    return;
+  }
+
+  if(currentStage === 7) {
+    q.className = 'quest free';
+    q.innerHTML = `
+      <div class="quest-head">
+        <span class="quest-stage" style="color:var(--green);">STAGE 07 · 自由模式</span>
+        <span class="quest-title">${st.title}</span>
+        <button class="replay-btn" onclick="buildToStage(currentStage)">↺ 重置沙盒</button>
+      </div>
+      <div class="q-row"><span class="k">🎯 当前状态</span><span class="v">第 2 层地基（单播/广播/多播物理机制）已全部解锁并彻底通关！</span></div>
+      <div class="q-row"><span class="k">👀 自由试验</span><span class="v">使用下方控制台自由发包、触发广播风暴或测试 Domain ID 端口隔离。</span></div>
+      <div class="go">
+        <button onclick="doMulticastSuccess()" style="border-color:var(--purple); color:var(--purple);">多播精准发包</button>
+        <button onclick="doBroadcastStorm()" style="border-color:var(--red); color:var(--red); margin-left:8px;">触发全网广播风暴</button>
+        <button onclick="doDomainIsolate()" style="border-color:var(--cyan); color:var(--cyan); margin-left:8px;">Domain 端口隔离测试</button>
+      </div>
+    `;
+    renderActionBtns();
+    return;
+  }
+
+  q.className = 'quest';
+  q.innerHTML = `
+    <div class="quest-head">
+      <span class="quest-stage">STAGE 0${currentStage} / 07</span>
+      <span class="quest-title">${st.title}</span>
+      <button class="replay-btn" onclick="buildToStage(currentStage)">↺ 重玩本关</button>
+      <button class="skip" onclick="skipStage()">跳至下一关 &gt;</button>
+    </div>
+    <div class="q-row"><span class="k">📍 任务背景</span><span class="v">${st.desc}</span></div>
+    <div class="q-row"><span class="k">👀 核心观察</span><span class="v">${st.obs}</span></div>
+    <div class="q-row"><span class="k">✅ 通关机制</span><span class="v">${st.pass}</span></div>
+    ${st.initBtn ? `
+      <div class="go">
+        <button onclick="${st.initBtn.fn}()">${st.initBtn.text}</button>
+      </div>
+    ` : ''}
+  `;
+  renderActionBtns();
+}
+
+function renderActionBtns() {
+  const container = document.getElementById('action-btns');
+  container.innerHTML = '';
+  const st = STAGES[currentStage];
+  if(st && st.initBtn) {
+    const b = document.createElement('button');
+    b.className = 'action-btn';
+    b.innerText = st.initBtn.text;
+    b.onclick = () => { window[st.initBtn.fn](); };
+    container.appendChild(b);
+  }
+}
+
+/* ==================== 小测 (Stage 6) ==================== */
+const QUIZ_DATA = [
+  {
+    q: "1. 为什么工业现场（如机器人机房、智能仓储）严禁随意使用广播 (255.255.255.255) 来传传感器数据？",
+    opts: [
+      { t: "A. 因为广播包在路由器里只能存 1 秒钟就会变质", c: false, expl: "错误！报文不会像食品一样变质。" },
+      { t: "B. 广播会强制打断局域网所有设备的网卡和 CPU，设备一多立即引发广播风暴致使全网瘫痪", c: true, expl: "完全正确！物理交换机会无差别把广播包复制发给每一个网口，打印机、监控、同事手机全部被迫中断处理垃圾包！" },
+      { t: "C. 广播只能在 5G 手机网络上用，Wi-Fi 局域网不支持", c: false, expl: "错误！Wi-Fi 局域网完全支持广播，正是因为支持才容易被风暴搞挂。" }
+    ]
+  },
+  {
+    q: "2. 多播地址（如 239.255.0.1）在物理层面上到底代表什么？",
+    opts: [
+      { t: "A. 代表一台配置了超级网卡的中心主控计算机", c: false, expl: "错误！多播没有任何一台具体物理机器拥有这个 IP。" },
+      { t: "B. 代表一个逻辑电台频道，交换机仅把该频道报文分发给真正加入了该组的物理网口", c: true, expl: "完全正确！多播是虚拟电台频道。网卡调用 setsockopt 加入组，交换机用 IGMP Snooping 记录，实现精准分发与硬件静默过滤！" },
+      { t: "C. 代表电信运营商分配的公网宽带静态 IP", c: false, expl: "错误！239.x.x.x 是私有管理组播地址，不会流向外网。" }
+    ]
+  },
+  {
+    q: "3. 为什么两台连在同一个 Wi-Fi 路由器下的小车，一台配 export ROS_DOMAIN_ID=0，另一台配 ROS_DOMAIN_ID=1，就绝对不会串台？",
+    opts: [
+      { t: "A. 因为路由器给它们分配了不同网段的 IP 地址", c: false, expl: "错误！在同一个路由器下，它们的 IP 都在同一个 192.168.1.x 网段。" },
+      { t: "B. 因为 DDS 根据 DomainID 计算了不同的多播 UDP 监听端口（7400 vs 7650），端口不符在网卡驱动层当场无情丢弃", c: true, expl: "完全正确！端口硬隔离公式：Port = 7400 + 250*DomainID。只要端口不对，操作系统连看都不看直接扔掉，物理上绝不串台！" },
+      { t: "C. 因为它们发包时使用的无线电电磁波频率不同", c: false, expl: "错误！Wi-Fi 频段是相同的（都是 2.4G 或 5G），隔离发生在上层端口协议栈！" }
+    ]
+  }
+];
+
+let quizAnswers = {};
+
+function renderQuizQuest(container) {
+  container.className = 'quest';
+  let html = `
+    <div class="quest-head">
+      <span class="quest-stage" style="color:var(--amber);">STAGE 06 · 毕业小测</span>
+      <span class="quest-title">局域网物理传输与多播机制考核 (3 题全对毕业)</span>
+      <button class="replay-btn" onclick="buildToStage(6)">↺ 重置做题</button>
+    </div>
+    <div class="quiz">
+  `;
+
+  QUIZ_DATA.forEach((qitem, qidx) => {
+    html += `
+      <div class="qitem">
+        <div class="qtext">${qitem.q}</div>
+        <div class="opts">
+    `;
+    qitem.opts.forEach((opt, oidx) => {
+      const selected = quizAnswers[qidx] === oidx;
+      let cls = 'opt';
+      if(quizAnswers[qidx] !== undefined) {
+        if(opt.c) cls += ' correct';
+        else if(selected) cls += ' wrong';
+        else cls += ' dim';
+      }
+      html += `<button class="${cls}" onclick="answerQuiz(${qidx}, ${oidx})">${opt.t}</button>`;
+    });
+    if(quizAnswers[qidx] !== undefined) {
+      const chosen = qitem.opts[quizAnswers[qidx]];
+      html += `<div class="qexpl">${chosen.expl}</div>`;
+    }
+    html += `</div></div>`;
+  });
+
+  html += `</div>`;
+  container.innerHTML = html;
+}
+
+function answerQuiz(qidx, oidx) {
+  quizAnswers[qidx] = oidx;
+  renderQuest();
+
+  const allCorrect = QUIZ_DATA.every((q, idx) => quizAnswers[idx] !== undefined && q.opts[quizAnswers[idx]].c);
+  if(allCorrect) {
+    addLog('毕业小测全对通过！', 'ok', '太出色了！你已经彻底打牢了局域网单播、广播与多播的物理本质！第 2 层地基彻底夯实！即将解锁自由沙盒。');
+    setTimeout(() => {
+      currentStage = 7;
+      saveState();
+      render();
+    }, 1200);
+  }
+}
+
+/* ==================== 舞台与三列渲染 ==================== */
+function render() {
+  renderRail();
+  renderQuest();
+  renderCodebox();
+  renderLANStage();
+  renderIGMPInspector();
+  saveState();
+}
+
+function renderCodebox() {
+  const box = document.getElementById('codebox');
+  const fnElem = document.getElementById('codebox-filename');
+  const ipBadge = document.getElementById('ip-type-badge');
+  const ipDesc = document.getElementById('ip-desc');
+  let code = '';
+
+  if(world.mode === 'UNICAST_FAIL') {
+    fnElem.innerText = 'unicast_client.c';
+    ipBadge.innerText = 'A/B/C 类单播 (如 192.168.x.x)';
+    ipBadge.style.color = 'var(--cyan)';
+    ipDesc.innerHTML = `<b>单播私信</b>：必须写死目的 IP 地址。对方 IP 只要因 DHCP 变动一次，通信当场暴毙。`;
+
+    code = `
+<span class="cm">// ===== 单播私信：必须写死对方真实 IP =====</span>
+<span class="type">int</span> fd = <span class="fn">socket</span>(AF_INET, SOCK_DGRAM, <span class="val">0</span>);
+
+<span class="kw">struct</span> sockaddr_in dst;
+dst.sin_family = AF_INET;
+dst.sin_port = <span class="fn">htons</span>(<span class="val">7400</span>);
+<span class="cm">// 致命死穴：写死了旧 IP 192.168.1.200！</span>
+<span class="fn">inet_pton</span>(AF_INET, <span class="str">"192.168.1.200"</span>, &amp;dst.sin_addr);
+
+<span class="cm">// 发包：小车根本不在这个 IP 上，包直接扔进虚空！</span>
+<span class="fn">sendto</span>(fd, <span class="str">"WHO_ARE_YOU"</span>, <span class="val">11</span>, <span class="val">0</span>,
+       (<span class="kw">struct</span> sockaddr*)&amp;dst, <span class="kw">sizeof</span>(dst));`;
+  } else if(world.mode === 'BROADCAST_STORM') {
+    fnElem.innerText = 'broadcast_storm.c';
+    ipBadge.innerText = '广播地址: 255.255.255.255';
+    ipBadge.style.color = 'var(--red)';
+    ipDesc.innerHTML = `<b>全网大喇叭</b>：向局域网广播广播风暴！交换机无脑分发给所有网口，引起无关设备硬件中断爆炸！`;
+
+    code = `
+<span class="cm">// ===== 广播：向全网所有设备无差别轰炸 =====</span>
+<span class="type">int</span> fd = <span class="fn">socket</span>(AF_INET, SOCK_DGRAM, <span class="val">0</span>);
+<span class="type">int</span> broadcast_en = <span class="val">1</span>;
+<span class="fn">setsockopt</span>(fd, SOL_SOCKET, SO_BROADCAST, &amp;broadcast_en, <span class="kw">sizeof</span>(broadcast_en));
+
+<span class="kw">struct</span> sockaddr_in dst;
+dst.sin_family = AF_INET;
+dst.sin_port = <span class="fn">htons</span>(<span class="val">7400</span>);
+<span class="fn">inet_pton</span>(AF_INET, <span class="str">"255.255.255.255"</span>, &amp;dst.sin_addr);
+
+<span class="cm">// 轰炸：打印机、手机全部被动收到垃圾包！</span>
+<span class="fn">sendto</span>(fd, <span class="str">"ANNOUNCE_ALL"</span>, <span class="val">12</span>, <span class="val">0</span>,
+       (<span class="kw">struct</span> sockaddr*)&amp;dst, <span class="kw">sizeof</span>(dst));`;
+  } else if(world.mode === 'MULTICAST_OK') {
+    fnElem.innerText = 'multicast_spdp.c';
+    ipBadge.innerText = 'D 类多播: 239.255.0.1';
+    ipBadge.style.color = 'var(--purple)';
+    ipDesc.innerHTML = `<b>多播对讲机</b>：小车与电脑加入公共频道。交换机只推给加群网口，无关设备零打扰静默过滤！`;
+
+    code = `
+<span class="cm">// ===== 多播：加入 239.255.0.1 对讲机公共频道 =====</span>
+<span class="type">int</span> fd = <span class="fn">socket</span>(AF_INET, SOCK_DGRAM, <span class="val">0</span>);
+
+<span class="kw">struct</span> ip_mreq mreq;
+<span class="fn">inet_pton</span>(AF_INET, <span class="str">"239.255.0.1"</span>, &amp;mreq.imr_multiaddr.s_addr);
+mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+<span class="cm">// 关键系统调用：将本地网卡加入组播群！</span>
+<span class="fn">setsockopt</span>(fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &amp;mreq, <span class="kw">sizeof</span>(mreq));
+
+<span class="cm">// 发送 SPDP 宣告：无需知道小车 IP，直接往频道喊话！</span>
+<span class="kw">struct</span> sockaddr_in dst;
+dst.sin_family = AF_INET;
+dst.sin_port = <span class="fn">htons</span>(<span class="val">7400</span>);
+<span class="fn">inet_pton</span>(AF_INET, <span class="str">"239.255.0.1"</span>, &amp;dst.sin_addr);
+<span class="fn">sendto</span>(fd, <span class="str">"SPDP_HELLO"</span>, <span class="val">10</span>, <span class="val">0</span>,
+       (<span class="kw">struct</span> sockaddr*)&amp;dst, <span class="kw">sizeof</span>(dst));`;
+  } else {
+    fnElem.innerText = 'domain_isolate.c';
+    ipBadge.innerText = 'Domain 隔离端口: 7400 vs 7650';
+    ipBadge.style.color = 'var(--cyan)';
+    ipDesc.innerHTML = `<b>端口硬核隔离</b>：Port = 7400 + 250*DomainID。同一个组播组，端口不匹配直接在内核驱动抛弃！`;
+
+    code = `
+<span class="cm">// ===== Domain ID 隔离：端口计算硬法则 =====</span>
+<span class="cm">// Domain 0 的多播监听端口: 7400 + 250 * 0 = 7400</span>
+<span class="cm">// Domain 1 的多播监听端口: 7400 + 250 * 1 = 7650</span>
+
+<span class="kw">struct</span> sockaddr_in bind_addr;
+bind_addr.sin_family = AF_INET;
+<span class="cm">// 小车在 Domain 1 上绑定端口 7650:</span>
+bind_addr.sin_port = <span class="fn">htons</span>(<span class="val">7650</span>);
+<span class="fn">bind</span>(fd, (<span class="kw">struct</span> sockaddr*)&amp;bind_addr, <span class="kw">sizeof</span>(bind_addr));
+
+<span class="cm">// 电脑往 7400 端口发包，小车操作系统看端口不对直接当垃圾扔掉！</span>`;
+  }
+
+  box.innerHTML = code.trim();
+}
+
+function renderLANStage() {
+  const p1 = document.getElementById('port-1');
+  const p2 = document.getElementById('port-2');
+  const p3 = document.getElementById('port-3');
+  const p4 = document.getElementById('port-4');
+  const dev2 = document.getElementById('dev-2');
+  const dev3 = document.getElementById('dev-3');
+  const dev4 = document.getElementById('dev-4');
+  const dev2Mcast = document.getElementById('dev-2-mcast');
+  const dev2Role = document.getElementById('dev-2-role');
+
+  // 重置状态
+  p2.className = 'port-jack';
+  p3.className = 'port-jack filter-drop';
+  p4.className = 'port-jack filter-drop';
+  dev2.className = 'dev-card';
+  dev3.className = 'dev-card silent';
+  dev4.className = 'dev-card silent';
+
+  if(world.mode === 'UNICAST_FAIL') {
+    dev2Role.innerText = 'IP 不匹配 (掉线)';
+    dev2Role.style.color = 'var(--red)';
+  } else if(world.mode === 'BROADCAST_STORM') {
+    p2.className = 'port-jack broadcast-fire';
+    p3.className = 'port-jack broadcast-fire';
+    p4.className = 'port-jack broadcast-fire';
+    dev2.className = 'dev-card storm';
+    dev3.className = 'dev-card storm';
+    dev4.className = 'dev-card storm';
+  } else if(world.mode === 'MULTICAST_OK') {
+    p2.className = 'port-jack active';
+    dev2.className = 'dev-card target';
+    dev2Role.innerText = '收到多播宣告！';
+    dev2Role.style.color = 'var(--green)';
+  } else if(world.mode === 'DOMAIN_ISOLATE') {
+    dev2Mcast.innerText = 'Domain 1 (Port: 7650)';
+    dev2Mcast.className = 'dev-mcast-status mcast-none';
+    dev2Role.innerText = '端口不符 (已忽略)';
+    dev2Role.style.color = 'var(--muted)';
+  }
+}
+
+function renderIGMPInspector() {
+  const stSent = document.getElementById('st-sent');
+  const stVictim = document.getElementById('st-victim');
+  const stStorm = document.getElementById('st-storm');
+  const cpuRobot = document.getElementById('cpu-robot');
+  const cpuPrinter = document.getElementById('cpu-printer');
+  const cpuPhone = document.getElementById('cpu-phone');
+  const igmpTbody = document.getElementById('igmp-tbody');
+
+  stSent.innerText = world.sentCount;
+  stVictim.innerText = world.victimCount;
+  stStorm.innerText = world.stormCount;
+
+  if(world.mode === 'BROADCAST_STORM') {
+    cpuRobot.style.width = '85%'; cpuRobot.className = 'cpu-bar high';
+    cpuPrinter.style.width = '95%'; cpuPrinter.className = 'cpu-bar high';
+    cpuPhone.style.width = '70%'; cpuPhone.className = 'cpu-bar high';
+    igmpTbody.innerHTML = `<tr>
+      <td style="color:var(--red); font-weight:700;">255.255.255.255</td>
+      <td>FF:FF:FF:FF:FF:FF</td>
+      <td style="color:var(--red); font-weight:700;">全端口轰炸 (1,2,3,4)</td>
+    </tr>`;
+  } else if(world.mode === 'MULTICAST_OK') {
+    cpuRobot.style.width = '15%'; cpuRobot.className = 'cpu-bar';
+    cpuPrinter.style.width = '0%'; cpuPrinter.className = 'cpu-bar';
+    cpuPhone.style.width = '0%'; cpuPhone.className = 'cpu-bar';
+    igmpTbody.innerHTML = `<tr>
+      <td style="color:var(--purple); font-weight:700;">239.255.0.1</td>
+      <td>01:00:5e:7f:00:01</td>
+      <td style="color:var(--green); font-weight:700;">端口 1, 2 (仅加群者)</td>
+    </tr>`;
+  } else {
+    cpuRobot.style.width = '5%'; cpuRobot.className = 'cpu-bar';
+    cpuPrinter.style.width = '0%'; cpuPrinter.className = 'cpu-bar';
+    cpuPhone.style.width = '0%'; cpuPhone.className = 'cpu-bar';
+    igmpTbody.innerHTML = `<tr><td colspan="3" style="color:var(--muted); text-align:center;">暂无组播转发表</td></tr>`;
+  }
+}
+
+/* ==================== 物理动作执行器 ==================== */
+function doUnicastFail() {
+  if(world.flowing) return;
+  world.flowing = true;
+  world.mode = 'UNICAST_FAIL';
+
+  const p = document.getElementById('fly-pkt');
+  p.className = 'flying-pkt unicast';
+  p.innerText = '单播 192..';
+  p.style.left = '20px';
+
+  addLog('sendto("192.168.1.200", 7400)', 'info', '电脑尝试向写死的旧 IP 发包...');
+
+  setTimeout(() => {
+    p.style.left = '50%';
+    setTimeout(() => {
+      p.style.left = '-70px';
+      world.sentCount += 1;
+      addLog('💥 目标不可达 (Destination Unreachable)', 'err', '【单播扑空】小车的真实 IP 是 192.168.1.105，报文发送到不存在的 .200，当场被交换机丢弃！小车两眼一抹黑！');
+      world.flowing = false;
+      currentStage = 1;
+      render();
+    }, 600);
+  }, 100);
+}
+
+function doBroadcastStorm() {
+  if(world.flowing) return;
+  world.flowing = true;
+  world.mode = 'BROADCAST_STORM';
+
+  const p = document.getElementById('fly-pkt');
+  p.className = 'flying-pkt bcast';
+  p.innerText = '广播 255..';
+  p.style.left = '20px';
+
+  addLog('sendto("255.255.255.255", 7400)', 'err', '电脑发起全网广播大喇叭轰炸！');
+
+  setTimeout(() => {
+    p.style.left = '85%';
+    setTimeout(() => {
+      p.style.left = '-70px';
+      world.sentCount += 1;
+      world.victimCount += 2; // 打印机 + 手机
+      world.stormCount += 1;
+      addLog('💥 广播风暴引发！无关设备全线受扰！', 'err', '【全网瘫痪警报】交换机向所有网口复制报文！打印机与同事手机的网卡被迫触发硬件中断，CPU 飙红处理垃圾包！');
+      world.flowing = false;
+      currentStage = 2;
+      render();
+    }, 800);
+  }, 100);
+}
+
+function doMulticastSuccess() {
+  if(world.flowing) return;
+  world.flowing = true;
+  world.mode = 'MULTICAST_OK';
+
+  const p = document.getElementById('fly-pkt');
+  p.className = 'flying-pkt mcast';
+  p.innerText = '多播 239..';
+  p.style.left = '20px';
+
+  addLog('sendto("239.255.0.1", 7400)', 'info', '电脑向多播公共频道发送自我介绍宣告...');
+
+  setTimeout(() => {
+    p.style.left = '85%';
+    setTimeout(() => {
+      p.style.left = '-70px';
+      world.sentCount += 1;
+      addLog('多播精准抵达小车！', 'ok', '【精准送达 · 静默过滤】交换机通过 IGMP 侦听，仅把报文推给端口 2（小车）！打印机和手机完全不受打扰，CPU 中断为 0！');
+      world.flowing = false;
+      currentStage = 3;
+      render();
+    }, 800);
+  }, 100);
+}
+
+function doExchangeUnicast() {
+  if(world.flowing) return;
+  world.flowing = true;
+
+  const p = document.getElementById('fly-pkt');
+  p.className = 'flying-pkt unicast';
+  p.innerText = '单播名片';
+  p.style.left = '85%';
+
+  addLog('小车单播回信 (192.168.1.10:8000)', 'info', '小车从多播包里得知了电脑的真实单播 IP，立刻单播回信把自己的真实 IP 告知电脑。');
+
+  setTimeout(() => {
+    p.style.left = '20px';
+    setTimeout(() => {
+      p.style.left = '-70px';
+      addLog('双方完成 SPDP 自动握手！', 'ok', '【无中心结识成功】双方各自把对方的真实 IP 记在自己的内存表中！后续控制数据直接走点对点单播，省下全网带宽！');
+      world.flowing = false;
+      currentStage = 4;
+      render();
+    }, 800);
+  }, 100);
+}
+
+function doDomainIsolate() {
+  if(world.flowing) return;
+  world.flowing = true;
+  world.mode = 'DOMAIN_ISOLATE';
+  world.robotDomain = 1;
+
+  const p = document.getElementById('fly-pkt');
+  p.className = 'flying-pkt mcast';
+  p.innerText = '端口 7400';
+  p.style.left = '20px';
+
+  addLog('电脑往 Domain 0 (7400) 发包，小车在 Domain 1 (7650)', 'info', '测试物理端口隔离...');
+
+  setTimeout(() => {
+    p.style.left = '85%';
+    setTimeout(() => {
+      p.style.left = '-70px';
+      addLog('端口不符！小车网卡驱动直接丢弃！', 'ok', '【物理防串台验证通过】小车只监听 7650 端口，看到 7400 的报文在内核层直接静默抛弃！两台小车同场作业绝不串车！');
+      world.flowing = false;
+      currentStage = 5;
+      render();
+    }, 800);
+  }, 100);
+}
+
+function doEnterQuiz() {
+  if(world.flowing) return;
+  currentStage = 6;
+  render();
+}
+
+function skipStage() {
+  if(currentStage < 6) {
+    currentStage += 1;
+    render();
+  }
+}
+
+/* ==================== 可重玩实现 ==================== */
+function saveState() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ currentStage, quizAnswers }));
+  } catch(e) {}
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw) {
+      const data = JSON.parse(raw);
+      if(data && typeof data.currentStage === 'number') {
+        buildToStage(data.currentStage);
+        if(data.quizAnswers) quizAnswers = data.quizAnswers;
+        return true;
+      }
+    }
+  } catch(e) {}
+  return false;
+}
+
+function buildToStage(target) {
+  currentStage = target;
+
+  world.mode = 'UNICAST_FAIL';
+  world.sentCount = 0;
+  world.victimCount = 0;
+  world.stormCount = 0;
+  world.robotDomain = 0;
+  world.controllerDomain = 0;
+  world.flowing = false;
+
+  const p = document.getElementById('fly-pkt');
+  if(p) { p.style.left = '-70px'; }
+
+  if(target === 1) {
+    world.mode = 'UNICAST_FAIL';
+    world.sentCount = 1;
+  } else if(target === 2) {
+    world.mode = 'BROADCAST_STORM';
+    world.sentCount = 1;
+    world.victimCount = 2;
+    world.stormCount = 1;
+  } else if(target === 3) {
+    world.mode = 'MULTICAST_OK';
+    world.sentCount = 1;
+  } else if(target >= 4) {
+    world.mode = 'MULTICAST_OK';
+    world.sentCount = 2;
+  }
+  if(target >= 5) {
+    world.mode = 'DOMAIN_ISOLATE';
+    world.robotDomain = 1;
+  }
+
+  addLog(`↺ 进度跳转`, 'info', `系统状态已重放并精确同步至第 0${target} 关「${STAGES[target].title}」。`);
+  render();
+}
+
+function handleClearClick() {
+  clearClickCount++;
+  const btn = document.getElementById('btn-rearm');
+  if(clearClickCount === 1) {
+    btn.className = 'clear-btn armed';
+    btn.innerText = '⚠️ 再点一次确认清空全部进度';
+    clearTimer = setTimeout(() => {
+      clearClickCount = 0;
+      btn.className = 'clear-btn';
+      btn.innerText = '⟲ 清除全部进度';
+    }, 3000);
+  } else if(clearClickCount >= 2) {
+    clearTimeout(clearTimer);
+    clearClickCount = 0;
+    btn.className = 'clear-btn';
+    btn.innerText = '⟲ 清除全部进度';
+    try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+    quizAnswers = {};
+    document.getElementById('logbox').innerHTML = '';
+    buildToStage(0);
+    addLog('已清除全部学习记录与进度', 'ok', '已回到起点。');
+  }
+}
+
+// 绑定全局接口
+window.world = world;
+window.STAGES = STAGES;
+window.getCurrentStage = () => currentStage;
+window.buildToStage = buildToStage;
+window.doUnicastFail = doUnicastFail;
+window.doBroadcastStorm = doBroadcastStorm;
+window.doMulticastSuccess = doMulticastSuccess;
+window.doExchangeUnicast = doExchangeUnicast;
+window.doDomainIsolate = doDomainIsolate;
+window.doEnterQuiz = doEnterQuiz;
+window.handleClearClick = handleClearClick;
+
+window.addEventListener('DOMContentLoaded', () => {
+  if(!loadState()) {
+    buildToStage(0);
+    addLog('欢迎来到局域网单播/广播/多播物理寻人透视系统', 'info', '已就绪。点击下方操作按钮，逐关体验物理交换机与网络发包！');
+  }
+});
+</script>
+</body>
+</html>

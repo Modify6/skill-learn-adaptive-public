@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Docker 一张图 —— 存档 · 开的一局 · 配方</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#151f36; --panel2:#0f1729;
+    --line:#26334d; --text:#dde6f5; --muted:#93a7c9;
+    --blue:#3b82f6; --green:#22c55e; --purple:#a855f7;
+    --amber:#f5b544; --cyan:#38bdf8; --red:#f87171;
+    --mono:"Cascadia Code",Consolas,"JetBrains Mono",monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:radial-gradient(1200px 600px at 50% -100px,#16223d 0%,var(--bg) 60%);
+    color:var(--text);
+    font-family:system-ui,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+    padding:30px 18px 70px; line-height:1.65;
+  }
+  .wrap{max-width:1200px; margin:0 auto;}
+
+  /* ---------- header ---------- */
+  h1{font-size:26px; letter-spacing:.5px;}
+  h1 .dot-word{color:var(--amber);}
+  .sub{color:var(--muted); margin-top:6px; font-size:14.5px;}
+  .git-ladder{
+    margin-top:12px; padding:8px 14px; border:1px dashed var(--line); border-radius:10px;
+    font-size:12.5px; color:var(--muted); background:rgba(255,255,255,.02);
+    font-family:var(--mono);
+  }
+  .git-ladder b{color:var(--cyan); font-weight:600;}
+
+  /* ---------- grounding 落地层 ---------- */
+  .ground{margin-top:20px; display:grid; gap:14px;}
+  .ground-two{display:grid; grid-template-columns:2.1fr 1fr; gap:14px;}
+  .gpanel{background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:14px 18px;}
+  .g-head{font-size:14px; font-weight:700; margin-bottom:10px; color:var(--cyan);}
+  .story-steps{display:flex; flex-direction:column; gap:6px; font-size:13.5px;}
+  .story-steps .step{padding:8px 12px; border:1px solid var(--line); border-radius:9px; background:rgba(255,255,255,.02);}
+  .story-foot{font-size:12px; color:var(--muted); margin-top:8px;}
+  table.terms{width:100%; border-collapse:collapse; font-size:12.5px;}
+  .terms th{color:var(--muted); font-weight:600; text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); font-size:11.5px;}
+  .terms td{padding:8px; border-bottom:1px solid rgba(38,51,77,.5); vertical-align:top; color:var(--text);}
+  .terms td:first-child{color:var(--amber); font-weight:700; white-space:nowrap;}
+  .terms td:nth-child(2){color:var(--cyan); font-family:var(--mono); font-size:11.5px; white-space:nowrap;}
+  .terms code{font-family:var(--mono); color:var(--cyan);}
+  .prereq-card ul{list-style:none; display:flex; flex-direction:column; gap:6px; font-size:12.5px; margin-top:2px;}
+  .prereq-note{font-size:11.5px; color:var(--muted); margin-top:10px;}
+
+  /* ---------- journey rail ---------- */
+  .journey{margin-top:22px;}
+  .rail{display:flex; align-items:center; gap:6px; overflow-x:auto; padding:4px 2px 10px;}
+  .pill{
+    flex:none; font-size:11.5px; padding:4px 11px; border-radius:999px;
+    border:1px solid var(--line); color:var(--muted); white-space:nowrap; background:var(--panel2);
+  }
+  .pill.done{color:var(--green); border-color:rgba(34,197,94,.55);}
+  .pill.current{color:var(--amber); border-color:var(--amber); box-shadow:0 0 10px rgba(245,181,68,.25); font-weight:700;}
+  .sep{flex:none; width:14px; height:2px; background:var(--line);}
+
+  /* ---------- quest card ---------- */
+  .quest{
+    border:1px solid rgba(245,181,68,.45); border-left:4px solid var(--amber);
+    background:linear-gradient(90deg, rgba(245,181,68,.07), var(--panel2) 45%);
+    border-radius:12px; padding:14px 18px;
+  }
+  .quest.free{border-color:rgba(34,197,94,.45); border-left-color:var(--green);
+    background:linear-gradient(90deg, rgba(34,197,94,.07), var(--panel2) 45%);}
+  .quest-head{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .quest-stage{font-family:var(--mono); font-size:11px; color:var(--amber); letter-spacing:1px;}
+  .quest-title{font-size:16px; font-weight:700;}
+  .skip{margin-left:auto; font-size:12px; color:var(--muted); cursor:pointer; border:none; background:none; text-decoration:underline dotted;}
+  .skip:hover{color:var(--text);}
+  .q-row{display:flex; gap:12px; margin-top:9px; font-size:13.5px;}
+  .q-row .k{flex:none; width:76px; color:var(--muted); font-weight:600;}
+  .q-row .v{color:var(--text);}
+  .q-row .v b{color:var(--amber);}
+  .quest .go{margin-top:12px;}
+  .quest .go button{
+    font-size:13px; padding:7px 18px; border-color:var(--amber); color:var(--amber);
+    font-family:system-ui,"Microsoft YaHei",sans-serif; font-weight:700;
+  }
+  /* quiz */
+  .quiz{margin-top:6px;}
+  .qitem{margin-top:12px; padding-top:10px; border-top:1px dashed var(--line);}
+  .qitem .qtext{font-size:13.5px; font-weight:600;}
+  .opts{display:flex; flex-direction:column; gap:6px; margin-top:8px;}
+  .opt{
+    text-align:left; font-size:12.5px; font-family:system-ui,"Microsoft YaHei",sans-serif;
+    background:#182338; color:var(--text);
+  }
+  .opt.correct{border-color:var(--green); color:var(--green); background:rgba(34,197,94,.1);}
+  .opt.wrong{border-color:var(--red); color:var(--red); background:rgba(248,113,113,.08);}
+  .opt.dim{opacity:.4;}
+  .qexpl{font-size:12px; color:var(--muted); margin-top:6px;}
+
+  /* ---------- stage ---------- */
+  .stage-scroll{overflow-x:auto; margin-top:20px; padding-bottom:6px;}
+  .stage{
+    min-width:1080px;
+    display:grid;
+    grid-template-columns:1fr 92px 1.22fr 92px 1.22fr;
+    gap:0 8px; align-items:stretch;
+  }
+  .col-head{margin-bottom:10px; text-align:center;}
+  .col-head .nick{font-size:17px; font-weight:700;}
+  .col-head .real{font-family:var(--mono); font-size:11.5px; color:var(--cyan); letter-spacing:1px; text-transform:uppercase;}
+  .col-head .duty{font-size:12px; color:var(--muted); margin-top:2px;}
+  .col{
+    background:var(--panel2); border:1px solid var(--line); border-radius:14px;
+    padding:14px; display:flex; flex-direction:column; gap:12px; min-height:400px;
+  }
+  .c1 .nick{color:var(--cyan);} .c2 .nick{color:var(--purple);} .c3 .nick{color:var(--amber);}
+  .c4 .nick{color:var(--green);}
+
+  .flow{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; padding-top:26px;}
+  .flow .cmd{font-family:var(--mono); font-size:11.5px; color:var(--amber); white-space:nowrap;}
+  .flow .glyph{font-size:24px; color:var(--line); line-height:1;}
+  .flow .note{font-size:11px; color:var(--muted); writing-mode:vertical-rl; letter-spacing:2px;}
+
+  /* ---------- cards ---------- */
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:12px; box-shadow:0 6px 18px rgba(0,0,0,.25);
+  }
+  .pop{animation:pop .5s cubic-bezier(.2,.9,.3,1.35);}
+  @keyframes pop{from{transform:scale(.72); opacity:0;} to{transform:scale(1); opacity:1;}}
+
+  .rline{
+    display:flex; align-items:baseline; gap:10px; justify-content:space-between;
+    font-family:var(--mono); font-size:13px; padding:7px 10px; border-radius:8px;
+    border-left:3px solid var(--c); background:color-mix(in srgb, var(--c) 7%, transparent);
+    margin-bottom:7px; transition:all .25s;
+  }
+  .rline code{color:var(--text);}
+  .rline .rnote{font-size:11px; color:var(--muted); font-family:system-ui,"Microsoft YaHei",sans-serif; white-space:nowrap;}
+  .rline.hot{background:color-mix(in srgb, var(--c) 26%, transparent); transform:translateX(4px);}
+  .rline.hot .rnote{color:var(--text);}
+  .rfoot{font-size:11.5px; color:var(--muted); margin-top:4px;}
+
+  .stack{display:flex; flex-direction:column-reverse; gap:5px; margin-top:8px;}
+  .layer{
+    height:32px; border-radius:7px; display:flex; align-items:center; gap:8px;
+    padding:0 10px; font-size:12.5px;
+    border:1px solid var(--c); background:color-mix(in srgb, var(--c) 14%, transparent);
+  }
+  .layer .tag{
+    font-family:var(--mono); font-size:10px; color:var(--c); font-weight:700;
+    border:1px solid var(--c); border-radius:4px; padding:0 4px; flex:none;
+  }
+  .layer .lock{margin-left:auto; font-size:11px; opacity:.7;}
+  .layer.grayed{opacity:.5; border-style:dotted;}
+  .layer.writable{
+    border:2px dashed var(--amber); background:color-mix(in srgb, var(--amber) 13%, transparent);
+    color:#ffe1a6; animation:breathe 2.2s ease-in-out infinite;
+  }
+  .layer.writable .tag{color:var(--amber); border-color:var(--amber);}
+  @keyframes breathe{0%,100%{box-shadow:0 0 0 0 rgba(245,181,68,.0);} 50%{box-shadow:0 0 14px 0 rgba(245,181,68,.35);}}
+
+  .img-name{font-family:var(--mono); font-size:13.5px; font-weight:700; color:#fff;}
+  .img-meta{font-family:var(--mono); font-size:10.5px; color:var(--muted); margin-top:9px;}
+  .shared-note{font-size:10.5px; color:var(--muted); text-align:center; margin-bottom:2px;}
+
+  .ct-head{display:flex; align-items:center; gap:8px; font-family:var(--mono); font-size:13px; font-weight:700;}
+  .dot{width:9px; height:9px; border-radius:50%; background:var(--green); box-shadow:0 0 8px var(--green); flex:none;}
+  .badge{margin-left:auto; font-size:10px; color:var(--green); border:1px solid var(--green); border-radius:99px; padding:1px 8px; font-family:system-ui,"Microsoft YaHei",sans-serif;}
+
+  .share-banner{
+    font-size:12px; color:#bff3ff; background:rgba(56,189,248,.08);
+    border:1px solid rgba(56,189,248,.35); border-radius:9px; padding:7px 10px; text-align:center;
+  }
+  .empty{color:var(--muted); font-size:12.5px; text-align:center; padding:30px 0;}
+
+  .registry-row{grid-column:3; margin-top:14px;}
+  .reg-link{display:flex; justify-content:center; gap:14px; font-family:var(--mono); font-size:11px; color:var(--muted); padding:2px 0 8px;}
+  .reg-link .up{color:var(--green);} .reg-link .down{color:var(--cyan);}
+  .shelf{display:flex; gap:10px;}
+  .shelf-item{
+    flex:1; background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    padding:8px 10px; text-align:center;
+  }
+  .shelf-item .nm{font-family:var(--mono); font-size:12px; font-weight:700;}
+  .shelf-item .lyr{height:5px; border-radius:3px; margin-top:6px; opacity:.6;}
+
+  /* ---------- console ---------- */
+  .console{margin-top:26px; background:var(--panel2); border:1px solid var(--line); border-radius:14px; overflow:hidden;}
+  .console-head{
+    display:flex; align-items:center; gap:10px; padding:10px 16px;
+    border-bottom:1px solid var(--line); background:rgba(255,255,255,.02);
+    font-size:13px; color:var(--muted); flex-wrap:wrap;
+  }
+  .btns{display:flex; gap:8px; flex-wrap:wrap; margin-left:auto;}
+  button{
+    font-family:var(--mono); font-size:12px; color:var(--text);
+    background:#1d2a47; border:1px solid var(--line); border-radius:8px;
+    padding:6px 12px; cursor:pointer; transition:all .15s;
+  }
+  button:hover:not(:disabled){border-color:var(--amber); color:var(--amber); transform:translateY(-1px);}
+  button:disabled{opacity:.35; cursor:not-allowed;}
+  button.primary{border-color:var(--amber); color:var(--amber);}
+  .logbox{padding:12px 16px; max-height:220px; overflow-y:auto; font-family:var(--mono); font-size:12.5px;}
+  .logline{margin-bottom:8px;}
+  .logline .cmd{color:var(--amber);}
+  .logline .expl{color:var(--muted); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:12px; margin-top:1px;}
+  .logline.info{color:var(--cyan); font-family:system-ui,"Microsoft YaHei",sans-serif;}
+  .logline.ok{color:var(--green); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:12.5px;}
+
+  /* ---------- constraints ---------- */
+  .why{margin-top:26px; display:grid; grid-template-columns:repeat(3,1fr); gap:12px;}
+  .why-card{background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:14px 16px; font-size:13px;}
+  .why-card h3{font-size:13.5px; margin-bottom:6px;}
+  .why-card p{color:var(--muted); font-size:12.5px;}
+  .why-card b{color:var(--text);}
+  .w1 h3{color:var(--cyan);} .w2 h3{color:var(--red);} .w3 h3{color:var(--purple);}
+
+  footer{margin-top:26px; text-align:center; color:var(--muted); font-size:12px;}
+  @media (max-width:900px){ .why{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Docker 一张图：<span class="dot-word">存档</span> · <span class="dot-word">开的一局</span> · <span class="dot-word">配方</span></h1>
+  <p class="sub">治「在我机器上明明能跑」—— 把程序 + 全套环境打成标准件，到哪台机器都原样跑。循序渐进：从空场起点出发，一关一关走到毕业。</p>
+  <div class="git-ladder">git 同构（脚手架）：Dockerfile ≈ <b>源码</b> · 镜像 ≈ <b>commit</b>（不可变 · 哈希 · 分层） · 容器 ≈ <b>checkout 出来跑着的工作区</b> · 仓库 ≈ <b>remote</b></div>
+
+  <!-- 落地层：开场故事 + 绰号落地表 + 前置自查 -->
+  <div class="ground">
+    <div class="gpanel">
+      <div class="g-head">🎬 开场白：Docker 到底在解决什么（30 秒）</div>
+      <div class="story-steps">
+        <div class="step">😰 <b>场景</b>：你写好一个网站，自己电脑上跑得好好的。</div>
+        <div class="step">😱 <b>发给同事 / 部署到服务器</b>：跑不起来——Node 版本不同、缺库、路径不同。这就是那句工程界名言：「在我机器上明明能跑」。</div>
+        <div class="step">💡 <b>Docker 的答案</b>：把「程序 + 跑起来需要的一切（连操作系统的底子）」打成一个<b>标准包</b>。包搬到哪台机器，跑出来都一样。</div>
+      </div>
+      <div class="story-foot">这个包体系一共就四个角色——下面三列 + 存档站。绰号只是记忆把手，真实身份见右下「绰号落地表」。</div>
+    </div>
+    <div class="ground-two">
+      <div class="gpanel">
+        <div class="g-head">🔤 绰号落地表：每个绰号，真实身份是什么</div>
+        <table class="terms">
+          <tr><th>绰号</th><th>真名</th><th>它其实是什么（物理上）</th><th>你生活中见过的同类</th></tr>
+          <tr><td>配方</td><td>Dockerfile</td><td>项目根目录里一个就叫 <code>Dockerfile</code> 的<b>纯文本文件</b>，一行行写清楚怎么造这个包：拿什么底子、装什么、放什么代码、开机执行什么</td><td>菜谱 / 新电脑装机清单</td></tr>
+          <tr><td>存档</td><td>镜像 Image</td><td>照配方<b>造好的整个包</b>：你的程序 + 全套环境，内部一层层叠出来，通常几百 MB。躺在硬盘上，是个「死」的只读文件包</td><td>ghost 系统镜像 / 出厂预装的系统盘</td></tr>
+          <tr><td>开的一局</td><td>容器 Container</td><td>把镜像<b>跑起来</b>得到的活动实例：一个被隔离的<b>进程</b>（任务管理器里能看到的那种），外加一块它专属的可写空间</td><td>用系统盘启动的一台「临时电脑」——但轻得多，秒开秒删</td></tr>
+          <tr><td>存档站</td><td>仓库 Registry</td><td>集中存镜像的网站，最大的叫 Docker Hub（<code>hub.docker.com</code>，用浏览器现在就能打开逛）</td><td>应用商店 / GitHub</td></tr>
+          <tr><td>火化</td><td>删容器</td><td>容器被删时，它那层<b>可写改动</b>的磁盘空间直接回收，找不回来（所以重要数据要另想办法放，下一遍讲 volume）</td><td>网吧电脑重启还原</td></tr>
+        </table>
+      </div>
+      <div class="gpanel prereq-card">
+        <div class="g-head">🎒 前置知识自查（只有三样）</div>
+        <ul>
+          <li>✅ 会敲基本命令：cd、ls / dir 这种（会一个就算）</li>
+          <li>✅ 知道「进程 = 正在运行的程序」：任务管理器（Ctrl+Shift+Esc）里那一列</li>
+          <li>✅ 知道文件夹、压缩包是什么</li>
+        </ul>
+        <p class="prereq-note">就这些。不用会 Linux、不用懂网络也能走完这个教程。缺哪样，回 ZCode 问一句就补上。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- journey -->
+  <div class="journey">
+    <div class="rail" id="rail"></div>
+    <div class="quest" id="quest"></div>
+  </div>
+
+  <div class="stage-scroll">
+  <div class="stage">
+
+    <!-- Dockerfile -->
+    <div class="col c1">
+      <div class="col-head">
+        <div class="real">Dockerfile</div>
+        <div class="nick">配方</div>
+        <div class="duty">一份文本：怎么造镜像。一行指令 ≈ 叠一层</div>
+      </div>
+      <div id="recipe"></div>
+      <div class="rfoot">换台机器重新 build，叠出来的存档一模一样——这就是「环境可复现」。</div>
+    </div>
+
+    <div class="flow">
+      <div class="cmd">docker build</div>
+      <div class="glyph">⟶</div>
+      <div class="note">照配方叠层</div>
+    </div>
+
+    <!-- Images -->
+    <div class="col c2">
+      <div class="col-head">
+        <div class="real">Image</div>
+        <div class="nick">存档</div>
+        <div class="duty">造好的成品：一叠只读层，叠完封死，永不修改</div>
+      </div>
+      <div id="images"></div>
+    </div>
+
+    <div class="flow">
+      <div class="cmd">docker run</div>
+      <div class="glyph">⟶</div>
+      <div class="note">读档 + 加可写层</div>
+    </div>
+
+    <!-- Containers -->
+    <div class="col c3">
+      <div class="col-head">
+        <div class="real">Container</div>
+        <div class="nick">开的一局</div>
+        <div class="duty">跑起来的活实例 = 共享只读层 + 顶上一层可写层</div>
+      </div>
+      <div id="containers"></div>
+    </div>
+
+    <!-- Registry (under images column) -->
+    <div class="registry-row">
+      <div class="reg-link">
+        <span class="up">↑ docker push 传上去</span>
+        <span class="down">↓ docker pull 拉下来</span>
+      </div>
+      <div class="col c4" style="min-height:0; padding:12px;">
+        <div class="col-head" style="margin-bottom:6px;">
+          <div class="real">Registry</div>
+          <div class="nick">存档站</div>
+          <div class="duty">镜像集中存放 · Docker Hub ≈ 镜像界的 GitHub</div>
+        </div>
+        <div class="shelf">
+          <div class="shelf-item"><div class="nm">nginx</div><div class="lyr" style="background:var(--blue)"></div><div class="lyr" style="background:var(--cyan)"></div></div>
+          <div class="shelf-item"><div class="nm">redis</div><div class="lyr" style="background:var(--blue)"></div><div class="lyr" style="background:var(--red)"></div></div>
+          <div class="shelf-item"><div class="nm">postgres</div><div class="lyr" style="background:var(--blue)"></div><div class="lyr" style="background:var(--green)"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <!-- console -->
+  <div class="console">
+    <div class="console-head">
+      <span>🕹️ 模拟机 —— 点按钮 = 敲命令，看上面的图怎么动、下面的日志怎么说</span>
+      <div class="btns">
+        <button id="b-build" class="primary">docker build</button>
+        <button id="b-run">docker run</button>
+        <button id="b-ps">docker ps</button>
+        <button id="b-commit">docker commit</button>
+        <button id="b-rm">docker rm</button>
+        <button id="b-pull">docker pull nginx</button>
+        <button id="b-reset">↺ 从起点重来</button>
+      </div>
+    </div>
+    <div class="logbox" id="log"></div>
+  </div>
+
+  <!-- constraints -->
+  <div class="why">
+    <div class="why-card w1">
+      <h3>🚀 为什么「秒开」还省盘</h3>
+      <p><b>只读层全容器共享</b>：同一个镜像开 10 个容器，磁盘上只读部分只有一份，每个局只背自己那层薄的可写层。开新局 ≈ 读档，不用复制整个游戏。</p>
+    </div>
+    <div class="why-card w2">
+      <h3>🔥 为什么容器一删、东西就没了</h3>
+      <p><b>可写层随容器火化</b>：你这局装的包、改的文件全在可写层里，rm 掉容器它就没了。想让数据活过这一局，要另外挂 volume —— 下一遍再讲。</p>
+    </div>
+    <div class="why-card w3">
+      <h3>🧊 为什么存档必须封死</h3>
+      <p><b>不可变 = 到哪都一样</b>：镜像叠完就锁死（哈希寻址，像 commit），所以任何机器 pull 下来跑出来的东西一模一样。这正是治「在我机器上能跑」的那味药。</p>
+    </div>
+  </div>
+
+  <footer>三绰号：存档（不可改）· 开的一局（可写层）· 配方（怎么造的）｜ 毕业后回 ZCode 复述这条链 ｜ 下一遍：volume、容器底下是被隔离的 Linux 进程</footer>
+</div>
+
+<script>
+const C = {blue:'#3b82f6', green:'#22c55e', purple:'#a855f7', amber:'#f5b544', cyan:'#38bdf8', red:'#f87171'};
+const KEY = 'docker-mental-model-journey';
+
+const RECIPE = [
+  {code:'FROM node:20-alpine',  note:'底座层',          color:C.blue,   builds:true, layer:'底座 · node:20-alpine', tag:'FROM'},
+  {code:'RUN npm install',      note:'依赖层',          color:C.green,  builds:true, layer:'依赖 · npm install',   tag:'RUN'},
+  {code:'COPY . /app',          note:'代码层',          color:C.purple, builds:true, layer:'代码 · /app',          tag:'COPY'},
+  {code:'CMD ["node","app.js"]',note:'开机指令（不叠层）', color:C.cyan,   builds:false},
+];
+
+/* ============ 关卡定义 ============ */
+const STAGES = [
+  { nm:'起点·导览', stageTag:'STAGE 0 / 7', title:'先认地形：四块在哪',
+    start:'一张空场：配方（左列）已写好，存档、开的一局都还空着——一切从配方开始。',
+    task:'看清三列各管什么：<b>配方</b>＝怎么造，<b>存档</b>＝造好的成品，<b>开的一局</b>＝跑起来的实例。然后点「开始」。',
+    watch:'右下角模拟机的按钮，就是这一路上你要亲手做的事。',
+    pass:()=>started },
+  { nm:'① build', stageTag:'STAGE 1 / 7', title:'配方 → 存档',
+    start:'存档栏还是空的，手里只有左边的配方。',
+    task:'按 <b>docker build</b>。',
+    watch:'配方一行行点亮，存档栏一层层叠出：底座 → 依赖 → 代码。CMD 只是开机指令，不叠层。',
+    done:'存档＝一叠只读层，叠完封死、永不修改。这就是「镜像」。',
+    pass:()=>images.some(i=>i.id==='myapp' && i.layers.length>=3) },
+  { nm:'② run', stageTag:'STAGE 2 / 7', title:'读档开局',
+    start:'有存档了，但还没开过任何一局。',
+    task:'按 <b>docker run</b>。',
+    watch:'web-1 出现：下面的层和存档长一样（共享、锁死），顶上多出一层虚线黄框＝<b>可写层</b>。',
+    done:'容器＝共享只读层＋一层自己的可写层。跑起来的是「局」，不是存档本身。',
+    pass:()=>containers.length>=1 },
+  { nm:'③ 共享', stageTag:'STAGE 3 / 7', title:'再开一局：共享只读层',
+    start:'一局（web-1）在跑，存档只有一份。',
+    task:'再按一次 <b>docker run</b>。',
+    watch:'web-2 出现＋横幅提示：2 个局共享同一份只读层——磁盘上只读部分<b>只有一份</b>。',
+    done:'开新局＝读档，不是复制。这就是容器「秒开」还省盘的原因。',
+    pass:()=>containers.length>=2 },
+  { nm:'④ rm', stageTag:'STAGE 4 / 7', title:'关一局：可写层的下场',
+    start:'两局在跑，各自的可写层里攒着这一局的改动。',
+    task:'按 <b>docker rm</b>。',
+    watch:'一局消失，它那层可写层随之<b>火化</b>；存档毫发无损，随时能再开新局。',
+    done:'容器一删，没 commit 过的改动就没了。数据想活过容器 → volume（下一遍）。',
+    pass:()=>didRm },
+  { nm:'⑤ commit', stageTag:'STAGE 5 / 7', title:'把这局存成新档',
+    start:'还剩一局，可写层里攒着改动。',
+    task:'按 <b>docker commit</b>。',
+    watch:'可写层被封进新存档 myapp:1.1（黄色 COMMIT 层）。以后 run 这个新档，开局自带这些改动。',
+    done:'commit＝把这局封成新档：改动的「合法出口」。',
+    pass:()=>images.some(i=>i.id.startsWith('myapp-')) },
+  { nm:'⑥ pull', stageTag:'STAGE 6 / 7', title:'存档站：拿现成的',
+    start:'本地只有自己 build 出来的档。',
+    task:'按 <b>docker pull nginx</b>。',
+    watch:'存档站货架上的 nginx 进入本地存档栏——这是别人 build 好 push 上去的。',
+    done:'仓库＝镜像界的 GitHub：pull 拿现成的，push 传自己的。',
+    pass:()=>images.some(i=>i.id==='nginx') },
+  { nm:'终点·毕业测', stageTag:'STAGE 7 / 7', title:'毕业测：3 道题',
+    start:'整条链都亲手走了一遍。',
+    task:'答对下面 3 道题就毕业（答错可以重选）。',
+    watch:'每题答完有解释。',
+    done:'毕业！自由模式解锁。',
+    pass:()=>quiz.length===3 && quiz.every(v=>v && v.ok) },
+];
+
+const QUIZ = [
+  { q:'1 / 3 · docker rm 掉一个容器之后，哪个说法对？',
+    opts:['镜像也没了，得重新 pull','镜像还在，只是这局的可写层火化了','容器和镜像一起进回收站'],
+    ans:1,
+    expl:'只读层属于存档，毫发无损；火化的只是这局自己的可写层。' },
+  { q:'2 / 3 · 同一个镜像开了 3 个容器，磁盘上只读层存几份？',
+    opts:['3 份，每局复制一套','1 份，三个局共享'],
+    ans:1,
+    expl:'共享只读层是 Docker 秒开、省盘的关键设计。' },
+  { q:'3 / 3 · 你在一局里装了个包，想让以后每局都自带，该怎么做？',
+    opts:['重启这个容器','docker pull 重新拉','docker commit 把这局封成新镜像，以后 run 新档'],
+    ans:2,
+    expl:'commit 是改动的合法出口。（改 Dockerfile 重新 build 也行，是更工程化的路——下一遍讲。）' },
+];
+
+/* ============ 状态 ============ */
+let images = [], containers = [], seq = 0, commits = 0;
+let busy = false, buildActive = -1;
+let didRm = false, started = false, stage = 0;
+let quiz = [null, null, null];
+const seen = new Set();
+const logLines = [];
+
+function addLog(cmd, type, expl){
+  logLines.unshift({cmd, type, expl});
+  if(logLines.length > 30) logLines.pop();
+}
+
+function fresh(key, cls){ if(seen.has(key)) return cls; seen.add(key); return cls + ' pop'; }
+
+function baseLayers(){
+  return RECIPE.filter(r=>r.builds).map(r=>({label:r.layer, color:r.color, tag:r.tag}));
+}
+
+function seed(){
+  images = []; containers = []; seq = 0; commits = 0;
+  busy = false; buildActive = -1; didRm = false; started = false; stage = 0;
+  quiz = [null, null, null];
+  logLines.length = 0; seen.clear();
+  addLog(null, 'info', '起点：空场。配方已写好（左列），存档和局都还没有。跟着引导卡，一关一关走。');
+}
+
+/* ============ 持久化 ============ */
+function saveState(){
+  try{ localStorage.setItem(KEY, JSON.stringify({images, containers, seq, commits, didRm, started, stage, quiz})); }catch(e){}
+}
+function loadState(){
+  try{
+    const d = JSON.parse(localStorage.getItem(KEY));
+    if(!d || !Array.isArray(d.images)) return false;
+    images = d.images; containers = d.containers; seq = d.seq||0; commits = d.commits||0;
+    didRm = !!d.didRm; started = !!d.started; stage = d.stage||0;
+    quiz = Array.isArray(d.quiz) ? d.quiz : [null,null,null];
+    // 重建 seen，避免载入时全部重播入场动画
+    images.forEach(img=>{ seen.add('img-'+img.id); img.layers.forEach((_,i)=>seen.add('img-'+img.id+'-l'+i)); });
+    containers.forEach(ct=>{ seen.add('ct-'+ct.id); });
+    logLines.length = 0;
+    addLog(null, 'info', '欢迎回来：进度已从上次恢复（第 ' + Math.min(stage+1,7) + ' / 7 关）。想从头再来点「↺ 从起点重来」。');
+    return true;
+  }catch(e){ return false; }
+}
+
+/* ============ 关卡推进 ============ */
+function progress(){
+  let moved = false;
+  while(stage < STAGES.length && STAGES[stage].pass()){
+    const s = STAGES[stage];
+    addLog(null, 'ok', '✅ ' + s.nm + ' 通过：' + (s.done || ''));
+    stage++; moved = true;
+  }
+  if(stage >= STAGES.length){
+    addLog(null, 'ok', '🏁 毕业！整条链你都亲手走通了。自由模式解锁——随便按，做实验。');
+  }
+  if(moved) renderQuest();
+}
+
+/* ============ 渲染 ============ */
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');}
+
+function renderRail(){
+  const el = document.getElementById('rail');
+  let html = '';
+  STAGES.forEach((s,i)=>{
+    let cls = 'pill';
+    if(stage >= STAGES.length || i < stage) cls += ' done';
+    else if(i === stage) cls += ' current';
+    const mark = (stage >= STAGES.length || i < stage) ? '✓ ' : '';
+    html += `<span class="${cls}">${mark}${esc(s.nm)}</span>`;
+    if(i < STAGES.length-1) html += '<span class="sep"></span>';
+  });
+  html += '<span class="sep"></span><span class="pill' + (stage>=STAGES.length?' current':'') + '">🏁 自由模式</span>';
+  el.innerHTML = html;
+}
+
+function quizHTML(){
+  return '<div class="quiz">' + QUIZ.map((it,i)=>{
+    const st = quiz[i];
+    const opts = it.opts.map((o,j)=>{
+      let cls = 'opt';
+      if(st){
+        if(j === it.ans) cls += ' correct';
+        else if(st.pick === j) cls += ' wrong';
+        else cls += ' dim';
+      }
+      const mark = st ? (j===it.ans ? ' ✅' : (st.pick===j ? ' ❌' : '')) : '';
+      return `<button class="${cls}" data-q="${i}" data-o="${j}" ${st && st.ok ? 'disabled':''}>${esc(o)}${mark}</button>`;
+    }).join('');
+    const expl = st ? `<div class="qexpl">${st.ok ? '✅' : '❌ 不对，再选一次。'} ${esc(it.expl)}</div>` : '';
+    return `<div class="qitem"><div class="qtext">${esc(it.q)}</div><div class="opts">${opts}</div>${expl}</div>`;
+  }).join('') + '</div>';
+}
+
+function renderQuest(){
+  const el = document.getElementById('quest');
+  if(stage >= STAGES.length){
+    el.className = 'quest free pop';
+    el.innerHTML = `
+      <div class="quest-head">
+        <span class="quest-stage" style="color:var(--green)">GRADUATED</span>
+        <span class="quest-title">🏁 终点：这条路你走通了</span>
+        <button class="skip" id="b-restart">↺ 从起点再走一遍</button>
+      </div>
+      <div class="q-row"><span class="k">📍 起点</span><span class="v">空场，只有一份配方。</span></div>
+      <div class="q-row"><span class="k">🏁 终点</span><span class="v">配方 —build→ 存档 —run→ 局（共享只读层＋可写层）；局 —rm→ 可写层火化 / —commit→ 封成新档；存档 ⇄ pull/push ⇄ 存档站。</span></div>
+      <div class="q-row"><span class="k">🎮 现在</span><span class="v">自由模式：随便按按钮做实验（比如 pull 完 nginx 再 commit 一局试试）。</span></div>
+      <div class="q-row"><span class="k">💬 回 ZCode</span><span class="v">合上这个页面，用自己的话把这条链<b>复述</b>一遍；说顺了就喊「咔哒」，哪里卡住就指哪里。</span></div>`;
+    const rb = document.getElementById('b-restart');
+    if(rb) rb.onclick = ()=>{ localStorage.removeItem(KEY); seed(); renderAll(); };
+    return;
+  }
+  const s = STAGES[stage];
+  el.className = 'quest';
+  el.innerHTML = `
+    <div class="quest-head">
+      <span class="quest-stage">${esc(s.stageTag)}</span>
+      <span class="quest-title">${esc(s.title)}</span>
+      <button class="skip" id="b-skip">跳过引导，直接自由模式 →</button>
+    </div>
+    <div class="q-row"><span class="k">📍 起点</span><span class="v">${s.start}</span></div>
+    <div class="q-row"><span class="k">🎯 任务</span><span class="v">${s.task}</span></div>
+    <div class="q-row"><span class="k">👀 看什么</span><span class="v">${s.watch}</span></div>
+    ${stage===0 ? '<div class="go"><button class="primary" id="b-begin">开始第 1 关 ▶</button></div>' : ''}
+    ${stage===STAGES.length-1 ? quizHTML() : ''}`;
+  const begin = document.getElementById('b-begin');
+  if(begin) begin.onclick = ()=>{ started = true; progress(); renderAll(); };
+  const skip = document.getElementById('b-skip');
+  if(skip) skip.onclick = ()=>{ stage = STAGES.length; renderAll(); };
+  el.querySelectorAll('.opt').forEach(btn=>{
+    btn.onclick = ()=>{
+      const i = +btn.dataset.q, j = +btn.dataset.o;
+      if(quiz[i] && quiz[i].ok) return;
+      quiz[i] = {pick:j, ok: j===QUIZ[i].ans};
+      renderQuest(); renderRail(); progress(); saveState();
+    };
+  });
+}
+
+function renderRecipe(){
+  document.getElementById('recipe').innerHTML = RECIPE.map((r,i)=>`
+    <div class="rline ${i===buildActive?'hot':''}" style="--c:${r.color}">
+      <code>${esc(r.code)}</code><span class="rnote">${r.note}</span>
+    </div>`).join('');
+}
+
+function layerHTML(l, key, grayed){
+  return `<div class="layer ${grayed?'grayed':''} ${fresh(key,'')}" style="--c:${l.color}">
+      <span class="tag">${l.tag||''}</span>${esc(l.label)}<span class="lock">🔒</span>
+    </div>`;
+}
+
+function writableHTML(){
+  return `<div class="layer writable" style="--c:${C.amber}">
+      <span class="tag">RW</span>✏️ 可写层 · 你这局的改动全在这里
+    </div>`;
+}
+
+function renderImages(){
+  const el = document.getElementById('images');
+  if(!images.length){ el.innerHTML = '<div class="empty">（空）用左边的配方 build 一个，<br>或从存档站 pull 一个</div>'; return; }
+  el.innerHTML = images.map(img=>`
+    <div class="${fresh('img-'+img.id,'card')}">
+      <div class="img-name">📦 ${esc(img.name)}</div>
+      <div class="stack">${[...img.layers].reverse().map((l,i)=>layerHTML(l,'img-'+img.id+'-l'+i)).join('')}</div>
+      ${img.layers.length ? `<div class="img-meta">sha256:${img.id.slice(0,4)}9f3c… · 封死，永不修改</div>` : '<div class="img-meta">叠层中…</div>'}
+    </div>`).join('');
+}
+
+function renderContainers(){
+  const el = document.getElementById('containers');
+  let html = '';
+  if(containers.length >= 2){
+    html += `<div class="share-banner">🔍 ${containers.length} 个局共享同一份只读层 —— 磁盘上只读层只有一份</div>`;
+  }
+  if(!containers.length){
+    html += '<div class="empty">（一个局都没开）<br>docker run 读档开局</div>';
+  }
+  html += containers.map(ct=>{
+    const img = images.find(i=>i.id===ct.image);
+    const ro = img ? [...img.layers].reverse().map((l,i)=>layerHTML(l,'ct-'+ct.id+'-l'+i,true)).join('') : '';
+    return `<div class="${fresh('ct-'+ct.id,'card')}">
+      <div class="ct-head"><span class="dot"></span>${esc(ct.name)}<span class="badge">运行中</span></div>
+      <div class="stack">
+        ${writableHTML()}
+        <div class="shared-note">↓ 下面这些是只读层 · 和镜像共享（磁盘上没复制）↓</div>
+        ${ro}
+      </div>
+    </div>`;
+  }).join('');
+  el.innerHTML = html;
+}
+
+function renderLog(){
+  document.getElementById('log').innerHTML = logLines.map(l=>{
+    if(l.type==='info') return `<div class="logline info">ℹ️ ${esc(l.expl)}</div>`;
+    if(l.type==='ok') return `<div class="logline ok">${esc(l.expl)}</div>`;
+    return `<div class="logline"><div class="cmd">$ ${esc(l.cmd)}</div><div class="expl">→ ${esc(l.expl)}</div></div>`;
+  }).join('');
+}
+
+function updateButtons(){
+  const myappReady = images.some(i=>i.id==='myapp' && i.layers.length>0);
+  document.getElementById('b-build').disabled = busy;
+  document.getElementById('b-run').disabled = busy || !myappReady || containers.length>=3;
+  document.getElementById('b-ps').disabled = busy;
+  document.getElementById('b-commit').disabled = busy || !containers.length;
+  document.getElementById('b-rm').disabled = busy || !containers.length;
+  document.getElementById('b-pull').disabled = busy || images.some(i=>i.id==='nginx');
+}
+
+function renderAll(){
+  renderRail(); renderQuest(); renderRecipe(); renderImages(); renderContainers(); renderLog(); updateButtons();
+  saveState();
+}
+
+/* ============ 动作 ============ */
+function build(){
+  if(busy) return; busy = true;
+  let img = images.find(i=>i.id==='myapp');
+  if(!img){ img = {id:'myapp', name:'myapp:1.0', layers:[]}; images.push(img); }
+  img.layers = []; buildActive = -1; renderAll();
+  RECIPE.forEach((r,k)=>{
+    setTimeout(()=>{
+      buildActive = k;
+      if(r.builds) img.layers.push({label:r.layer, color:r.color, tag:r.tag});
+      renderAll();
+      if(k===RECIPE.length-1){
+        setTimeout(()=>{
+          buildActive = -1; busy = false;
+          addLog('docker build -t myapp:1.0 .', 'cmd',
+            '照配方一层层叠：底座 → 依赖 → 代码。CMD 只是开机指令，不叠层。叠完封死 —— 得到只读存档 myapp:1.0');
+          renderAll(); progress();
+        }, 750);
+      }
+    }, 560*(k+1));
+  });
+}
+
+function run(){
+  if(busy || containers.length>=3) return;
+  containers.push({id:++seq, name:'web-'+seq, image:'myapp'});
+  addLog('docker run myapp:1.0', 'cmd',
+    '读档开局：只读层直接共享（不复制），顶上新加一层可写层。');
+  renderAll(); progress();
+}
+
+function ps(){
+  addLog('docker ps', 'cmd',
+    containers.length ? '开着的局：' + containers.map(c=>c.name).join('、') + '（状态：运行中）' : '一个局都没开。');
+  renderAll();
+}
+
+function commit(){
+  if(busy || !containers.length) return;
+  const ct = containers[containers.length-1];
+  const base = images.find(i=>i.id===ct.image);
+  if(!base || !base.layers.length) return;
+  const ver = commits + 1;
+  commits++;
+  images.push({
+    id:'myapp-'+commits, name:'myapp:1.'+ver,
+    layers:[...base.layers, {label:'封进去的 · 原可写层', color:C.amber, tag:'COMMIT'}]
+  });
+  addLog('docker commit '+ct.name+' myapp:1.'+ver, 'cmd',
+    '把这局存成新档：'+ct.name+' 的可写层被封进新镜像。以后 run 新档，开局就自带这局的改动。');
+  renderAll(); progress();
+}
+
+function rm(){
+  if(busy || !containers.length) return;
+  const ct = containers.pop();
+  didRm = true;
+  addLog('docker rm -f '+ct.name, 'cmd',
+    '这局关了，【可写层】随之火化 —— 没 commit 过的改动全没了。只读层没事：存档还在，随时再开新局。');
+  renderAll(); progress();
+}
+
+function pull(){
+  if(busy || images.some(i=>i.id==='nginx')) return;
+  images.push({
+    id:'nginx', name:'nginx:1.27',
+    layers:[
+      {label:'底座 · debian', color:C.blue, tag:'FROM'},
+      {label:'nginx 本体', color:C.cyan, tag:'RUN'},
+    ]
+  });
+  addLog('docker pull nginx', 'cmd',
+    '从存档站（Registry）拉了个现成存档。别人 build 好推上去的，你直接读档开局 —— 这就是镜像生态。');
+  renderAll(); progress();
+}
+
+document.getElementById('b-build').onclick  = build;
+document.getElementById('b-run').onclick    = run;
+document.getElementById('b-ps').onclick     = ps;
+document.getElementById('b-commit').onclick = commit;
+document.getElementById('b-rm').onclick     = rm;
+document.getElementById('b-pull').onclick   = pull;
+document.getElementById('b-reset').onclick  = ()=>{ localStorage.removeItem(KEY); seed(); renderAll(); };
+
+if(!loadState()) seed();
+renderAll();
+</script>
+</body>
+</html>

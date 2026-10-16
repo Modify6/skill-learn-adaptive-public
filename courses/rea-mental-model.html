@@ -1,0 +1,1166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REA 业务本体模型与 AI —— 资源·事件·参与者 · 经济对偶性</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#151f36; --panel2:#0f1729;
+    --line:#26334d; --text:#dde6f5; --muted:#a6b9d9;
+    --blue:#3b82f6; --green:#22c55e; --purple:#a855f7;
+    --amber:#f5b544; --cyan:#38bdf8; --red:#f87171;
+    --mono:"Cascadia Code",Consolas,"JetBrains Mono",monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:radial-gradient(1200px 600px at 50% -100px,#16223d 0%,var(--bg) 60%);
+    color:var(--text);
+    font-family:system-ui,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+    padding:30px 18px 70px; line-height:1.65;
+  }
+  .wrap{max-width:1240px; margin:0 auto;}
+
+  /* ---------- header ---------- */
+  h1{font-size:26px; letter-spacing:.5px;}
+  h1 .dot-word{color:var(--amber);}
+  .sub{color:var(--muted); margin-top:6px; font-size:14.5px;}
+  .ladder{
+    margin-top:12px; padding:8px 14px; border:1px dashed var(--line); border-radius:10px;
+    font-size:12.5px; color:var(--muted); background:rgba(255,255,255,.02);
+    font-family:var(--mono);
+  }
+  .ladder b{color:var(--cyan); font-weight:600;}
+  .ladder .bad{color:var(--red);}
+
+  /* ---------- landing table (机制落地表) ---------- */
+  .ltable{margin-top:12px; border:1px solid var(--line); border-radius:10px; overflow:hidden; font-size:12px;}
+  .ltable table{width:100%; border-collapse:collapse;}
+  .ltable th{
+    background:rgba(255,255,255,.03); color:var(--muted); font-size:11px; font-weight:600;
+    padding:6px 10px; text-align:left; border-bottom:1px solid var(--line); letter-spacing:1px;
+  }
+  .ltable td{padding:6px 10px; border-bottom:1px solid rgba(38,51,77,.5); vertical-align:top;}
+  .ltable tr:last-child td{border-bottom:none;}
+  .ltable .nick{color:var(--amber); font-weight:700; font-family:var(--mono); white-space:nowrap;}
+  .ltable .real{color:var(--cyan); font-family:var(--mono);}
+  .ltable .phys{color:var(--text);}
+  .ltable .life{color:var(--muted);}
+
+  /* ---------- journey rail ---------- */
+  .journey{margin-top:22px;}
+  .rail{display:flex; align-items:center; gap:5px; overflow-x:auto; padding:4px 2px 10px;}
+  .pill{
+    flex:none; font-size:11px; padding:4px 9px; border-radius:999px;
+    border:1px solid var(--line); color:var(--muted); white-space:nowrap; background:var(--panel2);
+    cursor:pointer;
+  }
+  .pill.done{color:var(--green); border-color:rgba(34,197,94,.55);}
+  .pill.current{color:var(--amber); border-color:var(--amber); box-shadow:0 0 10px rgba(245,181,68,.25); font-weight:700;}
+  .sep{flex:none; width:10px; height:2px; background:var(--line);}
+
+  /* ---------- quest card ---------- */
+  .quest{
+    border:1px solid rgba(245,181,68,.45); border-left:4px solid var(--amber);
+    background:linear-gradient(90deg, rgba(245,181,68,.07), var(--panel2) 45%);
+    border-radius:12px; padding:14px 18px;
+  }
+  .quest.free{border-color:rgba(34,197,94,.45); border-left-color:var(--green);
+    background:linear-gradient(90deg, rgba(34,197,94,.07), var(--panel2) 45%);}
+  .quest-head{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .quest-stage{font-family:var(--mono); font-size:11px; color:var(--amber); letter-spacing:1px;}
+  .quest-title{font-size:16px; font-weight:700;}
+  .skip{font-size:12px; color:var(--muted); cursor:pointer; border:none; background:none; text-decoration:underline dotted; padding:0;}
+  .skip:hover{color:var(--text);}
+  .replay-btn{
+    font-size:11px; padding:3px 8px; border-radius:6px; background:#182338;
+    color:var(--cyan); border:1px solid var(--line); cursor:pointer; margin-left:auto;
+  }
+  .replay-btn:hover{border-color:var(--cyan); background:#1e2d48;}
+  .q-row{display:flex; gap:12px; margin-top:9px; font-size:13.5px;}
+  .q-row .k{flex:none; width:88px; color:var(--muted); font-weight:600;}
+  .q-row .v{color:var(--text);}
+  .q-row .v b{color:var(--amber);}
+  .quest .go{margin-top:12px;}
+  .quest .go button{
+    font-size:13px; padding:7px 18px; border-radius:6px; cursor:pointer;
+    border:1px solid var(--line); background:#1a253d; color:var(--text);
+    font-family:system-ui,"Microsoft YaHei",sans-serif; font-weight:700;
+  }
+  .quest .go button.primary{border-color:var(--amber); color:var(--amber); background:rgba(245,181,68,.12);}
+  .quest .go button.primary:hover{background:rgba(245,181,68,.2);}
+
+  /* quiz */
+  .quiz{margin-top:6px;}
+  .qitem{margin-top:12px; padding-top:10px; border-top:1px dashed var(--line);}
+  .qitem .qtext{font-size:13.5px; font-weight:600;}
+  .opts{display:flex; flex-direction:column; gap:6px; margin-top:8px;}
+  .opt{
+    text-align:left; font-size:12.5px; font-family:var(--mono),system-ui,sans-serif;
+    background:#16203a; color:var(--text); border:1px solid var(--line); border-radius:6px;
+    padding:8px 12px; cursor:pointer;
+  }
+  .opt.correct{border-color:var(--green); color:var(--green); background:rgba(34,197,94,.1);}
+  .opt.wrong{border-color:var(--red); color:var(--red); background:rgba(248,113,113,.08);}
+  .opt.dim{opacity:.4;}
+  .qexpl{font-size:12px; color:var(--muted); margin-top:6px;}
+
+  /* ---------- stage (3 columns) ---------- */
+  .stage-scroll{overflow-x:auto; margin-top:20px; padding-bottom:6px;}
+  .stage{
+    min-width:1120px;
+    display:grid;
+    grid-template-columns:1.05fr 1.35fr 1.05fr;
+    gap:0 12px; align-items:stretch;
+  }
+  .col-head{margin-bottom:10px; text-align:center;}
+  .col-head .nick{font-size:17px; font-weight:700;}
+  .col-head .real{font-family:var(--mono); font-size:11.5px; color:var(--cyan); letter-spacing:1px; text-transform:uppercase;}
+  .col-head .duty{font-size:12px; color:var(--muted); margin-top:2px;}
+  .col{
+    background:var(--panel2); border:1px solid var(--line); border-radius:14px;
+    padding:14px; display:flex; flex-direction:column; gap:12px; min-height:550px;
+  }
+  .c1 .nick{color:var(--cyan);} .c2 .nick{color:var(--amber);} .c3 .nick{color:var(--green);}
+
+  /* Col1 工具输出与契约定义 */
+  .codebox{
+    background:#070b15; border:1px solid var(--line); border-radius:10px;
+    padding:12px; font-family:var(--mono); font-size:11.5px; line-height:1.7;
+    flex:1; overflow-y:auto;
+  }
+  .codeline{padding:1px 6px; border-radius:4px; transition:background .2s; white-space:pre-wrap; word-break:break-all;}
+  .codeline.active{background:rgba(245,181,68,.18); color:var(--amber); border-left:3px solid var(--amber);}
+  .codeline .kw{color:#ff7b72;}
+  .codeline .cm{color:#7f92ad; font-style:italic;}
+  .codeline .hl-g{color:var(--green);}
+  .codeline .hl-c{color:var(--cyan);}
+  .codeline .hl-a{color:var(--amber);}
+  .codeline .hl-p{color:var(--purple);}
+  .codeline .hl-r{color:var(--red);}
+
+  /* Col2 REA 解剖图谱 */
+  .anat-box{display:flex; flex-direction:column; gap:10px; flex:1;}
+  .anat-note{font-size:11.5px; color:var(--muted); text-align:center; line-height:1.7;}
+  .anat-note b{color:var(--amber);}
+
+  .rea-shelf{
+    background:#0d1526; border:1px solid var(--line); border-radius:10px; padding:10px 12px;
+    display:flex; flex-direction:column; gap:8px;
+  }
+  .shelf-title{font-size:11px; font-weight:700; color:var(--cyan); letter-spacing:1px; display:flex; justify-content:space-between;}
+  .shelf-grid{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .res-card{
+    background:#141f38; border:1px solid var(--line); border-radius:8px; padding:8px 10px;
+    font-size:11px; transition:all .3s;
+  }
+  .res-card.lit{border-color:var(--cyan); box-shadow:0 0 10px rgba(56,189,248,.25);}
+  .res-name{font-weight:700; color:var(--text); display:flex; justify-content:space-between;}
+  .res-type{font-size:10px; color:var(--cyan); font-family:var(--mono);}
+  .res-val{font-size:10.5px; color:var(--muted); margin-top:2px;}
+
+  /* Events Timeline */
+  .ev-flow{
+    background:#0d1526; border:1px solid var(--line); border-radius:10px; padding:10px 12px;
+    display:flex; flex-direction:column; gap:8px;
+  }
+  .ev-card{
+    background:#141f38; border:1px solid var(--line); border-radius:8px; padding:8px 10px;
+    font-size:11px; transition:all .3s;
+  }
+  .ev-card.give{border-left:3px solid var(--amber);}
+  .ev-card.take{border-left:3px solid var(--green);}
+  .ev-card.hot{border-color:var(--amber); box-shadow:0 0 10px rgba(245,181,68,.3);}
+  .ev-head{display:flex; justify-content:space-between; align-items:center;}
+  .ev-tag{font-family:var(--mono); font-size:10px; padding:1px 6px; border-radius:4px;}
+  .ev-tag.give{background:rgba(245,181,68,.15); color:var(--amber);}
+  .ev-tag.take{background:rgba(34,197,94,.15); color:var(--green);}
+  .ev-desc{font-size:11px; color:var(--text); margin-top:3px;}
+
+  /* Duality Chain Hook */
+  .duality-bar{
+    background:rgba(168,85,247,.08); border:1px dashed var(--purple); border-radius:8px;
+    padding:8px 12px; text-align:center; font-size:11.5px; color:var(--purple);
+    font-weight:700; transition:all .3s;
+  }
+  .duality-bar.locked{
+    background:rgba(168,85,247,.18); border-style:solid;
+    box-shadow:0 0 12px rgba(168,85,247,.35); color:#d8b4fe;
+  }
+
+  /* Agents Box */
+  .agent-box{
+    background:#0d1526; border:1px solid var(--line); border-radius:10px; padding:10px 12px;
+    display:flex; flex-direction:column; gap:8px;
+  }
+  .agent-grid{display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;}
+  .ag-card{
+    background:#141f38; border:1px solid var(--line); border-radius:8px; padding:7px 8px;
+    text-align:center; font-size:10.5px; transition:all .3s;
+  }
+  .ag-card.ai{border-color:rgba(56,189,248,.6); background:rgba(56,189,248,.07);}
+  .ag-card.hot{border-color:var(--green); box-shadow:0 0 9px rgba(34,197,94,.3);}
+  .ag-role{font-family:var(--mono); font-size:9.5px; color:var(--muted);}
+  .ag-name{font-weight:700; color:var(--text); margin-top:2px;}
+
+  /* Col3 现场账本与因果仪表盘 */
+  .run-panel{
+    background:#070b15; border:1px solid var(--line); border-radius:10px;
+    padding:12px; display:flex; flex-direction:column; gap:8px;
+  }
+  .run-title{font-size:11px; color:var(--muted); letter-spacing:1px; display:flex; justify-content:space-between;}
+  .audit-log{flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:5px; max-height:230px;}
+  .audit-entry{
+    font-family:var(--mono); font-size:10.5px; padding:5px 8px; border-radius:6px;
+    background:#0e1526; border-left:2px solid var(--line); line-height:1.5;
+  }
+  .audit-entry.ok{border-color:var(--green);}
+  .audit-entry.warn{border-color:var(--amber);}
+  .audit-entry.ai{border-color:var(--cyan); background:rgba(56,189,248,.05);}
+
+  .stats-bar{
+    display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;
+    margin-top:auto;
+  }
+  .stat-item{
+    background:#0d1526; border:1px solid var(--line); border-radius:8px;
+    padding:8px 6px; text-align:center;
+  }
+  .stat-val{font-size:15px; font-weight:700; font-family:var(--mono); color:var(--amber);}
+  .stat-val.ok{color:var(--green);}
+  .stat-lbl{font-size:10px; color:var(--muted); margin-top:2px;}
+
+  /* Console & Logs */
+  .console{
+    margin-top:20px; background:#070b15; border:1px solid var(--line); border-radius:12px;
+    padding:14px; display:flex; flex-direction:column; gap:10px;
+  }
+  .console-head{display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;}
+  .console-head span{font-size:12px; color:var(--muted); font-weight:600;}
+  .btns{display:flex; gap:8px; flex-wrap:wrap;}
+  .btns button{
+    font-size:12px; padding:6px 14px; border-radius:6px; cursor:pointer;
+    border:1px solid var(--line); background:#141d33; color:var(--text);
+    font-family:system-ui,"Microsoft YaHei",sans-serif; font-weight:600; transition:all .2s;
+  }
+  .btns button:hover{border-color:var(--amber); color:var(--amber);}
+  .btns button.primary{border-color:var(--amber); color:var(--amber); background:rgba(245,181,68,.12);}
+  .btns button.danger{border-color:rgba(248,113,113,.5); color:var(--red);}
+  .btns button.danger:hover{background:rgba(248,113,113,.15);}
+  .logbox{
+    background:#0a0f1d; border:1px solid var(--line); border-radius:8px;
+    padding:10px 12px; font-family:var(--mono); font-size:11.5px; color:var(--muted);
+    min-height:75px; max-height:140px; overflow-y:auto; line-height:1.6;
+  }
+  .logline{margin-bottom:3px;}
+  .logline.ok{color:var(--green);}
+  .logline.warn{color:var(--amber);}
+  .logline.err{color:var(--red);}
+  .logline.ai{color:var(--cyan);}
+
+  /* Why cards */
+  .why{margin-top:24px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;}
+  .why-card{
+    background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:14px 16px;
+  }
+  .why-card h3{font-size:13.5px; margin-bottom:6px; color:var(--text);}
+  .why-card.w1 h3{color:var(--cyan);}
+  .why-card.w2 h3{color:var(--amber);}
+  .why-card.w3 h3{color:var(--purple);}
+  .why-card p{font-size:12px; color:var(--muted); line-height:1.7;}
+  .why-card b{color:var(--text);}
+
+  footer{margin-top:30px; text-align:center; font-size:11px; color:var(--muted);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Header -->
+  <h1>REA 业务本体模型与 AI —— <span class="dot-word">资源 · 事件 · 参与者</span> · 经济对偶性</h1>
+  <div class="sub">超越死板的 CRUD 与借贷记账法 · 现代企业架构、房产数字化与 AI 智能体调度的因果底座</div>
+
+  <div class="ladder">
+    <b>演化梯子：</b>
+    <span class="bad">传统 CRUD (覆盖改状态·丢失因果)</span> ➔
+    借贷记账 (单向抽象数字) ➔
+    <b>REA 三元本体 (R资产 / E流转 / A主体)</b> ➔
+    <b>经济对偶性 Duality (双向不可逆契约)</b> ➔
+    <b>AI Agent 调度 (全息因果驱动·自愈闭环)</b>
+  </div>
+
+  <!-- 机制落地表 -->
+  <div class="ltable">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:100px;">元素</th>
+          <th style="width:180px;">真名 (REA Ontology)</th>
+          <th style="width:280px;">物理 / 代码上是什么</th>
+          <th style="width:340px;">真实业务场景 (如房产/资产管理)</th>
+          <th>铁律 / 设计约束</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="nick">R (资源)</td>
+          <td class="real">Economic Resource</td>
+          <td class="phys">稀缺且受控的有价值实体对象</td>
+          <td class="life">望京SOHO A座1201（房屋使用权）、押金池、数字门锁钥匙</td>
+          <td class="life"><b>只能通过事件增减</b>，绝不允许直接 update 余额或状态</td>
+        </tr>
+        <tr>
+          <td class="nick">E (事件)</td>
+          <td class="real">Economic Event</td>
+          <td class="phys">导致资源流入/流出的不可变动作</td>
+          <td class="life">支付租金事件、房屋交接事件、验房确认事件、解约事件</td>
+          <td class="life"><b>Append-only（只追加不修改）</b>，如同 Git 提交链，自带时间戳</td>
+        </tr>
+        <tr>
+          <td class="nick">A (参与者)</td>
+          <td class="real">Economic Agent</td>
+          <td class="phys">对资源有决策权/控制权的主体</td>
+          <td class="life">房东（业主）、租客、物业服务商、<b>AI 智能经纪人</b></td>
+          <td class="life">任何事件必须明确指出<b>流出方（From）</b>与<b>流入方（To）</b></td>
+        </tr>
+        <tr>
+          <td class="nick">对偶性</td>
+          <td class="real">Economic Duality</td>
+          <td class="phys">双向因果约束连线（Give ⇄ Take）</td>
+          <td class="life">交出房屋使用权（Give）⇄ 必须对偶收到租金押金（Take）</td>
+          <td class="life"><b>孤立事件非法</b>，付出必须对偶回报，缺失即判定为欠款/违约</td>
+        </tr>
+        <tr>
+          <td class="nick">AI Agent</td>
+          <td class="real">Autonomous REA Driver</td>
+          <td class="phys">监听 REA 图谱并触发合法事件的程序</td>
+          <td class="life">AI 自动监听退租事件 ➔ 计算行情定价 ➔ 撮合带看 ➔ 自动对偶签约</td>
+          <td class="life">AI 必须遵循 REA 因果律，不能凭空制造资源或跳过对偶验证</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Journey Rail -->
+  <div class="journey">
+    <div class="rail" id="rail"></div>
+  </div>
+
+  <!-- Quest Card -->
+  <div class="quest" id="quest"></div>
+
+  <!-- Stage (3 Columns) -->
+  <div class="stage-scroll">
+    <div class="stage">
+
+      <!-- Col1 业务事件与契约代码 -->
+      <div class="col c1">
+        <div class="col-head">
+          <div class="nick">业务事件与契约定义</div>
+          <div class="real">CONTRACT &amp; EVENT LOG</div>
+          <div class="duty">不可变事件流与状态机定义</div>
+        </div>
+        <div class="codebox" id="codebox"></div>
+      </div>
+
+      <!-- Col2 REA 动态解剖图谱 -->
+      <div class="col c2">
+        <div class="col-head">
+          <div class="nick">REA 动态本体图谱</div>
+          <div class="real">ONTOLOGY GRAPH &amp; DUALITY</div>
+          <div class="duty">资源货架 · 事件链 · 主体行为</div>
+        </div>
+        <div class="anat-box">
+          <div class="anat-note" id="anat-note">请跟随任务卡提示，逐步点亮 REA 实体网络。</div>
+
+          <!-- Resources Shelf -->
+          <div class="rea-shelf">
+            <div class="shelf-title">
+              <span>📦 ECONOMIC RESOURCES (经济资源货架)</span>
+              <span id="shelf-count" style="color:var(--muted);font-weight:normal;">3 个资源</span>
+            </div>
+            <div class="shelf-grid" id="res-grid"></div>
+          </div>
+
+          <!-- Duality Linkage -->
+          <div class="duality-bar" id="duality-bar">
+            🔗 经济对偶性 (Duality)：尚未建立双向契约锁扣
+          </div>
+
+          <!-- Events Flow -->
+          <div class="ev-flow">
+            <div class="shelf-title">
+              <span>⚡ ECONOMIC EVENTS (不可变事件流)</span>
+              <span id="ev-count" style="color:var(--muted);font-weight:normal;">0 个事件</span>
+            </div>
+            <div id="ev-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+          </div>
+
+          <!-- Agents -->
+          <div class="agent-box">
+            <div class="shelf-title">
+              <span>👤 ECONOMIC AGENTS (参与主体)</span>
+              <span style="color:var(--muted);font-weight:normal;">人类与 AI 智能体</span>
+            </div>
+            <div class="agent-grid" id="agent-grid"></div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Col3 资产账本与因果仪表盘 -->
+      <div class="col c3">
+        <div class="col-head">
+          <div class="nick">现场账本与因果仪表盘</div>
+          <div class="real">AUDIT TRAIL &amp; REASONING</div>
+          <div class="duty">对偶平衡度 · 因果链审计</div>
+        </div>
+        <div class="anat-box">
+
+          <div class="run-panel" style="flex:1;">
+            <div class="run-title">
+              <span>📜 实时因果审计流水 (APPEND-ONLY)</span>
+            </div>
+            <div class="audit-log" id="audit-log">
+              <div style="color:var(--muted);font-size:11px;">暂无事件。所有动作均会生成带因果溯源的记录。</div>
+            </div>
+          </div>
+
+          <!-- 仪表盘 -->
+          <div class="stats-bar">
+            <div class="stat-item">
+              <div class="stat-val" id="stat-duality">未绑定</div>
+              <div class="stat-lbl">对偶平衡度</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-val" id="stat-status">空置</div>
+              <div class="stat-lbl">房源使用权状态</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-val" id="stat-ai">监听中</div>
+              <div class="stat-lbl">AI Agent 状态</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Console Controls & Logs -->
+  <div class="console">
+    <div class="console-head">
+      <span>控制台与业务触发面板</span>
+      <div class="btns" id="btns"></div>
+    </div>
+    <div class="logbox" id="logbox"></div>
+  </div>
+
+  <!-- Why cards -->
+  <div class="why">
+    <div class="why-card w1">
+      <h3>🔍 为什么企业架构与 AI 拒绝纯 CRUD？</h3>
+      <p>CRUD 只有简单的 <code>UPDATE status = 'rented'</code>。谁改的？因为交了多少钱改的？交期多久？全丢了！<b>CRUD 抹杀了因果关系</b>。出现纠纷、退租维权或对账不平时，纯 CRUD 系统只能靠人脑扯皮。REA 让每一次状态跳变都由一个不可变的 Event 承载。</p>
+    </div>
+    <div class="why-card w2">
+      <h3>🎯 为什么叫「经济对偶性 (Duality)」？</h3>
+      <p>商业的本质是价值交换。你不可能凭空获得资源（Take），也不可能平白送出资产（Give）。<b>对偶性是防止业务逻辑穿透的硬防火墙</b>——交出房屋使用权必须强绑定租金收入事件，缺少任何一边，系统立刻警报违约或坏账。</p>
+    </div>
+    <div class="why-card w3">
+      <h3>🤖 为什么大模型 Agent 必须基于 REA？</h3>
+      <p>大模型最怕幻觉和状态穿透。如果给 AI 数据库写权限，它可能直接改状态。但如果把企业抽象为 REA 本体，<b>AI 只能作为 Agent 去发现需求、建议或触发合法 Event</b>，底层 Duality 契约规则会强行校验对偶闭环，确保商业逻辑绝对安全。</p>
+    </div>
+  </div>
+
+  <footer>
+    REA 核心心智模型：资源只能被事件增减 · 任何付出必有对偶回报 · 参与者承担因果责任 · AI 作为 Agent 遵循商业因果律 ｜ 案例演示：智能房产资产履约系统
+  </footer>
+
+</div>
+
+<script>
+const KEY = 'rea-journey-v1';
+
+/* ============ 关卡定义 ============ */
+const STAGES = [
+  { nm:'起点', stageTag:'STAGE 0 / 10', title:'先认地形：传统 CRUD 的崩溃与 REA 的救赎',
+    start:'欢迎来到 REA 本体论课堂！传统系统把业务看作「一堆数据库表 + 增删改查」；但这在复杂资产流转（如房产买卖租赁、供应链金融）中会彻底坏死——<b>修改了字段，却丢掉了为什么修改的商业因果</b>。',
+    task:'前置自查：① 见过数据库 UPDATE 语句；② 理解商业交换必须有来有回。确认后点「开启 REA 之旅」。',
+    watch:'带着核心问题往下走：房产从空置到出租，为什么不能只改一个 status 字段？',
+    pass:()=>flags.started },
+
+  { nm:'①传统之痛', stageTag:'STAGE 1 / 10', title:'CRUD 之痛：改了字段，丢了因果',
+    start:'眼前是一套望京 SOHO 房源。在传统 CRUD 系统中，出租操作就是一条暴力 <code>UPDATE apartment SET status=\'rented\', deposit=15000</code>。',
+    task:'点击 <b>💥 模拟传统 CRUD 覆盖修改</b>。',
+    watch:'观察账本：字段确实变了，但没有记录谁付的款、没有记录租期多久、没有关联租赁合同！一旦租客主张退租，系统无法证明该 15000 押金的因果闭环。这就是<b>状态覆盖综合征</b>。',
+    pass:()=>flags.crudRan },
+
+  { nm:'②拆解R资源', stageTag:'STAGE 2 / 10', title:'拆解 R：经济资源 (Economic Resource)',
+    start:'REA 重新定义世界：资源不是普通数据，而是<b>稀缺且受主体控制的经济价值实体</b>。在房产系统中，资源包括：① 房屋物理所有权；② 特定时间段的房屋使用权；③ 货币资产（租金/押金）。',
+    task:'点击 <b>📦 注册经济资源实体</b>。',
+    watch:'中列资源货架点亮：房屋使用权、租金资产、数字门禁钥匙独立建档。铁律：<b>任何程序都无权直接修改资源数值，它只能被接下来的事件所消耗或产生</b>。',
+    pass:()=>flags.resRegistered },
+
+  { nm:'③拆解E事件', stageTag:'STAGE 3 / 10', title:'拆解 E：经济事件 (Economic Event)',
+    start:'事件是导致资源状态跃迁的唯一途径！它是<b>不可变（Append-only）的历史事实</b>，就像 Git commit 一样，只准追加，绝不准修改和删除。',
+    task:'点击 <b>⚡ 记录房源挂牌事件</b> ➔ 点击 <b>⚡ 记录租金支付事件</b>。',
+    watch:'事件流中生成两条事实记录。注意：此时「租金支付事件」发生了，资金流入房东账户，但房屋使用权尚未交付——对偶闭环尚未完成！',
+    pass:()=>flags.eventListed && flags.eventPaid },
+
+  { nm:'④拆解A参与者', stageTag:'STAGE 4 / 10', title:'拆解 A：参与主体与 AI Agent 登场',
+    start:'每个事件不是孤立的程序操作，必须有真实的承担者。REA 明确区分两个角色：<b>提供方 (Provide)</b> 与 <b>接收方 (Receive)</b>。而在现代系统中，AI 也是合法的参与主体！',
+    task:'点击 <b>👥 绑定参与主体与 AI 经纪人</b>。',
+    watch:'房东（张业主）、租客（李工程师）、以及 <b>AI 房产经纪 Agent</b> 激活入场。AI 不仅是分析师，它将作为被授权的主体代管房源带看与合同校验。',
+    pass:()=>flags.agentsBound },
+
+  { nm:'⑤经济对偶性', stageTag:'STAGE 5 / 10', title:'核心灵魂：经济对偶性 (Duality)',
+    start:'这是整套 REA 的心脏！任何合法的商业交换，必须由两个方向相反的事件组成对偶闭环：<b>付出事件 (Give Event) ⇄ 获得事件 (Take Event)</b>。',
+    task:'点击 <b>🔗 签署对偶契约并交接房屋</b>。',
+    watch:'「交出房屋使用权 (Give)」与「获得租金与押金 (Take)」被一根牢不可破的<b>经济对偶锁链 (Duality Hook)</b> 锁死！对偶平衡度升至 100%。缺少任何一方，系统自动裁定为欠付或违约。',
+    pass:()=>flags.dualityLocked },
+
+  { nm:'⑥全息图谱', stageTag:'STAGE 6 / 10', title:'三维织网：全息 REA 关系网络',
+    start:'现在看完整张图：资源被事件消耗/产生（Inflow/Outflow）；参与者对事件负责（Participation）；事件与事件互为对偶（Duality）。一张全息因果网已织成。',
+    task:'点击 <b>🕸 激活全息图谱高亮</b>。',
+    watch:'左中右三列因果完全对齐。右侧因果审计流水可以 100% 倒推回当时的任何一笔资金与钥匙交付事实，完全不需要人工对账。',
+    pass:()=>flags.graphActive },
+
+  { nm:'⑦AI调度履约', stageTag:'STAGE 7 / 10', title:'AI Agent 介入：感知·定价·自主调度',
+    start:'AI 在传统 CRUD 里只能被动查表；但在 REA 里，AI 成为自主代理人！AI 监听到租客即将到期事件，自动根据周边行情智能调价，并派发续约或带看任务。',
+    task:'点击 <b>🤖 AI Agent 自主感知并触发调价履约</b>。',
+    watch:'AI 捕获到市场波动，自动追加「意向变更与续租意向事件」，并在 REA 因果图谱中完成合法签名，资产账本实时更新，完全合规。',
+    pass:()=>flags.aiScheduled },
+
+  { nm:'⑧违约与自愈', stageTag:'STAGE 8 / 10', title:'违约自愈：不可变历史下的补偿事件',
+    start:'租客突然违约提前退租怎么办？传统系统慌忙 `DELETE` 或覆盖改状态。REA 的做法是：<b>历史不可篡改，通过追加「补偿事件 (Compensating Event)」让系统自愈</b>。',
+    task:'点击 <b>🚨 租客申请退租 ➔ 追加补偿事件</b>。',
+    watch:'生成「扣除违约金事件」+「收回房屋使用权事件」+「退还剩余押金事件」。每一个补偿事件都有独立的对偶锁扣，系统重回健康状态。',
+    pass:()=>flags.compensated },
+
+  { nm:'⑨毕业测', stageTag:'STAGE 9 / 10', title:'毕业测：3 道业务与 AI 架构决策题',
+    start:'你已经亲历了从 CRUD 之痛到 REA 三元本体、经济对偶性以及 AI Agent 调度的完整闭环。',
+    task:'答对下面 3 道架构设计单选题即可毕业（答错可重选）。',
+    watch:'涉及供应链金融、AI 防作弊、以及事件溯源设计。',
+    pass:()=>quiz.length===3 && quiz.every(v=>v && v.ok) },
+
+  { nm:'⑩自由沙盒', stageTag:'STAGE 10 / 10', title:'自由沙盒：体验完整的商业本体调度',
+    start:'恭喜毕业！你已完全掌握 REA (Resource-Event-Agent) 的心智模型。',
+    task:'所有按钮已解锁。可自由发起签约、资金流动或调用 AI Agent 调度；可随时重玩或清除进度。',
+    watch:'体会：资源永不被孤立修改，任何流动必有对偶因果。',
+    pass:()=>true }
+];
+
+const QUIZ = [
+  { q:'1 / 3 · 在设计高可靠的房产交易系统时，工程师想直接在房源表执行 `UPDATE house SET is_sold = true`，这违反了 REA 的哪条根本原则？',
+    opts:[
+      '违反了资源不能有布尔值属性的规定',
+      '违反了「资源状态必须由经济事件（如签署过户事件）驱动且不可变追加」的原则，抹杀了商业因果',
+      '违反了数据库必须分库分表的设计准则',
+      '违反了房源必须有多个买家的业务规定'
+    ],
+    ans:1,
+    expl:'REA 核心约束：经济资源（Resource）的状态跃迁必须且只能由不可变经济事件（Event）记录并触发。直接更新字段导致丢失了交易时间、买家身份、合同编号、成交金额等所有全息因果元数据。' },
+
+  { q:'2 / 3 · 某电商系统发生了「用户已付款，但库存扣减失败」的单边账故障。从 REA 本体论来看，这是哪一个机制缺失导致的？',
+    opts:[
+      '缺乏经济资源（Resource）的分类标准',
+      '缺乏参与主体（Agent）的身份认证',
+      '缺乏「经济对偶性 (Duality)」的强约束事务控制（付钱事件与扣库存事件必须成对闭环）',
+      '缺乏大模型 AI 审查机制'
+    ],
+    ans:2,
+    expl:'对偶性 (Duality) 是商业交易的核心纽带。付钱 (Take Cash) 必须与交货 (Give Goods) 互为对偶绑定。如果系统没有在本体层将两类事件通过 Duality 锁扣绑定，就会发生单边事件孤立存在的严重账务事故。' },
+
+  { q:'3 / 3 · 引入 AI Agent 进行自主资产调度（例如让 AI 自动出租多余车位或房产）时，如何防止 AI 发生幻觉乱改资产？',
+    opts:[
+      '让 AI 拥有全库写入权限，但要求它每次修改前写一句解释',
+      '禁止 AI 参与任何业务，只允许人操作',
+      '把 AI 限制为 REA 中的普通 Agent，AI 只能提议或触发特定的合法 Event，底层由 Duality 规则强制核验',
+      '把数据库密码告诉 AI，让它通过 SQL 事务执行'
+    ],
+    ans:2,
+    expl:'AI 作为 Agent 参与系统时，最好的防护网就是 REA 本体规则。AI 只能作为主体提出 Event 请求（如发起签约事件），而系统的经济对偶性验证、资金托管规则是刚性的代码守卫，AI 绝对无法绕过因果律直接修改 Resource。' },
+];
+
+/* ============ 核心状态 ============ */
+let stage = 0;
+let flags = {};
+let quiz = [null, null, null];
+
+let world = {
+  resources: [
+    { id:'R1', name:'望京SOHO 1201使用权', type:'Right/Property', status:'空置待租', val:'12个月租期', lit:false },
+    { id:'R2', name:'租赁资金与押金池', type:'Cash/Currency', status:'待入账', val:'0 元', lit:false },
+    { id:'R3', name:'智能门锁数字钥匙', type:'Access/Digital', status:'托管中', val:'PIN: 8899', lit:false }
+  ],
+  events: [],
+  agents: [
+    { id:'A1', role:'Owner / 业主', name:'张房东', active:false },
+    { id:'A2', role:'Tenant / 租客', name:'李工程师', active:false },
+    { id:'A3', role:'AI Agent / 智能体', name:'瑞亚(REA)房产管家', isAi:true, active:false }
+  ],
+  duality: { locked:false, ratio:'0%', desc:'尚未建立对偶契约' },
+  auditLog: []
+};
+
+function freshWorld(){
+  return {
+    resources: [
+      { id:'R1', name:'望京SOHO 1201使用权', type:'Right/Property', status:'空置待租', val:'12个月租期', lit:false },
+      { id:'R2', name:'租赁资金与押金池', type:'Cash/Currency', status:'待入账', val:'0 元', lit:false },
+      { id:'R3', name:'智能门锁数字钥匙', type:'Access/Digital', status:'托管中', val:'PIN: 8899', lit:false }
+    ],
+    events: [],
+    agents: [
+      { id:'A1', role:'Owner / 业主', name:'张房东', active:false },
+      { id:'A2', role:'Tenant / 租客', name:'李工程师', active:false },
+      { id:'A3', role:'AI Agent / 智能体', name:'瑞亚(REA)房产管家', isAi:true, active:false }
+    ],
+    duality: { locked:false, ratio:'0%', desc:'尚未建立对偶契约' },
+    auditLog: []
+  };
+}
+
+let codeLines = [];
+
+/* ============ 渲染管道 ============ */
+function render(){
+  renderRail();
+  renderQuest();
+  renderCode();
+  renderAnat();
+  renderDashboard();
+  renderConsole();
+}
+
+function renderRail(){
+  const rail = document.getElementById('rail');
+  rail.innerHTML = STAGES.map((s, idx)=>{
+    let cls = 'pill';
+    if(idx < stage) cls += ' done';
+    if(idx === stage) cls += ' current';
+    return `<div class="${cls}" onclick="jumpStage(${idx})">${s.nm}</div>${idx < STAGES.length - 1 ? '<div class="sep"></div>' : ''}`;
+  }).join('');
+}
+
+function renderQuest(){
+  const q = document.getElementById('quest');
+  const s = STAGES[stage];
+  q.className = 'quest' + (stage === 10 ? ' free' : '');
+
+  let bodyHtml = `
+    <div class="quest-head">
+      <span class="quest-stage">${s.stageTag}</span>
+      <span class="quest-title">${s.title}</span>
+      <button class="replay-btn" onclick="replayStage()">↺ 重玩本关</button>
+      ${stage < 9 ? `<button class="skip" onclick="jumpStage(${stage+1})">直接跳关 →</button>` : ''}
+    </div>
+    <div class="q-row"><div class="k">📍 起点现状</div><div class="v">${s.start}</div></div>
+    <div class="q-row"><div class="k">🎯 当前任务</div><div class="v">${s.task}</div></div>
+    <div class="q-row"><div class="k">👀 核心观察</div><div class="v">${s.watch}</div></div>
+  `;
+
+  if(stage === 9){
+    bodyHtml += `
+      <div class="quiz">
+        ${QUIZ.map((qz, qidx)=>{
+          const res = quiz[qidx];
+          return `
+            <div class="qitem">
+              <div class="qtext">${qz.q}</div>
+              <div class="opts">
+                ${qz.opts.map((opt, oidx)=>{
+                  let cls = 'opt';
+                  if(res !== null){
+                    if(oidx === qz.ans) cls += ' correct';
+                    else if(oidx === res.pick) cls += ' wrong';
+                    else cls += ' dim';
+                  }
+                  return `<button class="${cls}" onclick="answerQuiz(${qidx}, ${oidx})">${opt}</button>`;
+                }).join('')}
+              </div>
+              ${res !== null ? `<div class="qexpl">${res.ok ? '✅ 答对了！' : '❌ 答错了。'} ${qz.expl}</div>` : ''}
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  if(stage === 0){
+    bodyHtml += `<div class="go"><button class="primary" onclick="startJourney()">开始学习（进入第 1 关：CRUD 之痛）→</button></div>`;
+  } else if(s.pass() && stage < STAGES.length - 1 && stage !== 9){
+    bodyHtml += `<div class="go"><button class="primary" onclick="jumpStage(${stage + 1})">✅ 本关目标达成！进入下一关 →</button></div>`;
+  } else if(stage === 9 && s.pass()){
+    bodyHtml += `<div class="go"><button class="primary" onclick="jumpStage(10)">🎉 测验全对！毕业并解锁自由沙盒 →</button></div>`;
+  }
+
+  q.innerHTML = bodyHtml;
+}
+
+function renderCode(){
+  const box = document.getElementById('codebox');
+  box.innerHTML = codeLines.map(l => {
+    return `<div class="codeline ${l.cls || ''}">${l.text}</div>`;
+  }).join('');
+  box.scrollTop = box.scrollHeight;
+}
+
+function renderAnat(){
+  // Shelf
+  const rgrid = document.getElementById('res-grid');
+  rgrid.innerHTML = world.resources.map(r => `
+    <div class="res-card ${r.lit ? 'lit' : ''}">
+      <div class="res-name">
+        <span>${r.name}</span>
+        <span class="res-type">${r.type}</span>
+      </div>
+      <div class="res-val">状态: <b style="color:${r.lit ? 'var(--cyan)' : 'var(--text)'}">${r.status}</b></div>
+      <div class="res-val" style="color:var(--muted);">${r.val}</div>
+    </div>
+  `).join('');
+  document.getElementById('shelf-count').innerText = `${world.resources.length} 项资产`;
+
+  // Duality
+  const dbar = document.getElementById('duality-bar');
+  dbar.className = 'duality-bar' + (world.duality.locked ? ' locked' : '');
+  dbar.innerHTML = world.duality.locked
+    ? `🔗 <b>经济对偶闭环 (Duality Locked)</b>：交出房源使用权 (Give) ⇄ 必须对偶收入租金 (Take)`
+    : `🔗 经济对偶性 (Duality)：${world.duality.desc}`;
+
+  // Events
+  const elist = document.getElementById('ev-list');
+  if(world.events.length === 0){
+    elist.innerHTML = `<div style="color:var(--muted);font-size:11px;padding:6px;">暂无事件。所有状态必须由不可变事件追加产生。</div>`;
+  } else {
+    elist.innerHTML = world.events.map(e => `
+      <div class="ev-card ${e.kind} ${e.hot ? 'hot' : ''}">
+        <div class="ev-head">
+          <span style="font-weight:700;">${e.title}</span>
+          <span class="ev-tag ${e.kind}">${e.kind.toUpperCase()} EVENT</span>
+        </div>
+        <div class="ev-desc">${e.desc}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px;font-family:var(--mono);">
+          From: ${e.from} ➔ To: ${e.to} | 时间戳: ${e.time}
+        </div>
+      </div>
+    `).join('');
+  }
+  document.getElementById('ev-count').innerText = `${world.events.length} 个不可变事件`;
+
+  // Agents
+  const agrid = document.getElementById('agent-grid');
+  agrid.innerHTML = world.agents.map(a => `
+    <div class="ag-card ${a.isAi ? 'ai' : ''} ${a.active ? 'hot' : ''}">
+      <div class="ag-role">${a.role}</div>
+      <div class="ag-name" style="color:${a.active ? 'var(--green)' : 'var(--text)'}">${a.name}</div>
+      <div style="font-size:9.5px;color:var(--muted);margin-top:2px;">${a.active ? '● 活跃就绪' : '○ 离线待机'}</div>
+    </div>
+  `).join('');
+}
+
+function renderDashboard(){
+  // Audit log
+  const alog = document.getElementById('audit-log');
+  if(world.auditLog.length === 0){
+    alog.innerHTML = `<div style="color:var(--muted);font-size:11px;">暂无事件。所有动作均会生成带因果溯源的记录。</div>`;
+  } else {
+    alog.innerHTML = world.auditLog.map(log => `
+      <div class="audit-entry ${log.cls || ''}">
+        <div><span style="color:var(--muted);">${log.time}</span> <b>${log.title}</b></div>
+        <div style="color:var(--text);font-size:10px;">${log.detail}</div>
+      </div>
+    `).join('');
+    alog.scrollTop = alog.scrollHeight;
+  }
+
+  // Stats
+  const sd = document.getElementById('stat-duality');
+  sd.innerText = world.duality.ratio;
+  sd.className = 'stat-val' + (world.duality.locked ? ' ok' : '');
+
+  const ss = document.getElementById('stat-status');
+  ss.innerText = world.resources[0].status;
+
+  const sa = document.getElementById('stat-ai');
+  sa.innerText = world.agents[2].active ? '自主调度中' : '监听中';
+}
+
+function renderConsole(){
+  const btns = document.getElementById('btns');
+  btns.innerHTML = '';
+
+  const mkBtn = (lbl, fn, cls='') => {
+    const b = document.createElement('button');
+    b.className = cls;
+    b.innerHTML = lbl;
+    b.onclick = fn;
+    btns.appendChild(b);
+  };
+
+  if(stage === 0){
+    mkBtn('🚀 开启 REA 探索之旅', startJourney, 'primary');
+  } else if(stage === 1){
+    mkBtn('💥 模拟传统 CRUD 覆盖修改 (体验缺陷)', doCRUD);
+  } else if(stage === 2){
+    mkBtn('📦 注册经济资源实体 (Resource)', doRegisterResource, 'primary');
+  } else if(stage === 3){
+    mkBtn('⚡ 记录房源挂牌事件 (Listing)', doListingEvent);
+    mkBtn('💰 记录租金与押金支付事件 (Payment)', doPaymentEvent, 'primary');
+  } else if(stage === 4){
+    mkBtn('👥 绑定参与主体与 AI Agent', doBindAgents, 'primary');
+  } else if(stage === 5){
+    mkBtn('🔗 签署对偶契约并交接房屋 (Duality Hook)', doLockDuality, 'primary');
+  } else if(stage === 6){
+    mkBtn('🕸 激活全息因果网高亮', doActiveGraph, 'primary');
+  } else if(stage === 7){
+    mkBtn('🤖 AI Agent 自主调价并触发履约', doAISchedule, 'primary');
+  } else if(stage === 8){
+    mkBtn('🚨 租客申请退租 ➔ 追加补偿事件', doCompensate, 'danger');
+  } else if(stage === 9){
+    // quiz
+  } else if(stage === 10){
+    mkBtn('📦 注册新房源', doRegisterResource);
+    mkBtn('⚡ 触发签约对偶', doLockDuality, 'primary');
+    mkBtn('🤖 AI 智能撮合', doAISchedule);
+    mkBtn('🚨 触发自愈补偿', doCompensate, 'danger');
+  }
+
+  // Global wipe
+  const wipeBtn = document.createElement('button');
+  wipeBtn.className = wipeArmed ? 'danger' : '';
+  wipeBtn.style.marginLeft = 'auto';
+  wipeBtn.innerText = wipeArmed ? '⚠️ 确认清空？' : '⟲ 清除全部进度';
+  wipeBtn.onclick = wipeAllProgress;
+  btns.appendChild(wipeBtn);
+}
+
+/* ============ 交互动作 ============ */
+let logMute = false;
+function addLog(title, type='info', detail=''){
+  if(logMute) return;
+  const box = document.getElementById('logbox');
+  const d = document.createElement('div');
+  d.className = `logline ${type}`;
+  d.innerHTML = `[${new Date().toLocaleTimeString()}] <b>${title}</b>: ${detail}`;
+  box.appendChild(d);
+  box.scrollTop = box.scrollHeight;
+}
+
+function startJourney(){
+  flags.started = true;
+  initCodeForStage(1);
+  addLog('旅程开始', 'ok', '已离开起点，进入第 1 关【传统 CRUD 之痛】。');
+  jumpStage(1);
+}
+
+function doCRUD(){
+  flags.crudRan = true;
+  world.resources[0].status = '已出租 (CRUD)';
+  world.auditLog.push({
+    time: '10:00:01',
+    title: 'UPDATE apartment SET status=\'rented\'',
+    detail: '⚠️ 仅仅覆盖了字段。没有记录谁付的钱、没有留存租期合同、因果信息全丢失！',
+    cls: 'warn'
+  });
+  codeLines = [
+    { text: '-- 传统糟糕的 CRUD 做法：直接修改字段', cls: 'cm' },
+    { text: 'UPDATE tb_house', cls: 'kw' },
+    { text: 'SET status = \'rented\',', cls: 'hl-r' },
+    { text: '    deposit_received = 15000,', cls: 'hl-r' },
+    { text: '    updated_at = NOW();', cls: 'kw' },
+    { text: '', cls: '' },
+    { text: '-- 🔴 致命缺陷：', cls: 'cm' },
+    { text: '-- 1. 之前是谁住的？被无情覆盖覆盖', cls: 'cm' },
+    { text: '-- 2. 谁经办的？没有审计轨迹', cls: 'cm' },
+    { text: '-- 3. 付出与获得是否对偶平衡？系统完全不知情！', cls: 'cm' }
+  ];
+  addLog('CRUD 模拟完成', 'warn', '数据库状态已改，但没有任何不可变事件支撑，极易产生单边账和纠纷。');
+  render();
+}
+
+function doRegisterResource(){
+  flags.resRegistered = true;
+  world.resources.forEach(r => r.lit = true);
+  world.auditLog.push({
+    time: '10:02:15',
+    title: 'RESOURCE REGISTRATION (资源注册)',
+    detail: '物理房产产权与可用租期独立解耦，成为经济资源实体 R1。',
+    cls: 'ok'
+  });
+  codeLines = [
+    { text: '# REA Python/JSON-LD 资源声明', cls: 'cm' },
+    { text: 'class EconomicResource:', cls: 'kw' },
+    { text: '    def __init__(self, res_id, name, value, owner):', cls: '' },
+    { text: '        self.id = res_id', cls: '' },
+    { text: '        self.name = name', cls: '' },
+    { text: '        self.scarce = True  # 稀缺且排他', cls: 'hl-c' },
+    { text: '', cls: '' },
+    { text: '# 实例化望京 SOHO 房源使用权', cls: 'cm' },
+    { text: 'res_apt = EconomicResource("R1", "望京SOHO 1201使用权", "12个月", "张业主")', cls: 'hl-a' }
+  ];
+  addLog('资源实体已建立', 'ok', '经济资源已载入货架，不可被随意覆盖修改。');
+  render();
+}
+
+function doListingEvent(){
+  flags.eventListed = true;
+  world.events.push({
+    id:'E1', kind:'give', title:'房源挂牌事件 (Listing)',
+    desc:'张房东授权将 R1 使用权公开挂牌挂网',
+    from:'张房东', to:'房产流通池', time:'10:05:00', hot:true
+  });
+  world.auditLog.push({
+    time: '10:05:00',
+    title: 'EVENT E1: House Listed',
+    detail: '只追加事件：张房东将房源进入招租事件流。',
+    cls: 'ok'
+  });
+  addLog('事件 E1 追加', 'ok', '房源挂牌事件已写入 Append-only 事件日志。');
+  render();
+}
+
+function doPaymentEvent(){
+  flags.eventPaid = true;
+  world.events.push({
+    id:'E2', kind:'take', title:'租金与押金支付事件 (Payment)',
+    desc:'李工程师向监管账户打款 15,000 元（含首月租金+押金）',
+    from:'李工程师', to:'资金监管池', time:'10:08:30', hot:true
+  });
+  world.resources[1].val = '15,000 元 (已锁定)';
+  world.resources[1].status = '托管中';
+  world.auditLog.push({
+    time: '10:08:30',
+    title: 'EVENT E2: Payment Received',
+    detail: '产生资金事件：收到李工程师款项。但注意：房屋使用权尚未实际交付，对偶尚未闭环！',
+    cls: 'warn'
+  });
+  codeLines = [
+    { text: '# Append-only 经济事件不可篡改', cls: 'cm' },
+    { text: 'event_payment = EconomicEvent(', cls: 'kw' },
+    { text: '    id="E2",', cls: '' },
+    { text: '    type="CashInflow",', cls: 'hl-g' },
+    { text: '    amount=15000,', cls: '' },
+    { text: '    from_agent="李工程师",', cls: 'hl-a' },
+    { text: '    to_agent="资金监管池",', cls: 'hl-a' },
+    { text: '    timestamp=1792030500', cls: 'cm' },
+    { text: ')', cls: '' },
+    { text: '# 警告：此时只有 Take 事件，缺少对偶的 Give 事件！', cls: 'hl-r' }
+  ];
+  addLog('事件 E2 追加', 'ok', '已收到款项，但对偶未完成，系统处于欠交房预警状态。');
+  render();
+}
+
+function doBindAgents(){
+  flags.agentsBound = true;
+  world.agents.forEach(a => a.active = true);
+  world.auditLog.push({
+    time: '10:10:00',
+    title: 'AGENTS PARTICIPATION (主体关联)',
+    detail: '张房东、李工程师以及 AI 智能经纪人正式接入系统，赋予对应操作权限。',
+    cls: 'ai'
+  });
+  codeLines = [
+    { text: '# 参与主体 (Agent) 定义', cls: 'cm' },
+    { text: 'class EconomicAgent:', cls: 'kw' },
+    { text: '    def __init__(self, name, role, is_autonomous=False):', cls: '' },
+    { text: '        self.name = name', cls: '' },
+    { text: '        self.is_autonomous = is_autonomous  # 是否为 AI 智能体', cls: 'hl-c' },
+    { text: '', cls: '' },
+    { text: 'ai_broker = EconomicAgent("瑞亚AI管家", "Broker", is_autonomous=True)', cls: 'hl-c' }
+  ];
+  addLog('主体就绪', 'ai', 'AI 经纪人已就绪，开始自动监控事件流与合同合规性。');
+  render();
+}
+
+function doLockDuality(){
+  flags.dualityLocked = true;
+  world.duality.locked = true;
+  world.duality.ratio = '100%';
+  world.resources[0].status = '已签约履约中';
+  world.resources[2].status = '已派发给租客';
+
+  world.events.push({
+    id:'E3', kind:'give', title:'房屋使用权交付与发卡事件 (Fulfillment)',
+    desc:'向李工程师交付门禁 PIN 码与 12 个月使用权',
+    from:'张房东 (AI代管)', to:'李工程师', time:'10:12:00', hot:true
+  });
+
+  world.auditLog.push({
+    time: '10:12:00',
+    title: 'DUALITY CLOSED (经济对偶性闭环达成)',
+    detail: 'Give Event (交付房源与钥匙) ⇄ Take Event (收取资金押金) 强绑定。因果平衡度 100%。',
+    cls: 'ok'
+  });
+
+  codeLines = [
+    { text: '# 经济对偶性 (Duality) 契约锁扣', cls: 'cm' },
+    { text: 'class EconomicDuality:', cls: 'kw' },
+    { text: '    def __init__(self, give_event, take_event):', cls: '' },
+    { text: '        assert give_event.resource_flow == "OUTFLOW"', cls: 'hl-r' },
+    { text: '        assert take_event.resource_flow == "INFLOW"', cls: 'hl-g' },
+    { text: '        self.is_balanced = True  # 两端天平平衡', cls: 'hl-p' },
+    { text: '', cls: '' },
+    { text: 'contract_duality = EconomicDuality(give_event=E3, take_event=E2)', cls: 'hl-p' }
+  ];
+  addLog('对偶闭环完成', 'ok', '经济对偶性锁死：房屋使用权已合法转移，租金已对偶平衡，交易具备法律因果完整性。');
+  render();
+}
+
+function doActiveGraph(){
+  flags.graphActive = true;
+  world.auditLog.push({
+    time: '10:15:00',
+    title: 'ONTOLOGY GRAPH ACTIVATED (全息图谱)',
+    detail: 'R-E-A 三元关系图谱全量联通：Resource 流经 Event，由 Agent 签名负责，形成双向因果环。',
+    cls: 'ok'
+  });
+  document.getElementById('anat-note').innerHTML = '🌟 <b>全息因果网络已贯通</b>：每个资源变动都能追溯到对偶事件与责任主体。';
+  addLog('图谱激活', 'ok', '全息网络激活，系统具备零摩擦自动审计与抗纠纷能力。');
+  render();
+}
+
+function doAISchedule(){
+  flags.aiScheduled = true;
+  world.auditLog.push({
+    time: '10:20:00',
+    title: 'AI AGENT AUTONOMOUS DISPATCH (AI自主调度)',
+    detail: 'AI 识别到租客即将入住，自动核验周边水电表底数，并发起自动保洁服务对偶事件。',
+    cls: 'ai'
+  });
+  codeLines = [
+    { text: '# AI Agent 监听 REA 图谱并自主决策', cls: 'cm' },
+    { text: 'def on_event_stream(event):', cls: 'kw' },
+    { text: '    if event.type == "Fulfillment":', cls: '' },
+    { text: '        # AI 自主生成保洁调度与水电抄表事件', cls: 'cm' },
+    { text: '        ai_event = ai_broker.propose_event(', cls: 'hl-c' },
+    { text: '            type="InspectionAndCleaning",', cls: '' },
+    { text: '            target_resource=event.resource', cls: '' },
+    { text: '        )', cls: '' },
+    { text: '        verify_duality(ai_event)  # 底层安全网强制质检', cls: 'hl-p' }
+  ];
+  addLog('AI 调度完成', 'ai', 'AI 经纪人按 REA 规范成功触发衍生增值服务，未发生越权或单边账。');
+  render();
+}
+
+function doCompensate(){
+  flags.compensated = true;
+  world.resources[0].status = '已收回空置';
+  world.resources[1].val = '已扣罚并退还';
+  world.duality.ratio = '自愈平衡';
+  world.events.push({
+    id:'E4', kind:'give', title:'退租收回钥匙事件 (Compensating)',
+    desc:'收回数字门锁权限，房源重新上架',
+    from:'李工程师', to:'张房东', time:'10:25:00', hot:true
+  });
+  world.events.push({
+    id:'E5', kind:'take', title:'退还押金并扣减违约金事件',
+    desc:'扣除 5,000 元违约金，退还 10,000 元',
+    from:'资金监管池', to:'李工程师', time:'10:25:01', hot:true
+  });
+  world.auditLog.push({
+    time: '10:25:00',
+    title: 'COMPENSATING EVENTS APPENDED (自愈补偿)',
+    detail: '通过追加相反方向的不可变事件消除违约影响，历史完整保留，系统自愈重平衡。',
+    cls: 'ok'
+  });
+  addLog('补偿事件完成', 'ok', '已通过只追加的补偿事件流完成退租处理，无需危险的数据库事务回滚。');
+  render();
+}
+
+/* ============ 重玩与自愈机制 ============ */
+function buildToStage(n){
+  logMute = true;
+  flags = {};
+  quiz = [null, null, null];
+  world = freshWorld();
+  if(n > 1) doCRUD();
+  if(n > 2) doRegisterResource();
+  if(n > 3){ doListingEvent(); doPaymentEvent(); }
+  if(n > 4) doBindAgents();
+  if(n > 5) doLockDuality();
+  if(n > 6) doActiveGraph();
+  if(n > 7) doAISchedule();
+  if(n > 8) doCompensate();
+  logMute = false;
+  addLog('↺ 状态已重建', 'ok', '已回到该关卡起始状态，可重新交互。');
+}
+
+function replayStage(){
+  buildToStage(stage);
+  addLog('↺ 重玩本关', 'ok', `状态已回退到「${STAGES[stage].nm}」刚到达时的样子。`);
+  jumpStage(stage);
+}
+
+let wipeArmed = null;
+function wipeAllProgress(){
+  if(!wipeArmed){
+    wipeArmed = setTimeout(()=>{ wipeArmed = null; render(); }, 3000);
+    addLog('⟲ 清除全部进度', 'err', '再点一次确认（3 秒内）：将清空存档并回到起点。');
+    render();
+    return;
+  }
+  clearTimeout(wipeArmed);
+  try{ localStorage.removeItem(KEY); }catch(e){}
+  location.reload();
+}
+
+function answerQuiz(qidx, oidx){
+  const ok = (oidx === QUIZ[qidx].ans);
+  quiz[qidx] = { pick:oidx, ok };
+  addLog(`测验 ${qidx+1} 题`, ok ? 'ok' : 'err', ok ? '回答正确！' : '回答有误，请看解析重试。');
+  render();
+}
+
+function jumpStage(idx){
+  stage = idx;
+  initCodeForStage(idx);
+  render();
+  saveState();
+}
+
+function initCodeForStage(s){
+  if(s === 0 || s === 1){
+    codeLines = [
+      { text: '-- 准备查看传统业务系统的常见设计', cls: 'cm' },
+      { text: 'SELECT * FROM tb_real_estate WHERE id = 1201;', cls: 'kw' }
+    ];
+  } else if(s === 2){
+    codeLines = [
+      { text: '# REA 资源实体定义', cls: 'cm' },
+      { text: 'res_apartment = EconomicResource(id="R1", name="望京SOHO 1201", type="Property")', cls: 'hl-a' }
+    ];
+  }
+}
+
+function saveState(){
+  try{
+    localStorage.setItem(KEY, JSON.stringify({ stage, flags, quiz }));
+  }catch(e){}
+}
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(KEY);
+    if(raw){
+      const data = JSON.parse(raw);
+      if(data && typeof data.stage === 'number'){
+        stage = data.stage;
+        flags = data.flags || {};
+        quiz = data.quiz || [null, null, null];
+        buildToStage(stage);
+      }
+    }
+  }catch(e){}
+}
+
+// 启动执行
+loadState();
+if(!flags.started && stage === 0){
+  initCodeForStage(0);
+}
+render();
+</script>
+</body>
+</html>

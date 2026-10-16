@@ -1,0 +1,1509 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LangChain —— 一切皆 Runnable · | 是传送带</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#151f36; --panel2:#0f1729;
+    --line:#26334d; --text:#dde6f5; --muted:#a6b9d9;
+    --blue:#3b82f6; --green:#22c55e; --purple:#a855f7;
+    --amber:#f5b544; --cyan:#38bdf8; --red:#f87171;
+    --mono:"Cascadia Code",Consolas,"JetBrains Mono",monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:radial-gradient(1200px 600px at 50% -100px,#16223d 0%,var(--bg) 60%);
+    color:var(--text);
+    font-family:system-ui,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+    padding:30px 18px 70px; line-height:1.65;
+  }
+  .wrap{max-width:1240px; margin:0 auto;}
+
+  /* ---------- header ---------- */
+  h1{font-size:26px; letter-spacing:.5px;}
+  h1 .dot-word{color:var(--amber);}
+  .sub{color:var(--muted); margin-top:6px; font-size:14.5px;}
+  .ladder{
+    margin-top:12px; padding:8px 14px; border:1px dashed var(--line); border-radius:10px;
+    font-size:12.5px; color:var(--muted); background:rgba(255,255,255,.02);
+    font-family:var(--mono);
+  }
+  .ladder b{color:var(--cyan); font-weight:600;}
+  .ladder .bad{color:var(--red);}
+
+  /* ---------- landing table (机制落地表) ---------- */
+  .ltable{margin-top:12px; border:1px solid var(--line); border-radius:10px; overflow:hidden; font-size:12px;}
+  .ltable table{width:100%; border-collapse:collapse;}
+  .ltable th{
+    background:rgba(255,255,255,.03); color:var(--muted); font-size:11px; font-weight:600;
+    padding:6px 10px; text-align:left; border-bottom:1px solid var(--line); letter-spacing:1px;
+  }
+  .ltable td{padding:6px 10px; border-bottom:1px solid rgba(38,51,77,.5); vertical-align:top;}
+  .ltable tr:last-child td{border-bottom:none;}
+  .ltable .nick{color:var(--amber); font-weight:700; font-family:var(--mono); white-space:nowrap;}
+  .ltable .real{color:var(--cyan); font-family:var(--mono);}
+  .ltable .phys{color:var(--text);}
+  .ltable .life{color:var(--muted);}
+
+  /* ---------- journey rail ---------- */
+  .journey{margin-top:22px;}
+  .rail{display:flex; align-items:center; gap:5px; overflow-x:auto; padding:4px 2px 10px;}
+  .pill{
+    flex:none; font-size:11px; padding:4px 9px; border-radius:999px;
+    border:1px solid var(--line); color:var(--muted); white-space:nowrap; background:var(--panel2);
+    cursor:pointer;
+  }
+  .pill.done{color:var(--green); border-color:rgba(34,197,94,.55);}
+  .pill.current{color:var(--amber); border-color:var(--amber); box-shadow:0 0 10px rgba(245,181,68,.25); font-weight:700;}
+  .sep{flex:none; width:10px; height:2px; background:var(--line);}
+
+  /* ---------- quest card ---------- */
+  .quest{
+    border:1px solid rgba(245,181,68,.45); border-left:4px solid var(--amber);
+    background:linear-gradient(90deg, rgba(245,181,68,.07), var(--panel2) 45%);
+    border-radius:12px; padding:14px 18px;
+  }
+  .quest.free{border-color:rgba(34,197,94,.45); border-left-color:var(--green);
+    background:linear-gradient(90deg, rgba(34,197,94,.07), var(--panel2) 45%);}
+  .quest-head{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .quest-stage{font-family:var(--mono); font-size:11px; color:var(--amber); letter-spacing:1px;}
+  .quest-title{font-size:16px; font-weight:700;}
+  .skip{font-size:12px; color:var(--muted); cursor:pointer; border:none; background:none; text-decoration:underline dotted; padding:0;}
+  .skip:hover{color:var(--text);}
+  .q-row{display:flex; gap:12px; margin-top:9px; font-size:13.5px;}
+  .q-row .k{flex:none; width:88px; color:var(--muted); font-weight:600;}
+  .q-row .v{color:var(--text);}
+  .q-row .v b{color:var(--amber);}
+  .quest .go{margin-top:12px;}
+  .quest .go button{
+    font-size:13px; padding:7px 18px; border-color:var(--amber); color:var(--amber);
+    font-family:system-ui,"Microsoft YaHei",sans-serif; font-weight:700;
+  }
+
+  /* quiz */
+  .quiz{margin-top:6px;}
+  .qitem{margin-top:12px; padding-top:10px; border-top:1px dashed var(--line);}
+  .qitem .qtext{font-size:13.5px; font-weight:600;}
+  .opts{display:flex; flex-direction:column; gap:6px; margin-top:8px;}
+  .opt{
+    text-align:left; font-size:12.5px; font-family:var(--mono),system-ui,sans-serif;
+    background:#182338; color:var(--text); border:1px solid var(--line); border-radius:6px;
+    padding:8px 12px; cursor:pointer;
+  }
+  .opt.correct{border-color:var(--green); color:var(--green); background:rgba(34,197,94,.1);}
+  .opt.wrong{border-color:var(--red); color:var(--red); background:rgba(248,113,113,.08);}
+  .opt.dim{opacity:.4;}
+  .qexpl{font-size:12px; color:var(--muted); margin-top:6px;}
+
+  /* ---------- stage (3 columns) ---------- */
+  .stage-scroll{overflow-x:auto; margin-top:20px; padding-bottom:6px;}
+  .stage{
+    min-width:1120px;
+    display:grid;
+    grid-template-columns:1.1fr 1.3fr 1fr;
+    gap:0 12px; align-items:stretch;
+  }
+  .col-head{margin-bottom:10px; text-align:center;}
+  .col-head .nick{font-size:17px; font-weight:700;}
+  .col-head .real{font-family:var(--mono); font-size:11.5px; color:var(--cyan); letter-spacing:1px; text-transform:uppercase;}
+  .col-head .duty{font-size:12px; color:var(--muted); margin-top:2px;}
+  .col{
+    background:var(--panel2); border:1px solid var(--line); border-radius:14px;
+    padding:14px; display:flex; flex-direction:column; gap:12px; min-height:490px;
+  }
+  .c1 .nick{color:var(--cyan);} .c2 .nick{color:var(--amber);} .c3 .nick{color:var(--green);}
+
+  /* Code Column */
+  .codebox{
+    background:#080d18; border:1px solid var(--line); border-radius:10px;
+    padding:12px; font-family:var(--mono); font-size:12px; line-height:1.75;
+    flex:1; overflow-y:auto;
+  }
+  .codeline{padding:1px 6px; border-radius:4px; transition:background .2s;}
+  .codeline.active{background:rgba(245,181,68,.18); color:var(--amber); border-left:3px solid var(--amber);}
+  .codeline .kw{color:#ff7b72;}
+  .codeline .cmd{color:#d2a8ff; font-weight:bold;}
+  .codeline .arg{color:#79c0ff;}
+  .codeline .cm{color:#8b949e; font-style:italic;}
+  .codeline .solder{color:var(--red);}
+
+  /* Conveyor / Pipeline Column */
+  .pipe-box{display:flex; flex-direction:column; gap:12px; flex:1;}
+  .ghost-row{display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:8px;}
+  .ghost-card{
+    border:1.5px dashed var(--line); border-radius:10px; padding:14px 12px;
+    width:150px; text-align:center; color:var(--muted); font-size:12px;
+  }
+  .ghost-card .gi{font-size:22px;}
+  .ghost-card .gn{font-family:var(--mono); font-size:11.5px; margin-top:4px; color:var(--cyan);}
+  .ghost-note{color:var(--muted); font-size:12px; text-align:center; line-height:1.8;}
+
+  /* raw soldered panel */
+  .raw-panel{
+    background:#160f14; border:1px solid rgba(248,113,113,.5); border-radius:10px;
+    padding:12px; flex:1; display:flex; flex-direction:column; gap:8px;
+  }
+  .raw-title{color:var(--red); font-weight:700; font-size:13px;}
+  .solder-item{
+    background:#1d1520; border:1px solid rgba(248,113,113,.4); border-radius:8px;
+    padding:8px 10px; font-size:12px; font-family:var(--mono);
+  }
+  .solder-item .si-h{color:var(--red); font-weight:700;}
+  .solder-item .si-d{color:var(--muted); font-size:11px; font-family:system-ui,"Microsoft YaHei",sans-serif;}
+
+  /* conveyor cards */
+  .conveyor{display:flex; align-items:stretch; gap:6px; flex-wrap:nowrap;}
+  .pcard{
+    flex:1; min-width:0; background:#0d1424; border:1px solid var(--line); border-radius:10px;
+    padding:10px 10px; transition:all .25s ease; display:flex; flex-direction:column; gap:6px;
+  }
+  .pcard.focus{border-color:var(--amber); box-shadow:0 0 12px rgba(245,181,68,.35); transform:translateY(-2px);}
+  .pc-icon{font-size:18px;}
+  .pc-name{font-family:var(--mono); font-size:11.5px; color:var(--cyan); word-break:break-all;}
+  .pc-duty{font-size:10.5px; color:var(--muted); line-height:1.5;}
+  .pc-shape{
+    margin-top:auto; background:#080d18; border:1px dashed var(--line); border-radius:6px;
+    font-family:var(--mono); font-size:10px; color:var(--amber);
+    padding:5px 6px; min-height:34px; word-break:break-all; line-height:1.5;
+  }
+  .pc-shape.idle{color:var(--muted);}
+  .parr{
+    flex:none; display:flex; align-items:center; justify-content:center;
+    color:var(--muted); font-size:15px; width:18px; transition:all .25s;
+  }
+  .parr.connected{color:var(--cyan);}
+  .parr.focus{color:var(--amber); text-shadow:0 0 8px rgba(245,181,68,.6);}
+  .belt-caption{font-size:11px; color:var(--muted); text-align:center;}
+  .belt-caption b{color:var(--amber);}
+
+  /* two-in merge card */
+  .merge-tabs{display:flex; flex-direction:column; gap:3px; font-family:var(--mono); font-size:9.5px;}
+  .merge-tab{border:1px solid var(--line); border-radius:5px; padding:2px 5px; color:var(--muted);}
+  .merge-tab b{color:var(--green); font-weight:600;}
+  .merge-tab.q b{color:var(--cyan);}
+
+  /* RAG stage */
+  .rag-doc{
+    background:#0d1424; border:1px solid var(--line); border-radius:8px;
+    padding:7px 10px; font-size:12px; display:flex; justify-content:space-between; align-items:center;
+  }
+  .rag-doc .rd-meta{color:var(--muted); font-size:10.5px; font-family:var(--mono);}
+  .chunk-grid{display:grid; grid-template-columns:1fr 1fr; gap:6px;}
+  .chunk-card{
+    background:#0d1424; border:1px solid var(--line); border-radius:8px; padding:7px 9px;
+    font-size:10.5px; transition:all .3s;
+  }
+  .chunk-card.stored{border-color:rgba(56,189,248,.5);}
+  .chunk-card.hit{border-color:var(--green); background:rgba(34,197,94,.08); box-shadow:0 0 8px rgba(34,197,94,.25);}
+  .chunk-card.dimmed{opacity:.35;}
+  .chunk-id{font-family:var(--mono); color:var(--cyan); font-size:10px;}
+  .chunk-text{color:var(--text); margin-top:2px; line-height:1.5;}
+  .vec-bar{display:flex; gap:2px; margin-top:4px; height:7px;}
+  .vec-seg{flex:1; border-radius:2px; background:linear-gradient(90deg,#38bdf8,#a855f7); opacity:.85;}
+  .chunk-score{font-family:var(--mono); font-size:9.5px; color:var(--green); margin-top:3px; display:none;}
+  .chunk-card.hit .chunk-score{display:block;}
+  .store-line{
+    background:#0d1424; border:1px dashed rgba(56,189,248,.5); border-radius:8px;
+    padding:7px 10px; font-size:11.5px; font-family:var(--mono); color:var(--muted);
+  }
+  .store-line b{color:var(--cyan);}
+  .query-line{
+    background:#0d1424; border:1px solid var(--line); border-radius:8px;
+    padding:7px 10px; font-size:11.5px; display:none; justify-content:space-between; gap:8px; align-items:center;
+  }
+  .query-line.show{display:flex;}
+  .query-line .qq{font-family:var(--mono); color:var(--amber); font-size:10.5px; word-break:break-all;}
+  .rag-out{
+    display:none; background:rgba(34,197,94,.06); border:1px solid rgba(34,197,94,.4); border-radius:8px;
+    padding:7px 10px; font-size:11px; line-height:1.6;
+  }
+  .rag-out.show{display:block;}
+  .rag-out b{color:var(--green);}
+
+  /* agent loop */
+  .astep{
+    background:#0d1424; border:1px solid var(--line); border-radius:8px;
+    padding:7px 10px; font-size:11.5px; display:flex; gap:8px; align-items:center;
+    opacity:.35; transition:all .3s;
+  }
+  .astep.reach{opacity:1;}
+  .astep.focus{border-color:var(--amber); box-shadow:0 0 10px rgba(245,181,68,.3); opacity:1;}
+  .astep .ai-ico{flex:none; font-size:15px;}
+  .astep .ai-txt{font-size:11px; line-height:1.55;}
+  .astep .ai-txt b{color:var(--amber); font-family:var(--mono); font-size:10.5px;}
+
+  /* Col 3 */
+  .run-box{display:flex; flex-direction:column; gap:12px; flex:1;}
+  .run-panel{
+    background:#0d1527; border:1px solid var(--line); border-radius:10px;
+    padding:10px 12px; font-size:12px; font-family:var(--mono);
+  }
+  .run-title{
+    color:var(--cyan); font-weight:700; font-size:11.5px; margin-bottom:6px;
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .io-line{font-size:11px; margin-top:5px; line-height:1.6; word-break:break-all;}
+  .io-line .io-k{color:var(--muted);}
+  .io-line .io-v{color:var(--amber);}
+  .scene-list{display:flex; flex-direction:column; gap:5px;}
+  .scene-item{
+    background:#141f36; padding:5px 9px; border-radius:6px; border:1px solid var(--line);
+    font-size:10.8px; line-height:1.55;
+  }
+  .scene-item b{color:var(--cyan); font-family:var(--mono); font-size:10.5px;}
+  .scene-item.bad{border-color:rgba(248,113,113,.4);}
+  .scene-item.bad b{color:var(--red);}
+  .scene-item.good{border-color:rgba(34,197,94,.4);}
+  .scene-item.good b{color:var(--green);}
+
+  /* Stats Bar */
+  .stats-bar{
+    display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;
+    margin-top:auto; padding-top:10px; border-top:1px dashed var(--line);
+  }
+  .stat-item{background:#0e172a; padding:6px 8px; border-radius:6px; border:1px solid var(--line); text-align:center;}
+  .stat-val{font-size:13px; font-weight:700; color:var(--text); font-family:var(--mono);}
+  .stat-val.good{color:var(--green);}
+  .stat-val.warn{color:var(--amber);}
+  .stat-val.bad{color:var(--red);}
+  .stat-lbl{font-size:10px; color:var(--muted);}
+
+  /* ---------- console ---------- */
+  .console{margin-top:26px; background:var(--panel2); border:1px solid var(--line); border-radius:14px; overflow:hidden;}
+  .console-head{
+    display:flex; align-items:center; gap:10px; padding:10px 16px;
+    border-bottom:1px solid var(--line); background:rgba(255,255,255,.02);
+    font-size:13px; color:var(--muted); flex-wrap:wrap;
+  }
+  .btns{display:flex; gap:8px; flex-wrap:wrap; margin-left:auto;}
+  button{
+    font-family:var(--mono); font-size:12px; color:var(--text);
+    background:#1d2a47; border:1px solid var(--line); border-radius:8px;
+    padding:6px 12px; cursor:pointer; transition:all .15s;
+  }
+  button:hover:not(:disabled){border-color:var(--amber); color:var(--amber); transform:translateY(-1px);}
+  button:disabled{opacity:.3; cursor:not-allowed;}
+  button.primary{border-color:var(--amber); color:var(--amber);}
+  button.action-btn{border-color:var(--cyan); color:var(--cyan);}
+  button.fix-btn{border-color:var(--green); color:var(--green);}
+  button.danger-btn{border-color:var(--red); color:var(--red);}
+
+  .logbox{padding:12px 16px; max-height:240px; overflow-y:auto; font-family:var(--mono); font-size:12.5px;}
+  .logline{margin-bottom:8px;}
+  .logline .cmd{color:var(--amber);}
+  .logline .expl{color:var(--muted); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:12px; margin-top:1px;}
+  .logline .expl b{color:var(--amber); font-weight:600;}
+  .logline.info{color:var(--cyan); font-family:system-ui,"Microsoft YaHei",sans-serif;}
+  .logline.ok{color:var(--green); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:12.5px;}
+  .logline.err{color:var(--red); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:12.5px;}
+
+  /* ---------- details cards ---------- */
+  .why{margin-top:22px; display:grid; grid-template-columns:repeat(3,1fr); gap:12px;}
+  .why-card{background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:14px 16px; font-size:13px;}
+  .why-card h3{font-size:13.5px; margin-bottom:6px;}
+  .why-card p{color:var(--muted); font-size:12.5px;}
+  .why-card b{color:var(--text);}
+  .w1 h3{color:var(--cyan);} .w2 h3{color:var(--amber);} .w3 h3{color:var(--green);}
+
+  footer{margin-top:26px; text-align:center; color:var(--muted); font-size:12px;}
+  @media (max-width:900px){ .why{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>LangChain：<span class="dot-word">一切皆 Runnable</span> · <span class="dot-word">| 是传送带</span></h1>
+  <p class="sub">治「裸调 SDK 面条代码——模型焊死、提示词焊死、返回值手撕」：从一次最朴素的 LLM 调用出发，装配出 模板→模型→解析 的标准件流水线，再上 RAG 两关与 Agent 导航。基于 LangChain 1.x（create_agent 时代）。</p>
+
+  <div class="ladder">
+    核心定性：<b>LangChain 不生产智能——模型才是发动机，LangChain 是把「调模型」工程化的标准件库</b>：提示词、调用、解析、检索、工具，全部做成可组合零件。
+    &nbsp;‖&nbsp; 黄金心智法则：<b>一切皆 Runnable（统一 .invoke 入口）· | 是传送带（LCEL 组合子）</b>；<b>链 = 你写代码时定死的路线，Agent = 模型运行时现场导航</b>。
+  </div>
+
+  <!-- 机制落地表 -->
+  <div class="ltable">
+    <table>
+      <tr><th>概念（真名）</th><th>物理上是什么</th><th>本质角色</th><th>核心职责与法则</th></tr>
+      <tr><td class="real">init_chat_model</td><td class="phys">各供应商 SDK 外面套的统一适配器，全部实现 BaseChatModel 接口</td><td class="nick">万能插座</td><td>换供应商只改模型字符串一行：'openai:gpt-4o-mini' → 'anthropic:claude-sonnet-4-5'，业务零改动</td></tr>
+      <tr><td class="real">ChatPromptTemplate</td><td class="phys">带变量槽的模板对象，invoke 时把 dict 填充成消息列表</td><td class="life">提示词数据化</td><td>提示词与业务代码解耦，可复用、可单独测试</td></tr>
+      <tr><td class="real">AIMessage</td><td class="phys">模型返回的标准对象：content 文本 + 元数据 + tool_calls</td><td class="life">统一回执单</td><td>所有供应商吐同一个形状，下游代码不感知厂商差异</td></tr>
+      <tr><td class="real">StrOutputParser / with_structured_output</td><td class="phys">从 AIMessage 抽 content；或按 Schema 直接解析成 Python 对象</td><td class="nick">出料口</td><td>告别 resp.choices[0].message.content 手撕；要 JSON 不用正则</td></tr>
+      <tr><td class="real">LCEL：prompt | model | parser</td><td class="phys">Runnable 组合子（| 即 pipe），把标准件编译成一条可驱动管道</td><td class="nick">装配线</td><td>invoke / stream / batch / 异步 四种驱动方式白送，因为每件都实现同一接口</td></tr>
+      <tr><td class="real">Retriever / VectorStore</td><td class="phys">文档切块 → embedding 成向量入库 → 查询时按相似度取 top-k</td><td class="life">外挂记忆</td><td>RAG = 先查后答；retriever 本身也是 Runnable，直接上传送带</td></tr>
+      <tr><td class="real">create_agent + @tool</td><td class="phys">LangGraph 驱动的「想 → 调工具 → 看结果 → 再想」循环</td><td class="nick">现场导航</td><td>路线由模型运行时决定；路线定得死就用链（快、省、可控），定不死才上 Agent</td></tr>
+    </table>
+  </div>
+
+  <!-- journey rail -->
+  <div class="journey">
+    <div class="rail" id="rail"></div>
+    <div class="quest" id="quest"></div>
+  </div>
+
+  <!-- visual stage (3 cols) -->
+  <div class="stage-scroll">
+    <div class="stage">
+
+      <!-- Col 1: Code -->
+      <div class="col c1">
+        <div class="col-head">
+          <div class="nick">app.py 应用代码</div>
+          <div class="real">PYTHON · LANGCHAIN 1.X</div>
+          <div class="duty">对照观察：业务代码如何与模型/提示词/解析逐件解耦</div>
+        </div>
+        <div class="codebox" id="codebox"></div>
+      </div>
+
+      <!-- Col 2: Runnable Conveyor -->
+      <div class="col c2">
+        <div class="col-head">
+          <div class="nick">Runnable 装配线（核心实体）</div>
+          <div class="real">RUNNABLE PIPELINE &amp; WORLD</div>
+          <div class="duty">传送带逐站看数据变形；RAG 库与 Agent 循环也在这列登场</div>
+        </div>
+        <div class="pipe-box" id="pipe-box"></div>
+      </div>
+
+      <!-- Col 3: Runtime View -->
+      <div class="col c3">
+        <div class="col-head">
+          <div class="nick">运行现场与账本</div>
+          <div class="real">INVOCATION &amp; SCENE</div>
+          <div class="duty">每次调用的进/出，装配现场的零件清单与代价</div>
+        </div>
+        <div class="run-box">
+
+          <div class="run-panel">
+            <div class="run-title">
+              <span>🧾 最近一次调用</span>
+              <span id="run-state" style="color:var(--amber);">待命</span>
+            </div>
+            <div class="io-line"><span class="io-k">输入 → </span><span class="io-v" id="io-in">—</span></div>
+            <div class="io-line"><span class="io-k">输出 ← </span><span class="io-v" id="io-out">—</span></div>
+          </div>
+
+          <div class="run-panel" style="flex:1;">
+            <div class="run-title">
+              <span>🔧 装配现场</span>
+            </div>
+            <div class="scene-list" id="scene-list">
+              <div style="color:var(--muted);font-size:11px;">空场地。第 1 关先看没有标准件的世界。</div>
+            </div>
+          </div>
+
+          <!-- Stats Dashboard -->
+          <div class="stats-bar">
+            <div class="stat-item">
+              <div class="stat-val" id="stat-parts">0</div>
+              <div class="stat-lbl">标准件数</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-val" id="stat-invoke">0</div>
+              <div class="stat-lbl">invoke 次数</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-val bad" id="stat-vendor">全部重写</div>
+              <div class="stat-lbl">换供应商的代价</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Console Controls & Logs -->
+  <div class="console">
+    <div class="console-head">
+      <span>控制台 &amp; 操作面板</span>
+      <div class="btns" id="btns"></div>
+    </div>
+    <div class="logbox" id="logbox"></div>
+  </div>
+
+  <!-- Why cards -->
+  <div class="why">
+    <div class="why-card w1">
+      <h3>🔍 为什么不直接用 openai SDK？</h3>
+      <p>一家一个 SDK：鉴权方式、方法名、返回结构全都不一样，换供应商 = 业务重写。LangChain 用统一适配层把厂商差异关进 <code>init_chat_model</code> 的一行模型字符串里，<b>业务代码与供应商彻底解耦</b>。</p>
+    </div>
+    <div class="why-card w2">
+      <h3>🎯 链和 Agent 到底怎么选？</h3>
+      <p>唯一判据：<b>处理路线能否在写代码时定死</b>。能定死（检索→生成、翻译、批量打分）→ 用链：快、省、可控；定不死（要查什么、查几步要现场才知道）→ 用 create_agent：灵活，但更贵、更慢、要防跑飞。</p>
+    </div>
+    <div class="why-card w3">
+      <h3>🚀 RAG 的「增强」增强在哪？</h3>
+      <p>模型权重里没有你的私有数据，时效知识也补不齐。检索把相关资料塞进 prompt，等于让模型<b>开卷考试</b>：答案基于你的资料、可溯源，资料更新也不用重训模型。</p>
+    </div>
+  </div>
+
+  <footer>
+    LangChain 1.x 核心心智模型：一切皆 Runnable · | 是传送带 · 链=固定路线 · Agent=现场导航 ｜ LLM 应用工程化的标准件库
+  </footer>
+
+</div>
+
+<script>
+const KEY = 'langchain-mental-model-journey-v1';
+
+/* ============ 关卡定义 ============ */
+const STAGES = [
+  { nm:'起点', stageTag:'STAGE 0 / 10', title:'先认地形：一切皆 Runnable · | 是传送带',
+    start:'欢迎！先立一个大定性：<b>LangChain 不生产智能</b>——大模型才是发动机，LangChain 是把「调模型」这件事工程化的标准件库。它的世界里只有一种零件：<b>Runnable</b>——任何标准件都实现同一个 .invoke(输入) → 输出。',
+    task:'前置自查：① 读得懂 Python 函数调用和 dict；② 知道 JSON 长什么样（调没调过 LLM API 都行，第 1 关就是 30 秒补课）。确认后点「开始旅程」。',
+    watch:'带着一个问题往下走：裸写 SDK 明明能跑，为什么还要框架？——先亲手痛一次再回答。',
+    pass:()=>flags.started },
+
+  { nm:'①裸调之痛', stageTag:'STAGE 1 / 10', title:'没有标准件的世界：一次裸调 SDK',
+    start:'假设你要做「通俗科普」小应用：用户给话题，模型用大白话讲解。先用最裸的 openai SDK 写。',
+    task:'点击 <b>裸调 openai SDK</b>，看这段能跑但全是暗礁的代码。',
+    watch:'数一数焊死了几处：模型名写死在业务里；提示词 f-string 和代码搅在一起；返回值要手撕 resp.choices[0].message.content。换一家供应商？全部重写。',
+    pass:()=>flags.rawDone },
+
+  { nm:'②模板', stageTag:'STAGE 2 / 10', title:'标准件① ChatPromptTemplate：提示词变数据',
+    start:'LangChain 把提示词从「字符串」升级成「带变量槽的模板对象」——第一件标准件。',
+    task:'点击 <b>创建 ChatPromptTemplate</b> ➔ 点击 <b>template.invoke 填充</b>。',
+    watch:'传送带上出现第一个标准件：dict {"topic":"黑洞"} 进去，渲染好的消息列表 [SystemMessage, HumanMessage] 出来。提示词从此可复用、可单测。',
+    pass:()=>flags.templateMade && flags.templateInvoked },
+
+  { nm:'③统一接口', stageTag:'STAGE 3 / 10', title:'标准件② init_chat_model：万能插座',
+    start:'各家 SDK 的鉴权、方法名、返回结构都不一样。LangChain 在外面套了统一适配器。',
+    task:'点击 <b>init_chat_model + invoke</b> ➔ 点击 <b>换供应商 → anthropic</b>。',
+    watch:'关键观察：换供应商只改了模型字符串一行，下游零改动——因为所有适配器都是同一个 BaseChatModel 接口：吃消息列表，吐 AIMessage。',
+    pass:()=>flags.modelMade && flags.modelSwapped },
+
+  { nm:'④解析', stageTag:'STAGE 4 / 10', title:'标准件③ StrOutputParser：不再手撕返回值',
+    start:'AIMessage 是个对象：content 文本、元数据、tool_calls 都在里面。多数时候你只想要文本。',
+    task:'点击 <b>挂上 StrOutputParser</b>。',
+    watch:'parser 吃 AIMessage、吐纯 str。要 JSON / 结构化数据？with_structured_output(Schema) 直接给 Python 对象，不用正则。',
+    pass:()=>flags.parserOn },
+
+  { nm:'⑤装配线', stageTag:'STAGE 5 / 10', title:'核心关：prompt | model | parser——| 是传送带',
+    start:'三个标准件到齐。LangChain 的灵魂一步：用 | 把它们串成链（LCEL）。',
+    task:'点击 <b>chain = 三件装配</b> ➔ <b>chain.invoke</b> 跑一条 ➔ 再试 <b>chain.stream</b> 与 <b>chain.batch</b>。',
+    watch:'盯传送带：dict → 消息列表 → AIMessage → str，一站一变形。同一根链，invoke / stream / batch / 异步全白送——因为一切皆 Runnable。',
+    pass:()=>flags.chainAssembled && flags.chainInvoked && flags.streamed && flags.batched },
+
+  { nm:'⑥RAG积木', stageTag:'STAGE 6 / 10', title:'标准件④ 外挂记忆：切块、入库、检索',
+    start:'新痛点：模型权重里没有你公司的报销制度。RAG 的原理（先查后答）你已经懂，LangChain 把它做成了标准件。',
+    task:'依次点击 <b>切块</b> ➔ <b>embedding + 入库</b> ➔ <b>retriever.invoke 检索</b>。',
+    watch:'长文档 → 4 小块 → 每块变向量入库；查询也变向量，抓最相似的 2 块。注意：retriever 本身也是 Runnable。',
+    pass:()=>flags.chunked && flags.indexed && flags.retrieved },
+
+  { nm:'⑦RAG汇流', stageTag:'STAGE 7 / 10', title:'两路汇流 RunnableParallel：dict 也是 Runnable',
+    start:'检索到的资料怎么进提示词？用 RunnableParallel 把「查资料」和「原话直通」并成两路。',
+    task:'点击 <b>组装 rag_chain（两路汇流）</b> ➔ 点击 <b>rag_chain.invoke("报销制度")</b>。',
+    watch:'汇流器输出 {context: 检索块, question: 原话}，正好填进带 {context}/{question} 槽的模板，后面接熟悉的模型和解析器——写法上只是把 dict 接上 |。',
+    pass:()=>flags.ragBuilt && flags.ragInvoked },
+
+  { nm:'⑧Agent', stageTag:'STAGE 8 / 10', title:'链是固定路线，Agent 是模型现场导航',
+    start:'链的路线是你写代码时定死的。可「查天气再给穿衣建议」要查什么、查几步，事先定不死——交给 create_agent（LangGraph 驱动，1.x 标准入口）。',
+    task:'点击 <b>@tool 注册 get_weather</b> ➔ <b>create_agent 装配</b> ➔ <b>agent.invoke("北京今天穿什么")</b>。',
+    watch:'看循环：模型思考 → 发起工具调用 get_weather("北京") → 拿到观察结果 → 继续思考 → 最终回答。这就是 ReAct 循环。',
+    pass:()=>flags.toolMade && flags.agentMade && flags.agentRan },
+
+  { nm:'⑨毕业测', stageTag:'STAGE 9 / 10', title:'毕业测：3 道换场景决策题',
+    start:'从裸调之痛、三大标准件、装配线，到 RAG 汇流与 Agent 导航，全部亲手跑过一遍。',
+    task:'答对下面 3 道单选题即可毕业（答错可重选）。',
+    watch:'题目全是改造题：换供应商、追形状、选链还是 Agent。',
+    pass:()=>quiz.length===3 && quiz.every(v=>v && v.ok) },
+
+  { nm:'⑩自由', stageTag:'STAGE 10 / 10', title:'自由沙盒：随便拆装',
+    start:'你已经拥有 LangChain 的核心心智模型：一切皆 Runnable，| 组装，链=固定路线，Agent=现场导航。',
+    task:'所有按钮已解锁。想重玩某一关：点上方导航跳到该关，再点任务卡右上角的「↺ 重玩本关」；想从零开始：控制台「⟲ 清除全部进度」（双击确认）。',
+    watch:'试着把「换供应商」和「装配线」组合起来感受：业务代码自始至终一行没变。',
+    pass:()=>true }
+];
+
+const QUIZ = [
+  { q:'1 / 3 · 老板要求：业务从 GPT 换到 Claude 模型，并且返回值要解析成 JSON。用 LangChain 标准件写法，你要动哪些地方？',
+    opts:[
+      '全部推倒重写：两家 SDK 的鉴权和返回结构完全不同',
+      '模型初始化改一行模型字符串；JSON 解析换 with_structured_output(Schema)，装配线其余部分一字不动',
+      '把所有 | 管道拆掉，改成手写 if-else 分支处理两家差异',
+      'prompt 里的 {topic} 变量槽必须跟着改名'
+    ],
+    ans:1,
+    expl:'第③关亲测：init_chat_model("anthropic:...") 只换一行字符串——所有适配器都实现同一 BaseChatModel 接口（吃消息列表、吐 AIMessage），下游不感知供应商。结构化输出是模型适配器自带能力，链上其他标准件照常工作。' },
+
+  { q:'2 / 3 · chain = prompt | model | parser，调 chain.invoke({"topic": "黑洞"}) 时，数据每过一站变成什么形状？',
+    opts:[
+      'str → dict → list',
+      'dict → 渲染后的消息列表 [SystemMessage, HumanMessage] → AIMessage → str',
+      'AIMessage → dict → str',
+      '全程都是 str，只是内容在变'
+    ],
+    ans:1,
+    expl:'第⑤关传送带上逐站看过：prompt 把 dict 填充成消息列表；model 吃消息列表吐 AIMessage；parser 从 AIMessage 抽 content 得纯 str。每站变形，因为每站职责单一。' },
+
+  { q:'3 / 3 · 下列哪个任务必须上 Agent（create_agent），而不是固定链？',
+    opts:[
+      '把公司文档做成问答机器人，每次先检索再生成',
+      '把用户输入的文本翻译成英文',
+      '「查北京天气，若下雨就再查室内展览并给出安排」——查什么、查几步，事先定不死',
+      '对 1000 条评论批量打分'
+    ],
+    ans:2,
+    expl:'判据只有一条：路线能否在写代码时定死。检索问答、翻译、批量打分的路线都是固定的 → 链（快、省、可控）；「若下雨就……」的条件分支要模型现场决定 → Agent。用错方向：该用链的上了 Agent（贵、慢、难调试），该用 Agent 的硬写链（分支爆炸）。' },
+];
+
+/* ============ 核心状态 ============ */
+let stage = 0;
+let flags = {};
+let quiz = [null, null, null];
+
+let world = {
+  mode:'empty',            // empty | raw | pipeline | rag | agent
+  pipe:[],                 // 传送带上的标准件
+  connected:false,         // 是否已用 | 装配
+  modelLabel:null,
+  flowing:false,
+  flowFocus:-1,
+  invocations:0,
+  lastInput:'—',
+  lastOutput:'—',
+  runState:'待命',
+  rag:{ chunked:false, indexed:0, retrieved:false, query:null, top:[] },
+  agent:{ toolMade:false, made:false, ran:false, stepIdx:-1 }
+};
+const CHUNKS = [
+  { id:'chunk#1', text:'差旅住宿报销比例：一线城市每晚上限 600 元，凭发票 3 个工作日内到账。', keys:'报销/比例' },
+  { id:'chunk#2', text:'年假制度：入职满一年享 5 天年假，需提前 3 天在 OA 申请。', keys:'年假' },
+  { id:'chunk#3', text:'考勤：工作日 9:30-18:30，弹性半小时，忘打卡每月可补 2 次。', keys:'考勤' },
+  { id:'chunk#4', text:'报销流程：OA 提交 → 直属主管审批 → 财务复核 → 打款；单笔超 5000 元需 VP 会签。', keys:'报销/流程' }
+];
+const RAG_TOP = [0, 3];   // 检索命中 chunk#1 与 chunk#4
+const RAG_SCORE = ['相似度 0.91', '相似度 0.86'];
+
+let codeLines = [
+  { text: '# app.py —— LLM 应用的第一性原理：', cls: 'cm', id:'init-line' },
+  { text: '# 把「调模型」这件重复的事拆成标准件', cls: 'cm' },
+  { text: '# （第 1 关先看没有标准件的世界）', cls: 'cm' }
+];
+let activeLineId = 'init-line';
+
+const logLines = [];
+function addLog(cmd, type, expl){
+  logLines.unshift({cmd, type, expl});
+  if(logLines.length > 32) logLines.pop();
+}
+
+/* ============ 通用序列器（传送带动画） ============ */
+function runSeq(steps, finish, gap){
+  if(world.flowing) return;
+  world.flowing = true;
+  let i = 0;
+  function tick(){
+    if(i >= steps.length){
+      world.flowing = false;
+      world.flowFocus = -1;
+      if(finish) finish();
+      render();
+      return;
+    }
+    steps[i]();
+    i++;
+    render();
+    setTimeout(tick, gap || 380);
+  }
+  tick();
+}
+function focus(i){ world.flowFocus = i; }
+
+/* ============ 业务动作 ============ */
+
+// 1. 裸调 SDK
+function doRawCall(){
+  if(world.flowing) return;
+  if(flags.rawDone){ doneNotice('裸调 openai SDK'); return; }
+  world.mode = 'raw';
+  world.lastInput = '"黑洞"';
+  world.lastOutput = '手撕 resp.choices[0].message.content';
+  world.runState = '裸调（能跑，但焊死）';
+  world.invocations++;
+  codeLines = [
+    { text: '# ===== 裸调 SDK（能跑，勿模仿）=====', cls: 'cm', id:'raw-h' },
+    { text: 'from openai import OpenAI', cls: 'cmd' },
+    { text: 'client = OpenAI()', cls: 'cmd' },
+    { text: 'resp = client.chat.completions.create(', cls: 'cmd' },
+    { text: '    model="gpt-4o-mini",   # 焊死①：模型名写死在业务里', cls: 'solder', id:'raw-m' },
+    { text: '    messages=[', cls: '' },
+    { text: '        {"role": "system", "content": "你是通俗科普作家"},', cls: '' },
+    { text: '        {"role": "user", "content": f"讲讲{topic}"}  # 焊死②：提示词搅进代码', cls: 'solder', id:'raw-p' },
+    { text: '    ],', cls: '' },
+    { text: ')', cls: '' },
+    { text: 'text = resp.choices[0].message.content  # 焊死③：手撕返回结构', cls: 'solder', id:'raw-o' }
+  ];
+  activeLineId = 'raw-m';
+  addLog('client.chat.completions.create(...)', 'err', '【裸调之痛】三处焊死：①模型名 ②提示词 ③返回值手撕。换供应商 = 整个业务重写；要 JSON 得自己正则 + 重试；要流式得再写一遍调用。');
+  addLog('世界状态：裸调模式', 'info', '右侧装配现场列出了三处焊死点——它们就是接下来标准件要逐个拆掉的靶子。');
+  flags.rawDone = true;
+  render();
+}
+
+// 2. 创建模板
+function doMakeTemplate(){
+  if(world.flowing) return;
+  if(flags.templateMade){ doneNotice('创建 ChatPromptTemplate'); return; }
+  world.mode = 'pipeline';
+  if(!world.pipe.find(p => p.id === 'prompt')){
+    world.pipe.push({ id:'prompt', icon:'📝', name:'ChatPromptTemplate', duty:'dict → 消息列表', shape:'', idle:true });
+  }
+  codeLines = codeLines.concat([
+    { text: '', cls: '' },
+    { text: '# ===== 标准件① 提示词模板 =====', cls: 'cm', id:'tpl-h' },
+    { text: 'from langchain_core.prompts import ChatPromptTemplate', cls: 'cmd' },
+    { text: 'template = ChatPromptTemplate.from_messages([', cls: 'cmd', id:'tpl-line' },
+    { text: '    ("system", "你是一个通俗科普作家"),', cls: '' },
+    { text: '    ("human", "用大白话讲讲{topic}"),  # {topic}=变量槽', cls: 'arg' },
+    { text: '])', cls: '' }
+  ]);
+  activeLineId = 'tpl-line';
+  addLog('ChatPromptTemplate.from_messages([...])', 'ok', '【提示词数据化】提示词变成带变量槽的模板对象。焊死②已拆除：提示词与业务代码解耦，可复用、可单独测试。');
+  flags.templateMade = true;
+  render();
+}
+
+function doInvokeTemplate(){
+  if(world.flowing || !flags.templateMade){
+    if(!flags.templateMade) addLog('template.invoke', 'err', '先点「创建 ChatPromptTemplate」。');
+    render(); return;
+  }
+  world.runState = 'template.invoke';
+  const pr = world.pipe.find(p => p.id === 'prompt');
+  runSeq([
+    ()=>{ focus(0); world.lastInput = '{"topic": "黑洞"}'; pr.shape = '收到: {"topic":"黑洞"}'; pr.idle = false;
+          addLog('template.invoke({"topic": "黑洞"})', 'info', '模板收到一个 dict，开始按槽位填充。'); },
+    ()=>{ focus(0); pr.shape = '[SystemMessage("你是通俗科普作家"), HumanMessage("用大白话讲讲黑洞")]';
+          world.lastOutput = '[SystemMessage, HumanMessage("用大白话讲讲黑洞")]';
+          addLog('→ 消息列表', 'ok', '产出标准消息列表：system 定人设，human 放用户输入。这就是所有模型适配器认的通用货币。'); }
+  ], ()=>{ flags.templateInvoked = true; });
+}
+
+// 3. 统一模型接口
+function doMakeModel(){
+  if(world.flowing) return;
+  if(flags.modelMade){ doneNotice('init_chat_model + invoke'); return; }
+  world.mode = 'pipeline';
+  if(!world.pipe.find(p => p.id === 'model')){
+    world.pipe.push({ id:'model', icon:'🤖', name:'init_chat_model', duty:'消息列表 → AIMessage', shape:'', idle:true });
+  }
+  world.modelLabel = 'openai:gpt-4o-mini';
+  codeLines = codeLines.concat([
+    { text: '', cls: '' },
+    { text: '# ===== 标准件② 统一模型接口 =====', cls: 'cm', id:'mdl-h' },
+    { text: 'from langchain.chat_models import init_chat_model', cls: 'cmd' },
+    { text: 'model = init_chat_model("openai:gpt-4o-mini")', cls: 'cmd', id:'mdl-line' },
+    { text: '# 换供应商？只改这一行字符串，见下一刀', cls: 'cm' }
+  ]);
+  activeLineId = 'mdl-line';
+  addLog('init_chat_model("openai:gpt-4o-mini")', 'ok', '【万能插座】openai 的 SDK 被包进统一适配器：吃消息列表、吐 AIMessage。厂商差异从此被封印在这一行字符串里。');
+  flags.modelMade = true;
+  render();
+}
+
+function doSwapModel(){
+  if(world.flowing || !flags.modelMade){
+    if(!flags.modelMade) addLog('换供应商', 'err', '先点「init_chat_model + invoke」。');
+    render(); return;
+  }
+  world.modelLabel = 'anthropic:claude-sonnet-4-5';
+  const ln = codeLines.find(l => l.id === 'mdl-line');
+  if(ln) ln.text = 'model = init_chat_model("anthropic:claude-sonnet-4-5")  # ← 唯一改动';
+  activeLineId = 'mdl-line';
+  const m = world.pipe.find(p => p.id === 'model');
+  if(m) m.shape = '已切到 anthropic（接口不变）';
+  addLog('init_chat_model("anthropic:claude-sonnet-4-5")', 'ok', '【换供应商 = 一行】业务链零改动——这就是统一接口的回报。右下角「换供应商的代价」从「全部重写」变成了「1 行」。');
+  flags.modelSwapped = true;
+  render();
+}
+
+// 4. 输出解析
+function doAttachParser(){
+  if(world.flowing) return;
+  if(flags.parserOn){ doneNotice('挂上 StrOutputParser'); return; }
+  world.mode = 'pipeline';
+  if(!world.pipe.find(p => p.id === 'parser')){
+    world.pipe.push({ id:'parser', icon:'🎯', name:'StrOutputParser', duty:'AIMessage → str', shape:'', idle:true });
+  }
+  codeLines = codeLines.concat([
+    { text: '', cls: '' },
+    { text: '# ===== 标准件③ 输出解析 =====', cls: 'cm', id:'prs-h' },
+    { text: 'from langchain_core.output_parsers import StrOutputParser', cls: 'cmd' },
+    { text: 'parser = StrOutputParser()', cls: 'cmd', id:'prs-line' },
+    { text: 'parser.invoke(ai_message)  # → "黑洞其实是…" 纯文本', cls: 'arg' },
+    { text: '# 要 JSON/对象: model.with_structured_output(Schema)', cls: 'cm' }
+  ]);
+  activeLineId = 'prs-line';
+  world.lastInput = 'AIMessage(content="黑洞其实是…")';
+  world.lastOutput = '"黑洞其实是时空的一个漩涡"';
+  world.runState = 'parser.invoke';
+  const p = world.pipe.find(x => x.id === 'parser');
+  p.shape = '"黑洞其实是时空的一个漩涡"';
+  p.idle = false;
+  addLog('StrOutputParser().invoke(AIMessage)', 'ok', '【出料口】焊死③已拆除：不再手撕 resp.choices[0].message.content。要结构化数据就换 with_structured_output(Schema)，直接得 Python 对象。');
+  flags.parserOn = true;
+  render();
+}
+
+// 5. LCEL 装配线
+function doAssemble(){
+  if(world.flowing) return;
+  if(flags.chainAssembled){ doneNotice('chain = 三件装配'); return; }
+  const need = flags.templateMade && flags.modelMade && flags.parserOn;
+  if(!need){
+    addLog('chain = template | model | parser', 'err', '三件标准件没凑齐：先过第②③④关。');
+    render(); return;
+  }
+  world.mode = 'pipeline';
+  world.connected = true;
+  codeLines = codeLines.concat([
+    { text: '', cls: '' },
+    { text: '# ===== LCEL 装配线（灵魂一行）=====', cls: 'cm', id:'lcel-h' },
+    { text: 'chain = template | model | parser', cls: 'cmd', id:'lcel-line' },
+    { text: '# | 就是 pipe：把 Runnable 编译成一条链', cls: 'cm' }
+  ]);
+  activeLineId = 'lcel-line';
+  addLog('chain = template | model | parser', 'ok', '【| 是传送带】三个标准件被 | 编译成一条链。整条链自己也是 Runnable——所以还能继续被 | 下去（第⑦关就是这么干的）。');
+  flags.chainAssembled = true;
+  render();
+}
+
+function doChainInvoke(){
+  if(world.flowing || !flags.chainAssembled){
+    if(!flags.chainAssembled) addLog('chain.invoke', 'err', '先点「chain = 三件装配」。');
+    render(); return;
+  }
+  world.runState = 'chain.invoke';
+  world.invocations++;
+  const [a, b, c] = world.pipe;
+  runSeq([
+    ()=>{ focus(0); world.lastInput = '{"topic": "黑洞"}'; a.shape = 'dict: {"topic":"黑洞"}'; a.idle = false;
+          addLog('chain.invoke({"topic": "黑洞"})', 'info', '第①站 prompt：dict 进，按槽位填充。'); },
+    ()=>{ focus(1); a.shape = '[SystemMessage, HumanMessage("讲讲黑洞")]'; b.idle = false;
+          addLog('→ 消息列表', 'info', 'prompt 产出标准消息列表，递给 model。'); },
+    ()=>{ focus(2); b.shape = 'AIMessage("黑洞其实是…")'; c.idle = false;
+          addLog('→ AIMessage', 'info', 'model 调用大模型（此处为模拟），吐统一回执单 AIMessage。'); },
+    ()=>{ focus(2); c.shape = '"黑洞其实是时空的一个漩涡"';
+          world.lastOutput = '"黑洞其实是时空的一个漩涡——引力大到光都出不来。"';
+          addLog('→ str', 'ok', 'parser 抽出 content，链的终点是干净文本。一条 .invoke 驱动了整条装配线。'); }
+  ], ()=>{ flags.chainInvoked = true; });
+}
+
+function doChainStream(){
+  if(world.flowing || !flags.chainAssembled){
+    if(!flags.chainAssembled) addLog('chain.stream', 'err', '先装配再驱动。');
+    render(); return;
+  }
+  world.runState = 'chain.stream';
+  world.invocations++;
+  const toks = ['黑洞', '其实', '是', '时空的', '一个漩涡'];
+  world.lastInput = '{"topic": "黑洞"} (stream)';
+  let acc = [];
+  runSeq(toks.map(t => ()=>{
+    acc.push(t);
+    world.lastOutput = acc.join('');
+    world.runState = 'chain.stream · 已出 ' + acc.length + ' 个 token';
+  }), ()=>{ world.runState = 'chain.stream ✓'; addLog('chain.stream({"topic": "黑洞"})', 'ok', '【白送能力①】逐 token 吐出，打字机效果。没有为流式重写任何调用代码——链的另一种驱动方式而已。'); flags.streamed = true; }, 300);
+}
+
+function doChainBatch(){
+  if(world.flowing || !flags.chainAssembled){
+    if(!flags.chainAssembled) addLog('chain.batch', 'err', '先装配再驱动。');
+    render(); return;
+  }
+  world.runState = 'chain.batch';
+  world.invocations++;
+  world.lastInput = '[{"topic":"黑洞"}, {"topic":"光速"}]';
+  runSeq([
+    ()=>{ addLog('chain.batch([...])', 'info', '两条输入同时上传送带，并发执行。'); },
+    ()=>{ world.lastOutput = '["黑洞其实是…", "光速是宇宙的限速…"]';
+          addLog('→ 批量结果', 'ok', '【白送能力②】批量并发拿回结果列表。同一条链：invoke 单发、stream 逐 token、batch 并发、ainvoke 异步——全是接口白送的。'); }
+  ], ()=>{ flags.batched = true; });
+}
+
+// 6. RAG 积木
+function doChunk(){
+  if(world.flowing) return;
+  if(flags.chunked){ doneNotice('切块 split_documents'); return; }
+  world.mode = 'rag';
+  world.rag.chunked = true;
+  codeLines = codeLines.concat([
+    { text: '', cls: '' },
+    { text: '# ===== 标准件④ 外挂记忆（RAG 积木）=====', cls: 'cm', id:'rag-h' },
+    { text: 'from langchain_text_splitters import RecursiveCharacterTextSplitter', cls: 'cmd' },
+    { text: 'chunks = RecursiveCharacterTextSplitter(', cls: 'cmd', id:'chunk-line' },
+    { text: '    chunk_size=200, chunk_overlap=20', cls: 'arg' },
+    { text: ').split_documents(docs)   # 长文档 → 小块', cls: '' }
+  ]);
+  activeLineId = 'chunk-line';
+  addLog('splitter.split_documents(docs)', 'ok', '【切块】员工手册.pdf 被切成 4 小块。切小块是为了检索精度：命中制度那一段，而不是整本塞进 prompt。');
+  flags.chunked = true;
+  render();
+}
+
+function doIndex(){
+  if(world.flowing) return;
+  if(flags.indexed){ doneNotice('embedding + 入库'); return; }
+  if(!flags.chunked){
+    addLog('入库', 'err', '先切块。');
+    render(); return;
+  }
+  world.rag.indexed = 4;
+  codeLines = codeLines.concat([
+    { text: 'from langchain_core.vectorstores import InMemoryVectorStore', cls: 'cmd' },
+    { text: 'from langchain_openai import OpenAIEmbeddings', cls: 'cmd' },
+    { text: 'store = InMemoryVectorStore(OpenAIEmbeddings())', cls: 'cmd', id:'idx-line' },
+    { text: 'store.add_documents(chunks)  # 每块 → 向量 → 入库', cls: 'arg' }
+  ]);
+  activeLineId = 'idx-line';
+  addLog('store.add_documents(chunks)', 'ok', '【embedding + 入库】每块文本被 embedding 成向量（右列蓝色小条）。语义相近的块，向量距离就近——这是「按意思找」而不是「按关键词找」。');
+  flags.indexed = true;
+  render();
+}
+
+function doRetrieve(){
+  if(world.flowing) return;
+  if(flags.retrieved){ doneNotice('retriever.invoke 检索'); return; }
+  if(!flags.indexed){
+    addLog('retriever.invoke', 'err', '先切块 + 入库。');
+    render(); return;
+  }
+  world.runState = 'retriever.invoke';
+  world.invocations++;
+  codeLines = codeLines.concat([
+    { text: 'retriever = store.as_retriever(search_kwargs={"k": 2})', cls: 'cmd', id:'ret-line' },
+    { text: 'retriever.invoke("报销制度是什么？")  # → 最相似的2块', cls: 'arg' }
+  ]);
+  activeLineId = 'ret-line';
+  runSeq([
+    ()=>{ world.rag.query = '我们公司的报销制度是什么？'; addLog('retriever.invoke("报销制度…")', 'info', '查询文本也被 embedding 成向量，去库里比对距离。'); },
+    ()=>{ world.rag.top = RAG_TOP; addLog('→ top-2 相似块', 'ok', '命中 chunk#1（报销比例）和 chunk#4（报销流程）——按语义抓到的，块里甚至没有连着的字面关键词。'); },
+    ()=>{ world.runState = 'retriever ✓'; world.lastInput = '"我们公司的报销制度是什么？"'; world.lastOutput = '[chunk#1 报销比例, chunk#4 报销流程]';
+          addLog('retriever 也是 Runnable', 'info', '记住这一点：检索器实现了 .invoke —— 所以下一关它能直接被 | 上传送带。'); }
+  ], ()=>{ world.rag.retrieved = true; flags.retrieved = true; });
+}
+
+// 7. RAG 链
+function doBuildRagChain(){
+  if(world.flowing) return;
+  if(flags.ragBuilt){ doneNotice('组装 rag_chain 汇流'); return; }
+  if(!flags.retrieved){
+    addLog('组装 rag_chain', 'err', '先过第⑥关拿到 retriever。');
+    render(); return;
+  }
+  world.mode = 'pipeline';
+  world.connected = true;
+  world.pipe = [
+    { id:'parallel', icon:'🔀', name:'RunnableParallel', duty:'1路输入 → 2路并行', shape:'', idle:true,
+      merge:[{k:'context', q:false, d:'→ retriever 查资料'}, {k:'question', q:true, d:'→ 原话直通'}] },
+    { id:'prompt', icon:'📝', name:'rag_prompt', duty:'填 {context} {question}', shape:'', idle:true },
+    { id:'model', icon:'🤖', name:'model', duty:'消息列表 → AIMessage', shape:'', idle:true },
+    { id:'parser', icon:'🎯', name:'parser', duty:'AIMessage → str', shape:'', idle:true }
+  ];
+  codeLines = codeLines.concat([
+    { text: '', cls: '' },
+    { text: '# ===== RAG 链：两路汇流 =====', cls: 'cm', id:'rgc-h' },
+    { text: 'from langchain_core.runnables import RunnableParallel, RunnablePassthrough', cls: 'cmd' },
+    { text: 'rag_prompt = ChatPromptTemplate.from_messages([', cls: 'cmd' },
+    { text: '    ("system", "仅根据以下资料回答：\\n{context}"),', cls: 'arg' },
+    { text: '    ("human", "{question}"),', cls: 'arg' },
+    { text: '])', cls: '' },
+    { text: 'rag_chain = RunnableParallel(', cls: 'cmd', id:'rgc-line' },
+    { text: '    context=retriever,               # 路1：先查资料', cls: 'arg' },
+    { text: '    question=RunnablePassthrough(),  # 路2：原话直通', cls: 'arg' },
+    { text: ') | rag_prompt | model | parser    # 汇流后接三件套', cls: '' }
+  ]);
+  activeLineId = 'rgc-line';
+  addLog('rag_chain = RunnableParallel(...) | rag_prompt | model | parser', 'ok', '【dict 也是 Runnable】汇流器把一路输入劈成两路并行，再把 {context, question} 合成 dict 喂给模板。RAG 的「先查后答」从此是一条链，不是一堆 if-else。');
+  flags.ragBuilt = true;
+  render();
+}
+
+function doRagInvoke(){
+  if(world.flowing || !flags.ragBuilt){
+    if(!flags.ragBuilt) addLog('rag_chain.invoke', 'err', '先组装 rag_chain。');
+    render(); return;
+  }
+  world.runState = 'rag_chain.invoke';
+  world.invocations++;
+  const [pa, pr, md, ps] = world.pipe;
+  runSeq([
+    ()=>{ focus(0); world.lastInput = '"我们公司的报销制度是什么？"'; pa.shape = 'str: "报销制度是什么？"'; pa.idle = false;
+          addLog('rag_chain.invoke("我们公司的报销制度是什么？")', 'info', '输入是一句原话，进汇流器。'); },
+    ()=>{ focus(0); pa.shape = '{context:[chunk#1,chunk#4], question:"报销制度…"}';
+          addLog('→ 两路汇流', 'info', 'context 路去查库（第⑥关的结果），question 路原样直通，汇成 dict。'); },
+    ()=>{ focus(1); pr.shape = '[System("仅根据资料…\\n<2块>"), Human("报销制度…")]'; pr.idle = false;
+          addLog('→ 消息列表', 'info', '模板把资料和问题填进槽位——模型即将「开卷考试」。'); },
+    ()=>{ focus(2); md.shape = 'AIMessage("报销比例…流程…")'; md.idle = false;
+          addLog('→ AIMessage', 'info', '基于你的资料作答，而不是凭权重里的模糊记忆。'); },
+    ()=>{ focus(3); ps.shape = '"住宿上限600元/晚；OA提交→主管→财务→打款"';
+          world.lastOutput = '报销分两块：比例上——一线城市住宿每晚上限600元；流程上——OA提交→主管审批→财务复核→打款，超5000元需VP会签。';
+          addLog('→ str 答案', 'ok', 'RAG 链全程跑通。答案可溯源（能指出来自哪两块），资料更新也不用重训模型。'); }
+  ], ()=>{ flags.ragInvoked = true; });
+}
+
+// 8. Agent
+function doMakeTool(){
+  if(world.flowing) return;
+  if(flags.toolMade){ doneNotice('@tool 注册 get_weather'); return; }
+  world.mode = 'agent';
+  world.agent.toolMade = true;
+  codeLines = codeLines.concat([
+    { text: '', cls: '' },
+    { text: '# ===== 标准件⑤ Agent：模型现场导航 =====', cls: 'cm', id:'agt-h' },
+    { text: 'from langchain.tools import tool', cls: 'cmd' },
+    { text: '@tool', cls: 'cmd', id:'tool-line' },
+    { text: 'def get_weather(city: str) -> str:', cls: '' },
+    { text: '    """查询指定城市的实时天气"""', cls: 'cm' },
+    { text: '    return f"{city}: 晴, 22°C"', cls: 'arg' }
+  ]);
+  activeLineId = 'tool-line';
+  addLog('@tool def get_weather(...)', 'ok', '【工具=带说明的函数】docstring 就是给模型看的说明书：什么工具、收什么参数、什么时候该用。模型不执行它，只「点单」，真正执行在你的进程里。');
+  flags.toolMade = true;
+  render();
+}
+
+function doMakeAgent(){
+  if(world.flowing) return;
+  if(flags.agentMade){ doneNotice('create_agent 装配'); return; }
+  if(!flags.toolMade){
+    addLog('create_agent', 'err', '先注册工具。');
+    render(); return;
+  }
+  world.agent.made = true;
+  codeLines = codeLines.concat([
+    { text: 'from langchain.agents import create_agent', cls: 'cmd' },
+    { text: 'agent = create_agent(model, tools=[get_weather],', cls: 'cmd', id:'agt-line' },
+    { text: '                     system_prompt="需要时调用工具")', cls: 'arg' }
+  ]);
+  activeLineId = 'agt-line';
+  addLog('agent = create_agent(model, tools=[get_weather])', 'ok', '【链 vs Agent 的分界】链的路线是你写代码时定死的；agent 把「下一步干什么」交给模型运行时决定，底层是 LangGraph 状态机在转圈。');
+  flags.agentMade = true;
+  render();
+}
+
+function doAgentInvoke(){
+  if(world.flowing || !flags.agentMade){
+    if(!flags.agentMade) addLog('agent.invoke', 'err', '先 create_agent。');
+    render(); return;
+  }
+  world.runState = 'agent.invoke';
+  world.invocations++;
+  world.agent.ran = true;
+  runSeq([
+    ()=>{ world.agent.stepIdx = 0; world.lastInput = '"北京今天穿什么？"';
+          addLog('agent.invoke("北京今天穿什么？")', 'info', '路线没写死：没有任何代码规定要先查天气。'); },
+    ()=>{ world.agent.stepIdx = 1; addLog('🧠 思考', 'info', '模型读问题：要给穿衣建议，缺实时天气 → 决定调 get_weather。这一步「决定」就是 agent 与链的全部区别。'); },
+    ()=>{ world.agent.stepIdx = 2; addLog('🔧 tool call: get_weather("北京")', 'info', '模型发出点单（tool call），你的 Python 函数被真正执行。'); },
+    ()=>{ world.agent.stepIdx = 3; addLog('👁 观察: "北京: 晴, 22°C"', 'info', '执行结果作为观察塞回对话，供模型下一步使用。'); },
+    ()=>{ world.agent.stepIdx = 4; addLog('🧠 再思考', 'info', '信息够了，不再调工具——循环能不能停、停在哪步，都是模型现场判断。'); },
+    ()=>{ world.agent.stepIdx = 5; world.lastOutput = '今天北京晴，22°C，早晚微凉——长袖单衣即可，不用带伞。';
+          addLog('✅ 最终回答', 'ok', 'ReAct 循环闭环：想 → 调 → 看 → 再想 → 答。代价也在此：比固定链更贵更慢，所以路线定得死就别上 agent。'); }
+  ], ()=>{ flags.agentRan = true; }, 420);
+}
+
+/* ============ 渲染与关卡系统 ============ */
+
+function renderRail(){
+  const rail = document.getElementById('rail');
+  rail.innerHTML = STAGES.map((s, idx)=>{
+    const cls = idx === stage ? 'pill current' : (idx < stage ? 'pill done' : 'pill');
+    return `<div class="${cls}" onclick="jumpStage(${idx})">${s.nm}</div>${idx < STAGES.length - 1 ? '<div class="sep"></div>' : ''}`;
+  }).join('');
+}
+
+function renderQuest(){
+  const s = STAGES[stage];
+  const q = document.getElementById('quest');
+  const isFree = stage === STAGES.length - 1;
+  q.className = isFree ? 'quest free' : 'quest';
+
+  let bodyHtml = `
+    <div class="quest-head">
+      <span class="quest-stage">${s.stageTag}</span>
+      <span class="quest-title">${s.title}</span>
+      <span style="margin-left:auto; display:flex; gap:12px; align-items:center; flex:none;">
+        ${stage >= 1 ? `<button class="skip" onclick="replayStage()">↺ 重玩本关</button>` : ''}
+        ${stage < STAGES.length - 1 ? `<button class="skip" onclick="jumpStage(${stage + 1})">跳过本关 →</button>` : ''}
+      </span>
+    </div>
+    <div class="q-row"><div class="k">📍 起点状态</div><div class="v">${s.start}</div></div>
+    <div class="q-row"><div class="k">🎯 任务</div><div class="v">${s.task}</div></div>
+    <div class="q-row"><div class="k">👀 观察点</div><div class="v">${s.watch}</div></div>
+  `;
+
+  if(stage === 9){
+    bodyHtml += `
+      <div class="quiz">
+        ${QUIZ.map((qz, qidx)=>{
+          const res = quiz[qidx];
+          return `
+            <div class="qitem">
+              <div class="qtext">${qz.q}</div>
+              <div class="opts">
+                ${qz.opts.map((opt, oidx)=>{
+                  let cls = 'opt';
+                  if(res !== null){
+                    if(oidx === qz.ans) cls += ' correct';
+                    else if(oidx === res.pick) cls += ' wrong';
+                    else cls += ' dim';
+                  }
+                  return `<button class="${cls}" onclick="answerQuiz(${qidx}, ${oidx})">${opt}</button>`;
+                }).join('')}
+              </div>
+              ${res !== null ? `<div class="qexpl">${res.ok ? '✅ 答对了！' : '❌ 答错了。'} ${qz.expl}</div>` : ''}
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  if(stage === 0){
+    bodyHtml += `<div class="go"><button onclick="startJourney()">开始旅程（进入第 1 关）→</button></div>`;
+  } else if(s.pass() && stage < STAGES.length - 1 && stage !== 9){
+    bodyHtml += `<div class="go"><button class="primary" onclick="jumpStage(${stage + 1})">✅ 本关目标达成！进入下一关 →</button></div>`;
+  } else if(stage === 9 && s.pass()){
+    bodyHtml += `<div class="go"><button class="primary" onclick="jumpStage(10)">🎉 测验全对！毕业并解锁自由模式 →</button></div>`;
+  }
+
+  q.innerHTML = bodyHtml;
+}
+
+function renderCode(){
+  const box = document.getElementById('codebox');
+  box.innerHTML = codeLines.map(l => {
+    const act = (l.id && l.id === activeLineId) ? 'active' : '';
+    return `<div class="codeline ${l.cls} ${act}">${escapeHtml(l.text)}</div>`;
+  }).join('');
+  const cb = document.getElementById('codebox');
+  cb.scrollTop = cb.scrollHeight;
+}
+
+/* ---- Col 2 各模式 ---- */
+function pipeCardHtml(p, idx){
+  const fcs = idx === world.flowFocus ? 'focus' : '';
+  let mergeHtml = '';
+  if(p.merge){
+    mergeHtml = `<div class="merge-tabs">` + p.merge.map(m =>
+      `<div class="merge-tab ${m.q?'q':''}"><b>${m.k}</b> ${m.d}</div>`).join('') + `</div>`;
+  }
+  const shapeCls = p.idle || !p.shape ? 'idle' : '';
+  const shapeTxt = p.shape || '— 待命 —';
+  return `
+    <div class="pcard ${fcs}">
+      <div class="pc-icon">${p.icon}</div>
+      <div class="pc-name">${p.name}</div>
+      <div class="pc-duty">${p.duty}</div>
+      ${mergeHtml}
+      <div class="pc-shape ${shapeCls}">${escapeHtml(shapeTxt)}</div>
+    </div>
+  `;
+}
+
+function renderPipeBox(){
+  const box = document.getElementById('pipe-box');
+  const m = world.mode;
+
+  if(m === 'empty'){
+    box.innerHTML = `
+      <div class="ghost-note">
+        世界由 <b style="color:var(--amber);">Runnable</b> 组成：统一入口 .invoke(输入) → 输出。<br>
+        下面是即将逐关点亮的三个核心标准件：
+      </div>
+      <div class="ghost-row">
+        <div class="ghost-card"><div class="gi">📝</div>标准件①<div class="gn">ChatPromptTemplate</div>第②关点亮</div>
+        <div class="ghost-card"><div class="gi">🤖</div>标准件②<div class="gn">init_chat_model</div>第③关点亮</div>
+        <div class="ghost-card"><div class="gi">🎯</div>标准件③<div class="gn">StrOutputParser</div>第④关点亮</div>
+      </div>
+      <div class="ghost-note">之后：标准件④ 检索器（RAG）与标准件⑤ Agent 依次登场。<br>用 <b style="color:var(--cyan);">|</b> 把零件串成装配线，就是全部剧情。</div>
+    `;
+    return;
+  }
+
+  if(m === 'raw'){
+    box.innerHTML = `
+      <div class="raw-panel">
+        <div class="raw-title">🔩 裸调模式：三处焊死</div>
+        <div class="solder-item"><div class="si-h">焊死① 模型名</div><div class="si-d">"gpt-4o-mini" 写在业务代码里 → 换供应商 = 重写</div></div>
+        <div class="solder-item"><div class="si-h">焊死② 提示词</div><div class="si-d">f-string 搅在代码里 → 不能复用、不能单测</div></div>
+        <div class="solder-item"><div class="si-h">焊死③ 返回值</div><div class="si-d">resp.choices[0].message.content 手撕 → 厂商一换就崩</div></div>
+        <div class="ghost-note">这三处就是接下来三件标准件的拆除目标 ↓</div>
+      </div>
+    `;
+    return;
+  }
+
+  if(m === 'rag'){
+    const r = world.rag;
+    let chunksHtml = '';
+    if(r.chunked){
+      chunksHtml = `<div class="chunk-grid">` + CHUNKS.map((c, i)=>{
+        const stored = r.indexed > 0 ? 'stored' : '';
+        const isTop = r.top.includes(i);
+        const hit = r.retrieved && isTop ? 'hit' : '';
+        const dim = r.retrieved && !isTop ? 'dimmed' : '';
+        const score = r.retrieved && isTop ? RAG_SCORE[r.top.indexOf(i)] : '';
+        return `
+          <div class="chunk-card ${stored} ${hit} ${dim}">
+            <div class="chunk-id">${c.id}</div>
+            <div class="chunk-text">${c.text}</div>
+            ${r.indexed ? `<div class="vec-bar"><div class="vec-seg"></div><div class="vec-seg"></div><div class="vec-seg"></div><div class="vec-seg"></div><div class="vec-seg"></div></div>` : ''}
+            <div class="chunk-score">✓ ${score}</div>
+          </div>
+        `;
+      }).join('') + `</div>`;
+    } else {
+      chunksHtml = `<div class="ghost-note">等待切块…</div>`;
+    }
+    box.innerHTML = `
+      <div class="rag-doc">📄 员工手册.pdf <span class="rd-meta">12 页长文档</span></div>
+      ${chunksHtml}
+      <div class="store-line">${r.indexed ? `🗄️ InMemoryVectorStore · <b>${r.indexed} 块已向量化入库</b>` : '🗄️ 向量库：空（切块后执行入库）'}</div>
+      <div class="query-line ${r.query ? 'show' : ''}"><span style="color:var(--muted);font-size:10.5px;">🔍 查询</span><span class="qq">${r.query ? escapeHtml(r.query) : ''}</span></div>
+      <div class="rag-out ${r.retrieved ? 'show' : ''}"><b>retriever 输出：</b>[chunk#1 报销比例, chunk#4 报销流程] —— 按语义相似度取 top-2，块与块在原文里不相邻。</div>
+    `;
+    return;
+  }
+
+  if(m === 'agent'){
+    const a = world.agent;
+    const steps = [
+      { ico:'👤', h:'用户提问', d:'"北京今天穿什么？"' },
+      { ico:'🧠', h:'模型思考', d:'缺实时天气 → 决定调工具' },
+      { ico:'🔧', h:'工具调用', d:'get_weather("北京") · 你的函数被执行' },
+      { ico:'👁️', h:'观察结果', d:'"北京: 晴, 22°C" 塞回对话' },
+      { ico:'🧠', h:'继续思考', d:'信息够了，停止调工具' },
+      { ico:'✅', h:'最终回答', d:'长袖单衣即可，不用带伞' }
+    ];
+    if(!a.toolMade && !a.made){
+      box.innerHTML = `<div class="ghost-note">Agent 舞台：先注册 @tool，再 create_agent，<br>然后 agent.invoke 触发下面的 ReAct 循环。</div>` +
+        steps.map(s=>`<div class="astep"><span class="ai-ico">${s.ico}</span><span class="ai-txt"><b>${s.h}</b> · ${s.d}</span></div>`).join('');
+      return;
+    }
+    box.innerHTML = `
+      <div class="store-line">🧰 工具箱：${a.toolMade ? '<b>get_weather(city)</b> · @tool' : '空'} ｜ 🤖 Agent：${a.made ? '<b>已装配（LangGraph 驱动）</b>' : '未装配'}</div>
+      <div style="font-size:11px;color:var(--muted);text-align:center;">ReAct 循环 · 想 → 调 → 看 → 再想 → 答</div>
+      ` + steps.map((s, i)=>{
+        const cls = a.ran ? (i <= a.stepIdx ? (i === a.stepIdx ? 'astep focus' : 'astep reach') : 'astep') : 'astep';
+        return `<div class="${cls}"><span class="ai-ico">${s.ico}</span><span class="ai-txt"><b>${s.h}</b> · ${s.d}</span></div>`;
+      }).join('');
+    return;
+  }
+
+  // pipeline 模式
+  if(world.pipe.length === 0){
+    box.innerHTML = `<div class="ghost-note">传送带空置——点控制台按钮创建标准件。</div>`;
+    return;
+  }
+  let html = `<div class="conveyor">`;
+  world.pipe.forEach((p, i)=>{
+    html += pipeCardHtml(p, i);
+    if(i < world.pipe.length - 1){
+      const ac = world.flowFocus === i + 0.5 ? 'focus' : '';
+      const conn = world.connected ? 'connected' : '';
+      html += `<div class="parr ${conn} ${ac}">${world.connected ? '⟶' : '·'}</div>`;
+    }
+  });
+  html += `</div>`;
+  html += world.connected
+    ? `<div class="belt-caption">已装配：<b>chain = ${world.pipe.map(p=>p.id).join(' | ')}</b> · 一条 .invoke 驱动整线</div>`
+    : `<div class="belt-caption">零件就位，尚未用 <b>|</b> 装配 · 各件仍可单独 .invoke</div>`;
+  box.innerHTML = html;
+}
+
+function renderRun(){
+  document.getElementById('run-state').innerText = world.runState;
+  document.getElementById('io-in').innerText = world.lastInput;
+  document.getElementById('io-out').innerText = world.lastOutput;
+
+  const list = document.getElementById('scene-list');
+  const parts = countParts();
+  document.getElementById('stat-parts').innerText = parts;
+  document.getElementById('stat-invoke').innerText = world.invocations;
+  const vendorEl = document.getElementById('stat-vendor');
+  if(flags.modelSwapped){ vendorEl.innerText = '1 行字符串'; vendorEl.className = 'stat-val good'; }
+  else if(flags.modelMade){ vendorEl.innerText = '1 行字符串'; vendorEl.className = 'stat-val good'; }
+  else { vendorEl.innerText = '全部重写'; vendorEl.className = 'stat-val bad'; }
+
+  let items = [];
+  if(world.mode === 'raw'){
+    items = [
+      { b:'🔩 焊死①', t:'模型名写死在业务代码', bad:true },
+      { b:'🔩 焊死②', t:'提示词 f-string 搅进逻辑', bad:true },
+      { b:'🔩 焊死③', t:'手撕 resp.choices[0].…', bad:true },
+      { b:'💸 换供应商', t:'鉴权、方法名、返回结构全要重写', bad:true }
+    ];
+  } else if(world.mode === 'agent'){
+    items = [
+      { b:'路线决策者', t: flags.agentMade ? '模型（运行时决定调什么）' : '——', good: flags.agentMade },
+      { b:'工具箱', t: world.agent.toolMade ? 'get_weather(city) · @tool' : '空', good: world.agent.toolMade },
+      { b:'底层引擎', t: flags.agentMade ? 'LangGraph 状态机' : '——', good: flags.agentMade },
+      { b:'适用判据', t:'路线定不死才用 Agent；定得死用链' }
+    ];
+  } else {
+    const inPipe = id => world.pipe.find(p => p.id === id);
+    if(inPipe('prompt')) items.push({ b:'标准件①', t:'ChatPromptTemplate · 提示词数据化', good:true });
+    if(inPipe('model')) items.push({ b:'标准件②', t:'init_chat_model(' + (world.modelLabel || '') + ') · 万能插座', good:true });
+    if(inPipe('parser')) items.push({ b:'标准件③', t:'StrOutputParser · 出料口', good:true });
+    if(flags.indexed) items.push({ b:'标准件④', t:'Retriever · 外挂记忆（先查后答）', good:true });
+    if(flags.agentMade) items.push({ b:'标准件⑤', t:'create_agent · 现场导航', good:true });
+    if(flags.ragBuilt) items.push({ b:'汇流器', t:'RunnableParallel · 两路并行', good:true });
+    if(items.length === 0) items = [{ b:'空场地', t:'点控制台按钮开始装配' }];
+    items.push({ b:'换供应商', t: flags.modelMade ? '只改 init_chat_model 一行' : '——', good: flags.modelMade });
+  }
+  list.innerHTML = items.map(it =>
+    `<div class="scene-item ${it.bad?'bad':''} ${it.good?'good':''}"><b>${it.b}</b> · ${it.t}</div>`).join('');
+}
+
+function countParts(){
+  let n = 0;
+  if(flags.templateMade) n++;
+  if(flags.modelMade) n++;
+  if(flags.parserOn) n++;
+  if(flags.indexed) n++;
+  if(flags.agentMade) n++;
+  return n;
+}
+
+function renderConsoleButtons(){
+  const btns = document.getElementById('btns');
+  const isFree = stage === STAGES.length - 1;
+  let btnHtml = '';
+  if(world.flowing){ btnHtml = `<span style="color:var(--amber);font-size:11px;">传送带运行中…</span>`; }
+
+  const push = (cond, cls, label, fn) => { if(cond && !world.flowing) btnHtml += `<button class="${cls}" onclick="${fn}">${label}</button>`; };
+
+  push(stage === 1 || isFree, 'danger-btn', '裸调 openai SDK', 'doRawCall()');
+  push(stage === 2 || isFree, 'action-btn', '创建 ChatPromptTemplate', 'doMakeTemplate()');
+  push(stage === 2 || isFree, 'action-btn', 'template.invoke 填充', 'doInvokeTemplate()');
+  push(stage === 3 || isFree, 'action-btn', 'init_chat_model + invoke', 'doMakeModel()');
+  push(stage === 3 || isFree, 'fix-btn', '换供应商 → anthropic', 'doSwapModel()');
+  push(stage === 4 || isFree, 'primary', '挂上 StrOutputParser', 'doAttachParser()');
+  push(stage === 5 || isFree, 'primary', 'chain = 三件装配', 'doAssemble()');
+  push(stage === 5 || isFree, 'action-btn', 'chain.invoke', 'doChainInvoke()');
+  push(stage === 5 || isFree, 'action-btn', 'chain.stream', 'doChainStream()');
+  push(stage === 5 || isFree, 'action-btn', 'chain.batch', 'doChainBatch()');
+  push(stage === 6 || isFree, 'action-btn', '切块 split_documents', 'doChunk()');
+  push(stage === 6 || isFree, 'action-btn', 'embedding + 入库', 'doIndex()');
+  push(stage === 6 || isFree, 'fix-btn', 'retriever.invoke 检索', 'doRetrieve()');
+  push(stage === 7 || isFree, 'primary', '组装 rag_chain 汇流', 'doBuildRagChain()');
+  push(stage === 7 || isFree, 'action-btn', 'rag_chain.invoke', 'doRagInvoke()');
+  push(stage === 8 || isFree, 'action-btn', '@tool 注册 get_weather', 'doMakeTool()');
+  push(stage === 8 || isFree, 'primary', 'create_agent 装配', 'doMakeAgent()');
+  push(stage === 8 || isFree, 'fix-btn', 'agent.invoke 提问', 'doAgentInvoke()');
+
+  if(!world.flowing){
+    btnHtml += `<button class="danger-btn" onclick="wipeAllProgress()">${wipeArmed ? '⚠ 再点一次：确认清除全部进度' : '⟲ 清除全部进度'}</button>`;
+    btnHtml += `<button onclick="resetWorldState()">↺ 重置环境</button>`;
+  }
+  btns.innerHTML = btnHtml;
+}
+
+function renderLogs(){
+  const box = document.getElementById('logbox');
+  if(logLines.length === 0){
+    box.innerHTML = `<div style="color:var(--muted);font-size:12px;">日志就绪，点击上方控制台按钮执行操作...</div>`;
+    return;
+  }
+  box.innerHTML = logLines.map(l => {
+    return `
+      <div class="logline ${l.type}">
+        <span class="cmd">${escapeHtml(l.cmd)}</span>
+        <div class="expl">${l.expl}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function render(){
+  renderRail();
+  renderQuest();
+  renderCode();
+  renderPipeBox();
+  renderRun();
+  renderConsoleButtons();
+  renderLogs();
+  saveState();
+}
+
+function startJourney(){
+  flags.started = true;
+  jumpStage(1);
+}
+
+function jumpStage(idx){
+  stage = idx;
+  render();
+}
+
+function answerQuiz(qidx, oidx){
+  const qz = QUIZ[qidx];
+  const ok = oidx === qz.ans;
+  quiz[qidx] = { pick: oidx, ok };
+  if(ok){
+    addLog(`测验第 ${qidx+1} 题`, 'ok', `回答正确！${qz.expl}`);
+  } else {
+    addLog(`测验第 ${qidx+1} 题`, 'err', `回答错误，再想想看！`);
+  }
+  render();
+}
+
+function freshWorld(){
+  return {
+    mode:'empty', pipe:[], connected:false, modelLabel:null,
+    flowing:false, flowFocus:-1, invocations:0,
+    lastInput:'—', lastOutput:'—', runState:'待命',
+    rag:{ chunked:false, indexed:0, retrieved:false, query:null, top:[] },
+    agent:{ toolMade:false, made:false, ran:false, stepIdx:-1 }
+  };
+}
+
+function initialCodeLines(){
+  return [
+    { text: '# app.py —— LLM 应用的第一性原理：', cls: 'cm', id:'init-line' },
+    { text: '# 把「调模型」这件重复的事拆成标准件', cls: 'cm' },
+    { text: '# （第 1 关先看没有标准件的世界）', cls: 'cm' }
+  ];
+}
+
+function resetWorldState(){
+  world = freshWorld();
+  codeLines = initialCodeLines();
+  activeLineId = 'init-line';
+  addLog('环境已重置', 'info', '装配线已清空（关卡进度保留）。');
+  render();
+}
+
+/* ============ 重玩机制：回退到第 n 关刚到达时的状态 ============ */
+function doneNotice(label){
+  addLog(label, 'info', '本动作已生效过，没有重复执行。想重新玩：点任务卡右上角的「↺ 重玩本关」；想从零开始：控制台「⟲ 清除全部进度」。');
+  render();
+}
+
+function buildToStage(n){
+  flags = {};
+  quiz = [null, null, null];
+  world = freshWorld();
+  codeLines = initialCodeLines();
+  activeLineId = 'init-line';
+  if(n > 1) doRawCall();
+  if(n > 2){
+    doMakeTemplate();
+    const pr = world.pipe.find(p => p.id === 'prompt');
+    pr.shape = '[SystemMessage("你是通俗科普作家"), HumanMessage("用大白话讲讲黑洞")]';
+    pr.idle = false;
+    world.invocations++;
+    world.lastInput = '{"topic": "黑洞"}';
+    world.lastOutput = '[SystemMessage, HumanMessage("用大白话讲讲黑洞")]';
+    world.runState = 'template.invoke ✓';
+    flags.templateInvoked = true;
+  }
+  if(n > 3){ doMakeModel(); doSwapModel(); }
+  if(n > 4) doAttachParser();
+  if(n > 5){
+    doAssemble();
+    const [a, b, c] = world.pipe;
+    a.shape = '[SystemMessage, HumanMessage("讲讲黑洞")]';
+    b.shape = 'AIMessage("黑洞其实是…")';
+    c.shape = '"黑洞其实是时空的一个漩涡"';
+    a.idle = b.idle = c.idle = false;
+    world.invocations += 3;
+    world.lastInput = 'batch: [{"topic":"黑洞"}, {"topic":"光速"}]';
+    world.lastOutput = '["黑洞其实是…", "光速是宇宙的限速…"]';
+    world.runState = 'chain.batch ✓';
+    flags.chainInvoked = flags.streamed = flags.batched = true;
+  }
+  if(n > 6){
+    doChunk(); doIndex();
+    world.rag.query = '我们公司的报销制度是什么？';
+    world.rag.top = [0, 3];
+    world.rag.retrieved = true;
+    world.invocations++;
+    world.lastInput = '"我们公司的报销制度是什么？"';
+    world.lastOutput = '[chunk#1 报销比例, chunk#4 报销流程]';
+    world.runState = 'retriever ✓';
+    flags.retrieved = true;
+  }
+  if(n > 7){
+    doBuildRagChain();
+    const [pa, pr2, md, ps] = world.pipe;
+    pa.shape = '{context:[chunk#1,chunk#4], question:"报销制度…"}';
+    pr2.shape = '[System("仅根据资料…\\n<2块>"), Human("报销制度…")]';
+    md.shape = 'AIMessage("报销比例…流程…")';
+    ps.shape = '"住宿上限600元/晚；OA提交→主管→财务→打款"';
+    pa.idle = pr2.idle = md.idle = ps.idle = false;
+    world.invocations++;
+    world.lastInput = '"我们公司的报销制度是什么？"';
+    world.lastOutput = '报销分两块：比例上——一线城市住宿每晚上限600元；流程上——OA提交→主管审批→财务复核→打款，超5000元需VP会签。';
+    world.runState = 'rag_chain ✓';
+    flags.ragInvoked = true;
+  }
+  if(n > 8){
+    doMakeTool(); doMakeAgent();
+    world.agent.ran = true;
+    world.agent.stepIdx = 5;
+    world.invocations++;
+    world.lastInput = '"北京今天穿什么？"';
+    world.lastOutput = '今天北京晴，22°C，早晚微凉——长袖单衣即可，不用带伞。';
+    world.runState = 'agent.invoke ✓';
+    flags.agentRan = true;
+  }
+}
+
+function replayStage(){
+  if(world.flowing) return;
+  buildToStage(stage);
+  addLog('↺ 重玩本关', 'info', `状态已回退到「${STAGES[stage].nm}」刚到达时的样子，本关按钮可以重新点一遍。`);
+  jumpStage(stage);
+}
+
+let wipeArmed = null;
+function wipeAllProgress(){
+  if(world.flowing) return;
+  if(!wipeArmed){
+    wipeArmed = setTimeout(()=>{ wipeArmed = null; render(); }, 3000);
+    addLog('⟲ 清除全部进度', 'err', '再点一次确认（3 秒内）：将清空存档并回到第 0 关起点。');
+    render();
+    return;
+  }
+  clearTimeout(wipeArmed);
+  try{ localStorage.removeItem(KEY); }catch(e){}
+  location.reload();
+}
+
+function escapeHtml(str){
+  if(!str) return '';
+  return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+/* ============ 持久化 ============ */
+function saveState(){
+  try{
+    localStorage.setItem(KEY, JSON.stringify({ stage, flags, quiz }));
+  }catch(e){}
+}
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(KEY);
+    if(raw){
+      const data = JSON.parse(raw);
+      if(typeof data.stage === 'number') stage = data.stage;
+      if(data.flags) flags = data.flags;
+      if(Array.isArray(data.quiz)) quiz = data.quiz;
+    }
+  }catch(e){}
+}
+
+window.onload = function(){
+  loadState();
+  render();
+};
+</script>
+</body>
+</html>

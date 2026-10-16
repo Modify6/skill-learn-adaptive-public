@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>C++ 虚函数与多态 —— 静态绑定 · 虚表查寻</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#151f36; --panel2:#0f1729;
+    --line:#26334d; --text:#dde6f5; --muted:#a6b9d9;
+    --blue:#3b82f6; --green:#22c55e; --purple:#a855f7;
+    --amber:#f5b544; --cyan:#38bdf8; --red:#f87171;
+    --mono:"Cascadia Code",Consolas,"JetBrains Mono",monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:radial-gradient(1200px 600px at 50% -100px,#16223d 0%,var(--bg) 60%);
+    color:var(--text);
+    font-family:system-ui,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+    padding:30px 18px 70px; line-height:1.65;
+  }
+  body.shake{animation:shake .5s;}
+  @keyframes shake{
+    0%,100%{transform:translateX(0);} 20%{transform:translateX(-9px);}
+    40%{transform:translateX(8px);} 60%{transform:translateX(-6px);} 80%{transform:translateX(4px);}
+  }
+  .wrap{max-width:1240px; margin:0 auto;}
+
+  /* ---------- header ---------- */
+  h1{font-size:26px; letter-spacing:.5px;}
+  h1 .dot-word{color:var(--amber);}
+  .sub{color:var(--muted); margin-top:6px; font-size:14.5px;}
+  .ladder{
+    margin-top:12px; padding:8px 14px; border:1px dashed var(--line); border-radius:10px;
+    font-size:12.5px; color:var(--muted); background:rgba(255,255,255,.02);
+    font-family:var(--mono);
+  }
+  .ladder b{color:var(--cyan); font-weight:600;}
+  .ladder .bad{color:var(--red);}
+
+  /* ---------- landing table (机制落地表) ---------- */
+  .ltable{margin-top:12px; border:1px solid var(--line); border-radius:10px; overflow:hidden; font-size:12px;}
+  .ltable table{width:100%; border-collapse:collapse;}
+  .ltable th{
+    background:rgba(255,255,255,.03); color:var(--muted); font-size:11px; font-weight:600;
+    padding:6px 10px; text-align:left; border-bottom:1px solid var(--line); letter-spacing:1px;
+  }
+  .ltable td{padding:6px 10px; border-bottom:1px solid rgba(38,51,77,.5); vertical-align:top;}
+  .ltable tr:last-child td{border-bottom:none;}
+  .ltable .nick{color:var(--amber); font-weight:700; font-family:var(--mono); white-space:nowrap;}
+  .ltable .real{color:var(--cyan); font-family:var(--mono);}
+  .ltable .phys{color:var(--text);}
+  .ltable .life{color:var(--muted);}
+
+  /* ---------- journey rail ---------- */
+  .journey{margin-top:22px;}
+  .rail{display:flex; align-items:center; gap:6px; overflow-x:auto; padding:4px 2px 10px;}
+  .pill{
+    flex:none; font-size:11.5px; padding:4px 11px; border-radius:999px;
+    border:1px solid var(--line); color:var(--muted); white-space:nowrap; background:var(--panel2);
+  }
+  .pill.done{color:var(--green); border-color:rgba(34,197,94,.55);}
+  .pill.current{color:var(--amber); border-color:var(--amber); box-shadow:0 0 10px rgba(245,181,68,.25); font-weight:700;}
+  .sep{flex:none; width:14px; height:2px; background:var(--line);}
+
+  /* ---------- quest card ---------- */
+  .quest{
+    border:1px solid rgba(245,181,68,.45); border-left:4px solid var(--amber);
+    background:linear-gradient(90deg, rgba(245,181,68,.07), var(--panel2) 45%);
+    border-radius:12px; padding:14px 18px;
+  }
+  .quest.free{border-color:rgba(34,197,94,.45); border-left-color:var(--green);
+    background:linear-gradient(90deg, rgba(34,197,94,.07), var(--panel2) 45%);}
+  .quest-head{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .quest-stage{font-family:var(--mono); font-size:11px; color:var(--amber); letter-spacing:1px;}
+  .quest-title{font-size:16px; font-weight:700;}
+  .skip{margin-left:auto; font-size:12px; color:var(--muted); cursor:pointer; border:none; background:none; text-decoration:underline dotted;}
+  .skip:hover{color:var(--text);}
+  .q-row{display:flex; gap:12px; margin-top:9px; font-size:13.5px;}
+  .q-row .k{flex:none; width:88px; color:var(--muted); font-weight:600;}
+  .q-row .v{color:var(--text);}
+  .q-row .v b{color:var(--amber);}
+  .quest .go{margin-top:12px;}
+  .quest .go button{
+    font-size:13px; padding:7px 18px; border-color:var(--amber); color:var(--amber);
+    font-family:system-ui,"Microsoft YaHei",sans-serif; font-weight:700;
+  }
+
+  /* quiz */
+  .quiz{margin-top:6px;}
+  .qitem{margin-top:12px; padding-top:10px; border-top:1px dashed var(--line);}
+  .qitem .qtext{font-size:13.5px; font-weight:600;}
+  .opts{display:flex; flex-direction:column; gap:6px; margin-top:8px;}
+  .opt{
+    text-align:left; font-size:12.5px; font-family:var(--mono),system-ui,sans-serif;
+    background:#182338; color:var(--text); border:1px solid var(--line); border-radius:6px;
+    padding:8px 12px; cursor:pointer;
+  }
+  .opt.correct{border-color:var(--green); color:var(--green); background:rgba(34,197,94,.1);}
+  .opt.wrong{border-color:var(--red); color:var(--red); background:rgba(248,113,113,.08);}
+  .opt.dim{opacity:.4;}
+  .qexpl{font-size:12px; color:var(--muted); margin-top:6px;}
+
+  /* ---------- crash banner ---------- */
+  .crashbar{
+    margin-top:18px; border:1px solid rgba(248,113,113,.6); border-radius:12px;
+    background:linear-gradient(90deg, rgba(248,113,113,.16), rgba(248,113,113,.04));
+    padding:12px 18px; font-size:14px; color:#ffc9c9; display:none;
+  }
+  .crashbar.show{display:flex; align-items:center; gap:12px; flex-wrap:wrap;}
+  .crashbar .boom{font-size:22px;}
+  .crashbar b{color:#fff;}
+  .crashbar .fix{margin-left:auto;}
+
+  /* ---------- stage (3 columns) ---------- */
+  .stage-scroll{overflow-x:auto; margin-top:20px; padding-bottom:6px;}
+  .stage{
+    min-width:1120px;
+    display:grid;
+    grid-template-columns:1.05fr 1.25fr 1.1fr;
+    gap:0 12px; align-items:stretch;
+  }
+  .col-head{margin-bottom:10px; text-align:center;}
+  .col-head .nick{font-size:17px; font-weight:700;}
+  .col-head .real{font-family:var(--mono); font-size:11.5px; color:var(--cyan); letter-spacing:1px; text-transform:uppercase;}
+  .col-head .duty{font-size:12px; color:var(--muted); margin-top:2px;}
+  .col{
+    background:var(--panel2); border:1px solid var(--line); border-radius:14px;
+    padding:14px; display:flex; flex-direction:column; gap:12px; min-height:490px;
+  }
+  .c1 .nick{color:var(--cyan);} .c2 .nick{color:var(--amber);} .c3 .nick{color:var(--green);}
+
+  /* Code Column */
+  .codebox{
+    background:#080d18; border:1px solid var(--line); border-radius:10px;
+    padding:12px; font-family:var(--mono); font-size:12px; line-height:1.75;
+    flex:1; overflow-y:auto;
+  }
+  .codeline{padding:1px 6px; border-radius:4px; transition:background .2s;}
+  .codeline.active{background:rgba(245,181,68,.18); color:var(--amber); border-left:3px solid var(--amber);}
+  .codeline .kw{color:#ff7b72;}
+  .codeline .tp{color:#79c0ff;}
+  .codeline .fn{color:#d2a8ff;}
+  .codeline .cm{color:#8b949e; font-style:italic;}
+  .codeline .tag{color:var(--green); font-weight:bold;}
+
+  /* Object Memory Layout Column */
+  .obj-box{display:flex; flex-direction:column; gap:10px; flex:1;}
+  .mem-card{
+    background:#0d1424; border:1px solid var(--line); border-radius:10px;
+    padding:10px 12px; font-family:var(--mono); font-size:12px;
+    transition:all .3s ease; position:relative;
+  }
+  .mem-card.active{border-color:var(--amber); box-shadow:0 0 10px rgba(245,181,68,.3);}
+  .mc-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;}
+  .mc-name{font-weight:700; color:var(--text); font-size:13px;}
+  .mc-type{font-size:10.5px; color:var(--muted);}
+  .byte-slot{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:4px 8px; border-radius:4px; margin-top:4px; font-size:11px;
+    background:#162238; border:1px solid var(--line);
+  }
+  .slot-vptr{background:rgba(245,181,68,.12); border-color:rgba(245,181,68,.4); color:var(--amber); font-weight:bold;}
+  .slot-data{color:var(--text);}
+  .slot-leak{background:rgba(248,113,113,.12); border-color:rgba(248,113,113,.4); color:var(--red);}
+
+  /* VTable Column */
+  .vtable-box{display:flex; flex-direction:column; gap:10px; flex:1;}
+  .vt-card{
+    background:#0a0f1d; border:1px solid var(--line); border-radius:10px;
+    padding:10px 12px; font-family:var(--mono); font-size:12px;
+  }
+  .vt-card.active{border-color:var(--green); box-shadow:0 0 12px rgba(34,197,94,.25);}
+  .vt-head{color:var(--green); font-weight:bold; font-size:12px; margin-bottom:6px; border-bottom:1px dashed var(--line); padding-bottom:4px;}
+  .vt-entry{
+    display:flex; justify-content:space-between; padding:3px 6px; border-radius:4px;
+    font-size:11px; margin-top:2px;
+  }
+  .vt-entry.hl{background:rgba(34,197,94,.18); color:var(--green); font-weight:bold;}
+
+  /* Stats Bar */
+  .stats-bar{
+    display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;
+    margin-top:auto; padding-top:10px; border-top:1px dashed var(--line);
+  }
+  .stat-item{background:#0e172a; padding:6px 8px; border-radius:6px; border:1px solid var(--line); text-align:center;}
+  .stat-val{font-size:14px; font-weight:700; color:var(--text); font-family:var(--mono);}
+  .stat-val.good{color:var(--green);}
+  .stat-val.warn{color:var(--amber);}
+  .stat-val.bad{color:var(--red);}
+  .stat-lbl{font-size:10px; color:var(--muted);}
+
+  /* ---------- console ---------- */
+  .console{margin-top:26px; background:var(--panel2); border:1px solid var(--line); border-radius:14px; overflow:hidden;}
+  .console-head{
+    display:flex; align-items:center; gap:10px; padding:10px 16px;
+    border-bottom:1px solid var(--line); background:rgba(255,255,255,.02);
+    font-size:13px; color:var(--muted); flex-wrap:wrap;
+  }
+  .btns{display:flex; gap:8px; flex-wrap:wrap; margin-left:auto;}
+  button{
+    font-family:var(--mono); font-size:12px; color:var(--text);
+    background:#1d2a47; border:1px solid var(--line); border-radius:8px;
+    padding:6px 12px; cursor:pointer; transition:all .15s;
+  }
+  button:hover:not(:disabled){border-color:var(--amber); color:var(--amber); transform:translateY(-1px);}
+  button:disabled{opacity:.3; cursor:not-allowed;}
+  button.primary{border-color:var(--amber); color:var(--amber);}
+  button.action-btn{border-color:var(--cyan); color:var(--cyan);}
+  button.fix-btn{border-color:var(--green); color:var(--green);}
+  button.danger-btn{border-color:var(--red); color:var(--red);}
+
+  .logbox{padding:12px 16px; max-height:240px; overflow-y:auto; font-family:var(--mono); font-size:12.5px;}
+  .logline{margin-bottom:8px;}
+  .logline .cmd{color:var(--amber);}
+  .logline .expl{color:var(--muted); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:12px; margin-top:1px;}
+  .logline .expl b{color:var(--amber); font-weight:600;}
+  .logline.info{color:var(--cyan); font-family:system-ui,"Microsoft YaHei",sans-serif;}
+  .logline.ok{color:var(--green); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:12.5px;}
+  .logline.err{color:var(--red); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:12.5px;}
+
+  /* ---------- details cards ---------- */
+  .why{margin-top:22px; display:grid; grid-template-columns:repeat(3,1fr); gap:12px;}
+  .why-card{background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:14px 16px; font-size:13px;}
+  .why-card h3{font-size:13.5px; margin-bottom:6px;}
+  .why-card p{color:var(--muted); font-size:12.5px;}
+  .why-card b{color:var(--text);}
+  .w1 h3{color:var(--cyan);} .w2 h3{color:var(--amber);} .w3 h3{color:var(--green);}
+
+  footer{margin-top:26px; text-align:center; color:var(--muted); font-size:12px;}
+  @media (max-width:900px){ .why{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>C++ 虚函数与多态：<span class="dot-word">静态绑定</span> · <span class="dot-word">虚表查寻</span></h1>
+  <p class="sub">治「基类指针调用永远调不到派生类、析构不全引发隐蔽泄漏、多态切片静默失效」—— 从编译器的两难出发，透视 vptr 虚表指针与 vtable 函数地址表的底层协作。</p>
+
+  <div class="ladder">
+    核心两派：<span class="bad">静态绑定（无 virtual）＝按指针声明类型在编译期定死跳转地址，0 寻址开销，但多态失效！</span> ｜ <span style="color:var(--green)">动态绑定（加 virtual）＝运行时通过对象自带的 vptr 查虚表，同一行代码执行不同实现！</span>
+    &nbsp;‖&nbsp; C++ 价值观：<b>“不为你用不到的东西付费”</b>——普通类对象不带 vptr（省 8 字节且可内联）；声明了 virtual 的类才背负查表开销。
+  </div>
+
+  <!-- 动机卡：编译器的两难抉择 -->
+  <div class="ltable" style="border-color:rgba(245,181,68,.4);margin-top:12px;">
+    <table>
+      <tr><th style="width:130px">🤔 编译器的两难</th><th>当你写下 Base* p = ...; p->speak(); 编译器在翻译这行汇编时的抉择</th></tr>
+      <tr><td class="real">编译期已知条件</td><td class="phys">编译器只知道变量 p 的声明类型是 <code>Base*</code>，<b>根本不知道</b>运行到这一行时 p 究竟指向 Base、DerivedA 还是 DerivedB。</td></tr>
+      <tr><td class="real">策略一：求快 (默认)</td><td class="phys">编译期定死跳转：直接生成 <code>call Base::speak</code>。<b>零额外寻址、可强力内联</b>；但若 p 指向 Derived，调用结果彻底错误。</td></tr>
+      <tr><td class="real">策略二：求对 (virtual)</td><td class="phys">运行时动态查寻：让每个对象头部自备 <code>vptr</code>，指令变为 <code>call *vptr[0]</code>。<b>保证正确</b>；代价是对象多占 8 字节 + 一次内存解引用 + 无法内联。</td></tr>
+    </table>
+  </div>
+
+  <!-- 机制落地表 -->
+  <div class="ltable">
+    <table>
+      <tr><th>概念 / 术语</th><th>物理上是什么</th><th>本质角色</th><th>核心职责与规矩</th></tr>
+      <tr><td class="real">vptr（虚表指针）</td><td class="phys">编译器藏在对象内存首部的指针（64位下占 8 字节）</td><td class="nick">“导航指针”</td><td>在构造对象时由编译器自动注入，指向所属类的虚函数表</td></tr>
+      <tr><td class="real">vtable（虚函数表）</td><td class="phys">编译器在常量数据区（.rodata）为每个类生成的一张只读函数指针数组</td><td class="life">类的函数地址簿</td><td>全类共享一份，记录所有 virtual 函数的真实地址</td></tr>
+      <tr><td class="real">override 关键字</td><td class="phys">编译期语法注解</td><td class="life">质检质保卡</td><td>强迫编译器检查该函数是否真的重写了基类虚函数，防止手滑签名不匹配</td></tr>
+      <tr><td class="real">virtual 析构函数</td><td class="phys">将析构函数加入虚函数表</td><td class="life">防泄漏守门员</td><td>基类指针 delete 时能动态定位到派生类析构函数，保证完整释放</td></tr>
+      <tr><td class="real">对象切片 (Slicing)</td><td class="phys">值拷贝 Base b = *p; 只复制了基类成员，丢弃了派生类字段与 vptr</td><td class="bad">多态失效陷阱</td><td>多态<b>只能通过指针或引用生效</b>！传值会导致虚表指针丢失</td></tr>
+    </table>
+  </div>
+
+  <!-- journey rail -->
+  <div class="journey">
+    <div class="rail" id="rail"></div>
+    <div class="quest" id="quest"></div>
+  </div>
+
+  <!-- crash / error banner -->
+  <div class="crashbar" id="crashbar">
+    <span class="boom">🛑</span>
+    <span id="crashtext"></span>
+    <button class="fix-btn fix" id="b-revive">↺ 恢复状态（继续）</button>
+  </div>
+
+  <!-- visual stage (3 cols) -->
+  <div class="stage-scroll">
+    <div class="stage">
+
+      <!-- Col 1: Code -->
+      <div class="col c1">
+        <div class="col-head">
+          <div class="nick">C++ 代码与执行</div>
+          <div class="real">SOURCE CODE & ASSEMBLY</div>
+          <div class="duty">观察类定义、virtual 声明与底层调用指令</div>
+        </div>
+        <div class="codebox" id="codebox"></div>
+      </div>
+
+      <!-- Col 2: Object Memory Layout -->
+      <div class="col c2">
+        <div class="col-head">
+          <div class="nick">对象内存物理布局</div>
+          <div class="real">MEMORY LAYOUT & VPTR</div>
+          <div class="duty">透视对象内部字节分布（首部 8 字节 vptr）</div>
+        </div>
+        <div class="obj-box" id="obj-box"></div>
+      </div>
+
+      <!-- Col 3: Virtual Function Table (vtable) -->
+      <div class="col c3">
+        <div class="col-head">
+          <div class="nick">类的虚函数表（vtable）</div>
+          <div class="real">VTABLE & JUMP TARGETS</div>
+          <div class="duty">观察全类共享的函数指针数组与实际跳转</div>
+        </div>
+        <div class="vtable-box">
+          <div id="vtable-list"></div>
+
+          <!-- Stats Dashboard -->
+          <div class="stats-bar">
+            <div class="stat-item">
+              <div class="stat-val" id="stat-bytes">0 B</div>
+              <div class="stat-lbl">对象额外内存开销</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-val" id="stat-lookup">直接调用</div>
+              <div class="stat-lbl">寻址机制</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-val good" id="stat-inline">可内联</div>
+              <div class="stat-lbl">内联优化潜力</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Console Controls & Logs -->
+  <div class="console">
+    <div class="console-head">
+      <span>控制台 & 操作面板</span>
+      <div class="btns" id="btns"></div>
+    </div>
+    <div class="logbox" id="logbox"></div>
+  </div>
+
+  <!-- Why cards -->
+  <div class="why">
+    <div class="why-card w1">
+      <h3>🔍 为什么普通类不默认带 vptr？</h3>
+      <p>Java 等语言所有对象都有类似开销。C++ 坚持<b>“零开销抽象”</b>：如果一个类只是存三个 <code>int</code> 的简单结构体，它的大小就是 12 字节；一旦加上 virtual，由于 8 字节 vptr 和内存对齐，大小会瞬间翻倍成 24 字节！不要的功能决不强制塞给你。</p>
+    </div>
+    <div class="why-card w2">
+      <h3>⚠️ 为什么构造函数中调虚函数没有多态？</h3>
+      <p>对象构造是按层进行的：先构造基类，此刻派生类的成员尚未初始化。在执行基类构造函数时，对象的 <code>vptr</code> 暂时指向基类的虚表！如果此时调到派生类重写的函数并访问未初始化的派生类成员，会导致致命崩溃！</p>
+    </div>
+    <div class="why-card w3">
+      <h3>🛡️ 纯虚函数 = 0 的物理本质是什么？</h3>
+      <p><code>virtual void f() = 0;</code> 的物理本质就是将该类虚表里的该项函数地址填为 <code>nullptr</code>（或指向 <code>__cxa_pure_virtual</code> 报错函数）。既然表里缺了地址，编译器就严禁直接实例化该类！</p>
+    </div>
+  </div>
+
+  <footer>
+    C++ 虚函数核心链路：类声明 virtual → 编译期生成 vtable 虚表 → 构造时对象首部写入 vptr → 运行时 call *vptr[idx] 动态跳转 ｜ 精准驾驭多态开销
+  </footer>
+
+</div>
+
+<script>
+const KEY = 'cpp-vtable-polymorphism-journey-v1';
+
+/* ============ 关卡定义 ============ */
+const STAGES = [
+  { nm:'起点·导览', stageTag:'STAGE 0 / 8', title:'认清地形：编译器的两难 · 两大底层零件',
+    start:'欢迎来到 C++ 虚函数与多态深水区沙盒！仔细阅读上方「编译器的两难抉择」：求快（静态绑定）vs 求对（动态绑定）。',
+    task:'熟悉三列舞台：<b>C++ 代码列</b>、<b>对象内存物理布局（看前 8 字节）</b>、<b>只读虚函数表 vtable</b>。点击右侧「开始旅程」。',
+    watch:'带着问题思考：当指针声明为基类类型时，代码如何知道实际指向的是哪一个派生类的重写函数？',
+    pass:()=>flags.started },
+
+  { nm:'① 静态绑定的局限', stageTag:'STAGE 1 / 8', title:'没有 virtual：编译器死守声明类型',
+    start:'类声明中未加 virtual。代码执行 Base* p = new Derived(); p->speak();',
+    task:'点击 <b>执行静态调用 p->speak()</b>，观察实际调用的函数。',
+    watch:'看日志与汇编：虽然指针指向 Derived 对象，但由于未声明 virtual，编译器在编译期直接写死了 <code>call Base::speak</code>！调用结果完全错误！',
+    pass:()=>flags.staticCalled },
+
+  { nm:'② 加 virtual 激活虚表', stageTag:'STAGE 2 / 8', title:'一个关键字：激活 vptr 与虚表生成',
+    start:'给基类函数加上 virtual 声明：virtual void speak();',
+    task:'点击 <b>声明 virtual void speak()</b> ➔ 点击 <b>执行动态调用 p->speak()</b>。',
+    watch:'看第二列与第三列：对象首部注入了 <b>8 字节 vptr</b>！常量区生成了 <b>vtable 虚表</b>！底层指令变成了 <code>call *vptr[0]</code>，成功动态跳转到 Derived::speak！',
+    pass:()=>flags.virtualAdded && flags.dynamicCalled },
+
+  { nm:'③ 内存物理拆解', stageTag:'STAGE 3 / 8', title:'透视对象内存：vptr 占据前 8 字节',
+    start:'虚函数不是凭空生效的，它带来了真实的内存开销。',
+    task:'点击 <b>🔍 透视对象内部字节分布</b>，查看内存对齐账目。',
+    watch:'看第二列内存卡片：对象首部 <code>+0x00</code> 是 8 字节的虚表指针 vptr；紧随其后是成员变量。即使新建 1,000 个 Derived 对象，它们首部的 vptr 都指向<b>同一张常量虚表</b>！',
+    pass:()=>flags.xrayDone },
+
+  { nm:'④ override 编译质检', stageTag:'STAGE 4 / 8', title:'签名手滑：意外变成重载而非重写',
+    start:'派生类写重写函数时不小心把参数或 const 写错（例如多了一个 int 参数）。',
+    task:'点击 <b>派生类手滑写错签名</b> ➔ 查看虚表变化 ➔ 点击 <b>加 override 质检</b>。',
+    watch:'签名写错＝没有重写虚表，程序依然调基类版本！加了 <code>override</code> 后，编译器在编译期当场红字报错：“标了 override 但未覆盖任何基类虚函数”！',
+    pass:()=>flags.overrideFixed },
+
+  { nm:'⑤ 对象切片陷阱', stageTag:'STAGE 5 / 8', title:'多态必须走指针或引用：传值导致切片',
+    start:'如果不用指针，而是用值传递：Base b = *p; b.speak();',
+    task:'点击 <b>执行值拷贝切片 Base b = *p;</b>。',
+    watch:'<b>多态毁灭现场：</b>按值拷贝时，只有 Base 的成员变量被拷了过去，<b>Derived 独有的成员与 vptr 被彻底切除！</b>b 变成了一个普通的纯粹 Base 对象，多态静默失效！',
+    pass:()=>flags.slicingSeen },
+
+  { nm:'⑥ 虚析构函数守门', stageTag:'STAGE 6 / 8', title:'delete 基类指针：派生类内存进坟场',
+    start:'Derived 拥有自己的堆内存资源（如 char* buffer）。基类析构函数未声明 virtual。',
+    task:'点击 <b>delete 基类指针 (非虚析构)</b> ➔ 观察内存泄漏 ➔ 点击 <b>声明 virtual ~Base() 修复</b>。',
+    watch:'非虚析构下：delete p 仅执行了 ~Base，Derived 自身的析构函数未被执行，堆内存永久泄漏！析构函数加 virtual 后，通过虚表先调 ~Derived 再调 ~Base，完美释放！',
+    pass:()=>flags.dtorLeakSeen && flags.dtorFixed },
+
+  { nm:'⑦ 纯虚函数与接口', stageTag:'STAGE 7 / 8', title:'= 0 的物理本质：虚表项置空，禁造实例',
+    start:'基类将函数声明为纯虚函数：virtual void speak() = 0;',
+    task:'点击 <b>声明纯虚函数 = 0</b> ➔ 尝试 new Base() (编译报错) ➔ new Derived()。',
+    watch:'纯虚函数将虚表项标记为 null。基类变成抽象类，任何直接实例化 Base 的行为都会被编译器当场拦截，强迫派生类必须实现它！',
+    pass:()=>flags.pureVirtualDone },
+
+  { nm:'⑧ 毕业测验', stageTag:'STAGE 8 / 8', title:'毕业测：3 道硬核实战题',
+    start:'恭喜你走完 7 关！静态绑定、动态查表、vptr 8 字节开销、override 质检、对象切片与虚析构函数，你全透视过了。',
+    task:'答对下面 3 道单选题即可毕业（答错可重选）。',
+    watch:'每题均配有详尽的原理解释。',
+    pass:()=>quiz.length===3 && quiz.every(v=>v && v.ok) },
+
+  { nm:'⑨ 自由模式', stageTag:'STAGE 9 / 8', title:'自由沙盒：随时实验',
+    start:'你已经完全掌握了 C++ 虚函数与多态的核心心智模型！',
+    task:'所有按钮已完全解锁，你可以随意切换 virtual、测试调用指令、检查内存布局。',
+    watch:'探索不同类层次下的虚表流转。',
+    pass:()=>true }
+];
+
+const QUIZ = [
+  { q:'1 / 3 · 在 64 位系统下，一个没有任何成员变量的类（class Empty {};）大小为 1 字节。若给它加上一个虚函数（virtual void f();），它的大小会变成多少？',
+    opts:[
+      '依然是 1 字节，因为函数代码存放在代码段',
+      '变成 8 字节：因为类中多出了一个隐藏的 8 字节虚表指针 (vptr)',
+      '变成 4 字节：虚表指针在 64 位下是压缩指针'
+    ],
+    ans:1,
+    expl:'真相：一旦类中存在至少一个 virtual 函数，编译器就会在对象物理内存首部插入一个 8 字节的 vptr 指针，用于在运行时寻址虚表。' },
+
+  { q:'2 / 3 · 为什么通过基类指针 delete 派生类对象时，基类的析构函数必须声明为 virtual？',
+    opts:[
+      '这是 C++ 标准库语法糖，不加也可以自动正常释放',
+      '若非虚析构，delete 基类指针只会调用基类析构函数，派生类独有的资源（如堆内存、文件句柄）不会被释放，造成泄漏',
+      '加 virtual 会加快内存回收速度'
+    ],
+    ans:1,
+    expl:'第⑥关亲身验证：非虚调用按指针声明类型绑定，只会调用 ~Base()。必须将析构函数声明为 virtual，才能通过虚表动态定位到 ~Derived()。' },
+
+  { q:'3 / 3 · 代码 Base b = *derived_ptr; b.speak(); 为什么即使 speak 是虚函数也不会产生多态？',
+    opts:[
+      '因为 Derived 必须用 shared_ptr 包裹才能支持多态',
+      '对象切片（Slicing）：按值拷贝只复制了基类成员，Derived 的 vptr 根本没被拷过来，b 只是个纯粹的 Base 对象',
+      '因为 speak 没有在 main 函数前显式前向声明'
+    ],
+    ans:1,
+    expl:'第⑤关经典陷阱：按值传递会发生对象切片，虚表指针丢失。多态必须通过指针（Base*）或引用（Base&）才能生效！' },
+];
+
+/* ============ 核心状态 ============ */
+let stage = 0;
+let flags = {};
+let quiz = [null, null, null];
+let crashActive = false;
+
+// 状态变量
+let hasVirtual = false;
+let hasOverride = false;
+let hasVirtualDtor = false;
+let isPureVirtual = false;
+let signatureMismatch = false;
+
+// 内存与对象
+let currentObj = {
+  name: 'p (指针)',
+  type: 'Base*',
+  pointsTo: 'Derived 实例',
+  bytes: [
+    { name: 'vptr (虚表指针)', size: '8 字节', val: '&vtable_Derived', cls: 'slot-vptr' },
+    { name: 'Base::id', size: '4 字节', val: '101', cls: 'slot-data' },
+    { name: 'Derived::data', size: '8 字节', val: '0x7fff1234', cls: 'slot-data' }
+  ]
+};
+
+// 统计
+let stats = {
+  extraBytes: '8 B',
+  lookup: 'vptr[0] 查表',
+  canInline: '不可内联'
+};
+
+// C++ 代码与执行行
+let codeLines = [
+  { text: '// C++ Virtual Function & Polymorphism', cls: 'cm' },
+  { text: 'class Base {', cls: 'kw' },
+  { text: 'public:', cls: 'kw' },
+  { text: '    void speak() { cout << "Base"; }', cls: 'fn', id: 'base-speak' },
+  { text: '    ~Base() { /* 普通析构 */ }', cls: 'fn', id: 'base-dtor' },
+  { text: '};', cls: 'kw' },
+  { text: '', cls: '' },
+  { text: 'class Derived : public Base {', cls: 'kw' },
+  { text: 'public:', cls: 'kw' },
+  { text: '    void speak() { cout << "Derived"; }', cls: 'fn', id: 'derived-speak' },
+  { text: '    ~Derived() { delete[] buf; }', cls: 'fn', id: 'derived-dtor' },
+  { text: '};', cls: 'kw' },
+  { text: '', cls: '' },
+  { text: 'int main() {', cls: 'kw' },
+  { text: '    Base* p = new Derived();', cls: 'tp', id: 'new-line' },
+  { text: '    p->speak();', cls: 'tp', id: 'call-line' },
+  { text: '}', cls: 'kw' }
+];
+let activeLineId = 'call-line';
+
+// 日志
+const logLines = [];
+function addLog(cmd, type, expl){
+  logLines.unshift({cmd, type, expl});
+  if(logLines.length > 32) logLines.pop();
+}
+
+/* ============ 业务动作 ============ */
+
+// 1. 静态调用
+function doStaticCall(){
+  if(crashActive) return;
+  activeLineId = 'base-speak';
+  addLog('p->speak(); // 静态绑定', 'err', '【输出：Base】编译器只认指针类型 Base*！底层直接生成 call Base::speak 指令。多态完全失效！');
+  flags.staticCalled = true;
+  render();
+}
+
+// 2. 声明 virtual void speak()
+function doAddVirtual(){
+  if(crashActive) return;
+  hasVirtual = true;
+  codeLines[3] = { text: '    virtual void speak() { cout << "Base"; }', cls: 'tag', id: 'base-speak' };
+  activeLineId = 'base-speak';
+
+  stats.extraBytes = '8 B';
+  stats.lookup = 'call *vptr[0]';
+  stats.canInline = '不可内联 (动态)';
+
+  addLog('virtual void speak();', 'ok', '【启用 virtual】：基类与派生类均生成虚表 vtable！对象首部自动注入 8 字节 vptr 指针！');
+  flags.virtualAdded = true;
+  render();
+}
+
+// 3. 动态调用
+function doDynamicCall(){
+  if(crashActive) return;
+  if(!hasVirtual){
+    doStaticCall();
+    return;
+  }
+  activeLineId = 'derived-speak';
+  addLog('p->speak(); // 动态绑定', 'ok', '【输出：Derived】指令为 call *vptr[0]！运行时先读 p 首部的 vptr，跳转到 Derived 虚表第 0 项，正确执行 Derived::speak！');
+  flags.dynamicCalled = true;
+  render();
+}
+
+// 4. 透视对象内部
+function doXray(){
+  if(crashActive) return;
+  addLog('透视内存布局', 'info', '【对象内存结构】：首地址 0x00 处存放 8 字节 vptr；紧随其后是 Base 成员，再其后是 Derived 扩展字段。同类的所有实例共享同一张只读虚表。');
+  flags.xrayDone = true;
+  render();
+}
+
+// 5. 模拟手滑写错签名
+function doSignatureMismatch(){
+  if(crashActive) return;
+  signatureMismatch = true;
+  codeLines[9] = { text: '    void speak(int dummy) { cout << "Derived"; } // 手滑多个参数！', cls: 'fn', id: 'derived-speak' };
+  activeLineId = 'derived-speak';
+  addLog('void speak(int dummy);', 'err', '【手滑错误】：派生类签名多了一个参数！编译器认为这是全新的重载函数，虚表里的 speak 依然是 Base 版本！');
+  render();
+}
+
+// 修复 override
+function doFixOverride(){
+  if(crashActive) return;
+  signatureMismatch = false;
+  hasOverride = true;
+  codeLines[9] = { text: '    void speak() override { cout << "Derived"; } // 质检通过', cls: 'tag', id: 'derived-speak' };
+  activeLineId = 'derived-speak';
+  addLog('void speak() override;', 'ok', '【override 质检护航】：强迫编译器校验覆盖关系！签名完全对齐，虚表第 0 项稳固更新为 &Derived::speak！');
+  flags.overrideFixed = true;
+  render();
+}
+
+// 6. 对象切片陷阱
+function doSlicing(){
+  crashActive = true;
+  document.body.classList.add('shake');
+  setTimeout(()=>document.body.classList.remove('shake'), 500);
+
+  const crashBar = document.getElementById('crashbar');
+  const crashText = document.getElementById('crashtext');
+  crashText.innerHTML = '<b>⚠️ 对象切片（Object Slicing）发生！</b> 你执行了 <code>Base b = *p;</code>（值拷贝）！Derived 独有的成员和 8 字节 vptr 被强制切除！b 变成了纯 Base，多态彻底丧失！';
+  crashBar.classList.add('show');
+
+  addLog('Base b = *p; b.speak();', 'err', '💥 切片陷阱：多态只走指针或引用！按值赋值导致派生类信息和 vptr 彻底丢失，输出退化为 Base！');
+  flags.slicingSeen = true;
+  render();
+}
+
+// 7. 析构函数泄漏与修复
+function doDtorLeak(){
+  if(hasVirtualDtor){
+    addLog('delete p;', 'ok', '【虚析构安全释放】：通过虚表先调用 ~Derived 释放派生类堆内存，再调用 ~Base 销毁基座，0 泄漏！');
+    return;
+  }
+  crashActive = true;
+  document.body.classList.add('shake');
+  setTimeout(()=>document.body.classList.remove('shake'), 500);
+
+  const crashBar = document.getElementById('crashbar');
+  const crashText = document.getElementById('crashtext');
+  crashText.innerHTML = '<b>🚨 内存泄漏事故！</b> <code>delete p;</code> 时基类析构函数没有 virtual！编译器只静态调用了 <code>~Base()</code>，Derived 独有的动态数组 <code>delete[] buf</code> 永远未被执行！';
+  crashBar.classList.add('show');
+
+  addLog('delete p; // 非虚析构', 'err', '💥 泄漏：Derived 专属堆内存未被回收！基类指针删除派生对象时，基类析构必须是 virtual！');
+  flags.dtorLeakSeen = true;
+  render();
+}
+
+function doFixVirtualDtor(){
+  if(crashActive){
+    crashActive = false;
+    document.getElementById('crashbar').classList.remove('show');
+  }
+  hasVirtualDtor = true;
+  codeLines[4] = { text: '    virtual ~Base() { /* 虚析构 */ }', cls: 'tag', id: 'base-dtor' };
+  activeLineId = 'base-dtor';
+  addLog('virtual ~Base();', 'ok', '【基类析构加 virtual】：析构函数正式登记进虚表第 1 项！delete 时将按对象类型完整逐层释放，杜绝泄漏！');
+  flags.dtorFixed = true;
+  render();
+}
+
+// 8. 纯虚函数
+function doPureVirtual(){
+  if(crashActive) return;
+  isPureVirtual = true;
+  codeLines[3] = { text: '    virtual void speak() = 0; // 纯虚函数', cls: 'tag', id: 'base-speak' };
+  activeLineId = 'base-speak';
+  addLog('virtual void speak() = 0;', 'ok', '【纯虚函数生效】：Base::vtable[0] 填为 0 (nullptr)。Base 成为抽象接口类，禁止直接实例化，强迫派生类实现！');
+  flags.pureVirtualDone = true;
+  render();
+}
+
+function doRevive(){
+  crashActive = false;
+  document.getElementById('crashbar').classList.remove('show');
+  render();
+}
+
+/* ============ 渲染与关卡系统 ============ */
+
+function renderRail(){
+  const rail = document.getElementById('rail');
+  rail.innerHTML = STAGES.map((s, idx)=>{
+    const cls = idx === stage ? 'pill current' : (idx < stage ? 'pill done' : 'pill');
+    return `<div class="${cls}" onclick="jumpStage(${idx})">${s.nm}</div>${idx < STAGES.length - 1 ? '<div class="sep"></div>' : ''}`;
+  }).join('');
+}
+
+function renderQuest(){
+  const s = STAGES[stage];
+  const q = document.getElementById('quest');
+  const isFree = stage === STAGES.length - 1;
+  q.className = isFree ? 'quest free' : 'quest';
+
+  let bodyHtml = `
+    <div class="quest-head">
+      <span class="quest-stage">${s.stageTag}</span>
+      <span class="quest-title">${s.title}</span>
+      ${stage < STAGES.length - 1 ? `<button class="skip" onclick="jumpStage(${stage + 1})">跳过本关 →</button>` : ''}
+    </div>
+    <div class="q-row"><div class="k">📍 起点状态</div><div class="v">${s.start}</div></div>
+    <div class="q-row"><div class="k">🎯 任务</div><div class="v">${s.task}</div></div>
+    <div class="q-row"><div class="k">👀 观察点</div><div class="v">${s.watch}</div></div>
+  `;
+
+  if(stage === 8){
+    // 测验关
+    bodyHtml += `
+      <div class="quiz">
+        ${QUIZ.map((qz, qidx)=>{
+          const res = quiz[qidx];
+          return `
+            <div class="qitem">
+              <div class="qtext">${qz.q}</div>
+              <div class="opts">
+                ${qz.opts.map((opt, oidx)=>{
+                  let cls = 'opt';
+                  if(res !== null){
+                    if(oidx === qz.ans) cls += ' correct';
+                    else if(oidx === res.pick) cls += ' wrong';
+                    else cls += ' dim';
+                  }
+                  return `<button class="${cls}" onclick="answerQuiz(${qidx}, ${oidx})">${opt}</button>`;
+                }).join('')}
+              </div>
+              ${res !== null ? `<div class="qexpl">${res.ok ? '✅ 答对了！' : '❌ 答错了。'} ${qz.expl}</div>` : ''}
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  if(stage === 0){
+    bodyHtml += `<div class="go"><button onclick="startJourney()">开始旅程（进入第 1 关）→</button></div>`;
+  } else if(s.pass() && stage < STAGES.length - 1 && stage !== 8){
+    bodyHtml += `<div class="go"><button class="primary" onclick="jumpStage(${stage + 1})">✅ 本关目标达成！进入下一关 →</button></div>`;
+  } else if(stage === 8 && s.pass()){
+    bodyHtml += `<div class="go"><button class="primary" onclick="jumpStage(9)">🎉 测验全对！毕业并解锁自由模式 →</button></div>`;
+  }
+
+  q.innerHTML = bodyHtml;
+}
+
+function renderCode(){
+  const box = document.getElementById('codebox');
+  box.innerHTML = codeLines.map(l => {
+    const act = (l.id && l.id === activeLineId) ? 'active' : '';
+    return `<div class="codeline ${l.cls} ${act}">${escapeHtml(l.text)}</div>`;
+  }).join('');
+}
+
+function renderObjectMemory(){
+  const box = document.getElementById('obj-box');
+  box.innerHTML = `
+    <div class="mem-card">
+      <div class="mc-head">
+        <span class="mc-name">变量 p 所指的 Derived 堆实例</span>
+        <span class="mc-type">地址: 0x7fff0010</span>
+      </div>
+      <div class="byte-slot ${hasVirtual ? 'slot-vptr' : ''}">
+        <span>[+0x00 ~ 0x07]</span>
+        <span>${hasVirtual ? 'vptr -> &vtable_Derived (8 字节)' : '普通成员/无 vptr'}</span>
+      </div>
+      <div class="byte-slot slot-data">
+        <span>[+0x08 ~ 0x0B]</span>
+        <span>Base::id = 101 (4 字节)</span>
+      </div>
+      <div class="byte-slot slot-data">
+        <span>[+0x0C ~ 0x13]</span>
+        <span>Derived::buf = 0x7fff9999 (8 字节动态内存)</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderVTables(){
+  const list = document.getElementById('vtable-list');
+  if(!hasVirtual){
+    list.innerHTML = `<div style="color:var(--muted);font-size:12px;padding:20px 0;text-align:center;">未声明 virtual，类无需生成虚函数表 (vtable)</div>`;
+  } else {
+    list.innerHTML = `
+      <div class="vt-card">
+        <div class="vt-head">vtable for Base (只读常量区)</div>
+        <div class="vt-entry">[0] &Base::speak ${isPureVirtual ? '(nullptr / =0)' : ''}</div>
+        <div class="vt-entry">[1] ${hasVirtualDtor ? '&Base::~Base()' : '(无虚析构)'}</div>
+      </div>
+      <div class="vt-card active" style="margin-top:10px;">
+        <div class="vt-head">vtable for Derived (只读常量区)</div>
+        <div class="vt-entry hl">[0] ${signatureMismatch ? '&Base::speak (手滑未重写)' : '&Derived::speak'}</div>
+        <div class="vt-entry">[1] ${hasVirtualDtor ? '&Derived::~Derived()' : '(无虚析构)'}</div>
+      </div>
+    `;
+  }
+
+  // 渲染统计
+  document.getElementById('stat-bytes').innerText = hasVirtual ? '8 B' : '0 B';
+  document.getElementById('stat-lookup').innerText = hasVirtual ? 'vptr[0] 查表' : '直接跳转';
+  document.getElementById('stat-inline').innerText = hasVirtual ? '不可内联' : '完全可内联';
+  document.getElementById('stat-inline').className = hasVirtual ? 'stat-val warn' : 'stat-val good';
+}
+
+function renderConsoleButtons(){
+  const btns = document.getElementById('btns');
+  const isFree = stage === STAGES.length - 1;
+  let btnHtml = '';
+
+  if(stage === 1 || isFree){
+    btnHtml += `<button class="danger-btn" onclick="doStaticCall()">执行静态调用 p->speak()</button>`;
+  }
+  if(stage === 2 || isFree){
+    btnHtml += `<button class="primary" onclick="doAddVirtual()">声明 virtual void speak()</button>`;
+    btnHtml += `<button class="action-btn" onclick="doDynamicCall()">执行动态调用 p->speak()</button>`;
+  }
+  if(stage === 3 || isFree){
+    btnHtml += `<button class="action-btn" onclick="doXray()">透视内部内存账目</button>`;
+  }
+  if(stage === 4 || isFree){
+    btnHtml += `<button class="danger-btn" onclick="doSignatureMismatch()">手滑写错签名 (踩坑)</button>`;
+    btnHtml += `<button class="fix-btn" onclick="doFixOverride()">加 override 质检 (修复)</button>`;
+  }
+  if(stage === 5 || isFree){
+    btnHtml += `<button class="danger-btn" onclick="doSlicing()">执行对象切片 Base b = *p</button>`;
+  }
+  if(stage === 6 || isFree){
+    btnHtml += `<button class="danger-btn" onclick="doDtorLeak()">delete p (非虚析构泄漏)</button>`;
+    btnHtml += `<button class="fix-btn" onclick="doFixVirtualDtor()">加 virtual ~Base() (修复)</button>`;
+  }
+  if(stage === 7 || isFree){
+    btnHtml += `<button class="primary" onclick="doPureVirtual()">声明纯虚函数 = 0 (抽象类)</button>`;
+  }
+
+  btnHtml += `<button onclick="resetWorldState()">↺ 重置环境</button>`;
+  btns.innerHTML = btnHtml;
+}
+
+function renderLogs(){
+  const box = document.getElementById('logbox');
+  if(logLines.length === 0){
+    box.innerHTML = `<div style="color:var(--muted);font-size:12px;">日志就绪，点击上方控制台按钮执行操作...</div>`;
+    return;
+  }
+  box.innerHTML = logLines.map(l => {
+    return `
+      <div class="logline ${l.type}">
+        <span class="cmd">${escapeHtml(l.cmd)}</span>
+        <div class="expl">${l.expl}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function render(){
+  renderRail();
+  renderQuest();
+  renderCode();
+  renderObjectMemory();
+  renderVTables();
+  renderConsoleButtons();
+  renderLogs();
+  saveState();
+}
+
+function startJourney(){
+  flags.started = true;
+  jumpStage(1);
+}
+
+function jumpStage(idx){
+  stage = idx;
+  render();
+}
+
+function answerQuiz(qidx, oidx){
+  const qz = QUIZ[qidx];
+  const ok = oidx === qz.ans;
+  quiz[qidx] = { pick: oidx, ok };
+  if(ok){
+    addLog(`测验第 ${qidx+1} 题`, 'ok', `回答正确！${qz.expl}`);
+  } else {
+    addLog(`测验第 ${qidx+1} 题`, 'err', `回答错误，再想想看！`);
+  }
+  render();
+}
+
+function resetWorldState(){
+  hasVirtual = false;
+  hasOverride = false;
+  hasVirtualDtor = false;
+  isPureVirtual = false;
+  signatureMismatch = false;
+  activeLineId = 'call-line';
+  codeLines[3] = { text: '    void speak() { cout << "Base"; }', cls: 'fn', id: 'base-speak' };
+  codeLines[4] = { text: '    ~Base() { /* 普通析构 */ }', cls: 'fn', id: 'base-dtor' };
+  codeLines[9] = { text: '    void speak() { cout << "Derived"; }', cls: 'fn', id: 'derived-speak' };
+  addLog('环境已重置', 'info', '恢复到未声明 virtual 的初始纯 C++ 代码状态。');
+  render();
+}
+
+function escapeHtml(str){
+  if(!str) return '';
+  return str.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+/* ============ 持久化 ============ */
+function saveState(){
+  try{
+    localStorage.setItem(KEY, JSON.stringify({ stage, flags, quiz }));
+  }catch(e){}
+}
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(KEY);
+    if(raw){
+      const data = JSON.parse(raw);
+      if(typeof data.stage === 'number') stage = data.stage;
+      if(data.flags) flags = data.flags;
+      if(Array.isArray(data.quiz)) quiz = data.quiz;
+    }
+  }catch(e){}
+}
+
+window.onload = function(){
+  loadState();
+  document.getElementById('b-revive').onclick = doRevive;
+  render();
+};
+</script>
+</body>
+</html>

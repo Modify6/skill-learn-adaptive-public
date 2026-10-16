@@ -1,0 +1,1179 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>C++ 虚函数 —— 指针说了算 · 对象说了算</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#151f36; --panel2:#0f1729;
+    --line:#26334d; --text:#dde6f5; --muted:#a6b9d9;
+    --blue:#3b82f6; --green:#22c55e; --purple:#a855f7;
+    --amber:#f5b544; --cyan:#38bdf8; --red:#f87171;
+    --mono:"Cascadia Code",Consolas,"JetBrains Mono",monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:radial-gradient(1200px 600px at 50% -100px,#16223d 0%,var(--bg) 60%);
+    color:var(--text);
+    font-family:system-ui,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+    padding:30px 18px 70px; line-height:1.65;
+  }
+  body.shake{animation:shake .5s;}
+  @keyframes shake{
+    0%,100%{transform:translateX(0);} 20%{transform:translateX(-9px);}
+    40%{transform:translateX(8px);} 60%{transform:translateX(-6px);} 80%{transform:translateX(4px);}
+  }
+  .wrap{max-width:1200px; margin:0 auto;}
+
+  /* ---------- header ---------- */
+  h1{font-size:26px; letter-spacing:.5px;}
+  h1 .dot-word{color:var(--amber);}
+  .sub{color:var(--muted); margin-top:6px; font-size:14.5px;}
+  .ladder{
+    margin-top:12px; padding:8px 14px; border:1px dashed var(--line); border-radius:10px;
+    font-size:12.5px; color:var(--muted); background:rgba(255,255,255,.02);
+    font-family:var(--mono);
+  }
+  .ladder b{color:var(--cyan); font-weight:600;}
+  .ladder .bad{color:var(--red);}
+
+  /* ---------- landing table (绰号落地表) ---------- */
+  .ltable{margin-top:12px; border:1px solid var(--line); border-radius:10px; overflow:hidden; font-size:12px;}
+  .ltable table{width:100%; border-collapse:collapse;}
+  .ltable th{
+    background:rgba(255,255,255,.03); color:var(--muted); font-size:11px; font-weight:600;
+    padding:6px 10px; text-align:left; border-bottom:1px solid var(--line); letter-spacing:1px;
+  }
+  .ltable td{padding:6px 10px; border-bottom:1px solid rgba(38,51,77,.5); vertical-align:top;}
+  .ltable tr:last-child td{border-bottom:none;}
+  .ltable .nick{color:var(--amber); font-weight:700; font-family:var(--mono); white-space:nowrap;}
+  .ltable .real{color:var(--cyan); font-family:var(--mono);}
+  .ltable .phys{color:var(--text);}
+  .ltable .life{color:var(--muted);}
+
+  /* ---------- journey rail ---------- */
+  .journey{margin-top:22px;}
+  .rail{display:flex; align-items:center; gap:6px; overflow-x:auto; padding:4px 2px 10px;}
+  .pill{
+    flex:none; font-size:11.5px; padding:4px 11px; border-radius:999px;
+    border:1px solid var(--line); color:var(--muted); white-space:nowrap; background:var(--panel2);
+  }
+  .pill.done{color:var(--green); border-color:rgba(34,197,94,.55);}
+  .pill.current{color:var(--amber); border-color:var(--amber); box-shadow:0 0 10px rgba(245,181,68,.25); font-weight:700;}
+  .sep{flex:none; width:14px; height:2px; background:var(--line);}
+
+  /* ---------- quest card ---------- */
+  .quest{
+    border:1px solid rgba(245,181,68,.45); border-left:4px solid var(--amber);
+    background:linear-gradient(90deg, rgba(245,181,68,.07), var(--panel2) 45%);
+    border-radius:12px; padding:14px 18px;
+  }
+  .quest.free{border-color:rgba(34,197,94,.45); border-left-color:var(--green);
+    background:linear-gradient(90deg, rgba(34,197,94,.07), var(--panel2) 45%);}
+  .quest-head{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .quest-stage{font-family:var(--mono); font-size:11px; color:var(--amber); letter-spacing:1px;}
+  .quest-title{font-size:16px; font-weight:700;}
+  .skip{margin-left:auto; font-size:12px; color:var(--muted); cursor:pointer; border:none; background:none; text-decoration:underline dotted;}
+  .skip:hover{color:var(--text);}
+  .q-row{display:flex; gap:12px; margin-top:9px; font-size:13.5px;}
+  .q-row .k{flex:none; width:88px; color:var(--muted); font-weight:600;}
+  .q-row .v{color:var(--text);}
+  .q-row .v b{color:var(--amber);}
+  .quest .go{margin-top:12px;}
+  .quest .go button{
+    font-size:13px; padding:7px 18px; border-color:var(--amber); color:var(--amber);
+    font-family:system-ui,"Microsoft YaHei",sans-serif; font-weight:700;
+  }
+  /* quiz */
+  .quiz{margin-top:6px;}
+  .qitem{margin-top:12px; padding-top:10px; border-top:1px dashed var(--line);}
+  .qitem .qtext{font-size:13.5px; font-weight:600;}
+  .opts{display:flex; flex-direction:column; gap:6px; margin-top:8px;}
+  .opt{
+    text-align:left; font-size:12.5px; font-family:var(--mono),system-ui,sans-serif;
+    background:#182338; color:var(--text);
+  }
+  .opt.correct{border-color:var(--green); color:var(--green); background:rgba(34,197,94,.1);}
+  .opt.wrong{border-color:var(--red); color:var(--red); background:rgba(248,113,113,.08);}
+  .opt.dim{opacity:.4;}
+  .qexpl{font-size:12px; color:var(--muted); margin-top:6px;}
+
+  /* ---------- crash banner ---------- */
+  .crashbar{
+    margin-top:18px; border:1px solid rgba(248,113,113,.6); border-radius:12px;
+    background:linear-gradient(90deg, rgba(248,113,113,.16), rgba(248,113,113,.04));
+    padding:12px 18px; font-size:14px; color:#ffc9c9; display:none;
+  }
+  .crashbar.show{display:flex; align-items:center; gap:12px; flex-wrap:wrap;}
+  .crashbar .boom{font-size:22px;}
+  .crashbar b{color:#fff;}
+  .crashbar .fix{margin-left:auto;}
+
+  /* ---------- stage ---------- */
+  .stage-scroll{overflow-x:auto; margin-top:20px; padding-bottom:6px;}
+  .stage{
+    min-width:1080px;
+    display:grid;
+    grid-template-columns:1.05fr 74px 1fr 74px 1.25fr;
+    gap:0 8px; align-items:stretch;
+  }
+  .col-head{margin-bottom:10px; text-align:center;}
+  .col-head .nick{font-size:17px; font-weight:700;}
+  .col-head .real{font-family:var(--mono); font-size:11.5px; color:var(--cyan); letter-spacing:1px; text-transform:uppercase;}
+  .col-head .duty{font-size:12px; color:var(--muted); margin-top:2px;}
+  .col{
+    background:var(--panel2); border:1px solid var(--line); border-radius:14px;
+    padding:14px; display:flex; flex-direction:column; gap:12px; min-height:460px;
+  }
+  .c1 .nick{color:var(--cyan);} .c2 .nick{color:var(--amber);} .c3 .nick{color:var(--purple);}
+
+  .flow{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; padding-top:26px;}
+  .flow .cmd{font-family:var(--mono); font-size:11px; color:var(--amber); white-space:nowrap;}
+  .flow .glyph{font-size:22px; color:var(--line); line-height:1;}
+  .flow .note{font-size:11px; color:var(--muted); writing-mode:vertical-rl; letter-spacing:2px;}
+
+  /* ---------- code column ---------- */
+  .codebox{
+    background:#0a0f1d; border:1px solid var(--line); border-radius:10px;
+    padding:12px 10px; font-family:var(--mono); font-size:12px; line-height:1.9;
+    min-height:340px; white-space:pre-wrap; word-break:break-all;
+  }
+  .cline{padding:1px 6px; border-radius:5px; color:#b9c7e4;}
+  .cline .cm{color:#5b6f95;}
+  .cline.hot{background:rgba(245,181,68,.14); color:#ffe1a6; border-left:2px solid var(--amber);}
+  .cline .vk{color:var(--amber); font-weight:700;}
+  .cline .pk{color:var(--red); font-weight:700;}
+  .cline .ok-k{color:var(--green); font-weight:700;}
+  .cfoot{font-size:11.5px; color:var(--muted); margin-top:auto;}
+
+  /* ---------- stack cards ---------- */
+  .var-card{
+    background:var(--panel); border:1px solid var(--line); border-radius:11px;
+    padding:9px 12px; box-shadow:0 6px 18px rgba(0,0,0,.25); font-size:12.5px;
+  }
+  .var-card .vhead{display:flex; align-items:center; gap:7px; font-family:var(--mono); font-weight:700; font-size:13px;}
+  .var-card .vtype{
+    font-size:10.5px; font-weight:400; color:var(--amber);
+    border:1px solid rgba(245,181,68,.45); border-radius:4px; padding:0 6px;
+  }
+  .var-card .vscope{margin-left:auto; font-size:10px; color:var(--muted); font-family:var(--mono);}
+  .var-card .vtarget{font-size:11.5px; color:var(--muted); margin-top:3px; font-family:var(--mono);}
+  .var-card.ptr{border-color:rgba(56,189,248,.5);} .var-card.ptr .vhead{color:var(--cyan);}
+  .var-card.value{border-color:rgba(147,167,201,.5);} .var-card.value .vhead{color:var(--muted);}
+  .var-card .dang{color:var(--red); font-size:11px; margin-top:2px;}
+  .pop{animation:pop .5s cubic-bezier(.2,.9,.3,1.35);}
+  @keyframes pop{from{transform:scale(.72); opacity:0;} to{transform:scale(1); opacity:1;}}
+  .empty{color:var(--muted); font-size:12.5px; text-align:center; padding:30px 0;}
+
+  /* ---------- heap column ---------- */
+  .obj-card{
+    background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:10px 13px; box-shadow:0 6px 18px rgba(0,0,0,.25);
+  }
+  .obj-head{display:flex; align-items:center; gap:8px; font-family:var(--mono); font-size:13.5px; font-weight:700;}
+  .obj-kind{font-size:10px; border:1px solid; border-radius:4px; padding:0 5px; font-family:system-ui,"Microsoft YaHei",sans-serif;}
+  .obj-tag{
+    margin-left:auto; font-family:var(--mono); font-weight:700; font-size:11px;
+    border:1px solid var(--amber); color:var(--amber); border-radius:99px; padding:1px 9px;
+    background:rgba(245,181,68,.1); white-space:nowrap;
+  }
+  .obj-tag.notag{border-color:rgba(147,167,201,.5); color:var(--muted); background:rgba(147,167,201,.06);}
+  .obj-tag.flash{background:var(--amber); color:#132;}
+  .obj-holders{font-size:11.5px; color:var(--muted); margin-top:5px; line-height:1.7;}
+  .obj-holders b{color:var(--text); font-weight:600; font-family:var(--mono);}
+  .obj-card.dog{border-color:rgba(245,181,68,.45);}
+  .obj-card.cat{border-color:rgba(168,85,247,.5);}
+  .obj-card.duck{border-color:rgba(56,189,248,.5);}
+  .obj-card.animal{border-color:rgba(147,167,201,.5);}
+  .inner-key{
+    font-size:11px; color:var(--muted); margin-top:4px; font-family:var(--mono);
+    border-top:1px dashed var(--line); padding-top:4px;
+  }
+  .inner-key .kw{color:var(--purple);} .inner-key .kk{color:var(--cyan);}
+
+  /* vtable 函数表 */
+  .manuals{border:1px dashed rgba(56,189,248,.35); border-radius:12px; padding:10px 12px;}
+  .man-head{display:flex; align-items:center; gap:8px; font-size:12px; color:#9fc6e8; font-weight:700;}
+  .man-items{display:flex; gap:10px; flex-wrap:wrap; margin-top:8px;}
+  .vtable{
+    flex:1 1 200px; background:#0a0f1d; border:1px solid var(--line); border-radius:10px;
+    padding:8px 10px; font-family:var(--mono); font-size:11.5px; min-width:170px;
+  }
+  .vtable .vt-title{color:var(--cyan); font-weight:700; margin-bottom:4px; font-size:12px;}
+  .vtable .vt-row{display:flex; justify-content:space-between; gap:8px; padding:2px 4px; border-radius:4px; color:#b9c7e4;}
+  .vtable .vt-row .imp{color:var(--muted);}
+  .vtable .vt-row.dog .imp{color:var(--amber);}
+  .vtable .vt-row.cat .imp{color:var(--purple);}
+  .vtable .vt-row.duck .imp{color:var(--cyan);}
+  .vtable .vt-row.animal .imp{color:#9aa7c4;}
+  .vtable .vt-row .vb{color:var(--amber); font-size:10px;}
+  .vtable .vt-row.miss{color:var(--red); font-style:italic;}
+  .vtable.hl{border-color:var(--amber); box-shadow:0 0 12px rgba(245,181,68,.3);}
+
+  /* graveyard + memory bar */
+  .graveyard{margin-top:auto; border:1px dashed rgba(248,113,113,.4); border-radius:12px; padding:10px 12px;}
+  .grave-head{display:flex; align-items:center; gap:8px; font-size:12px; color:#e8a3a3; font-weight:700;}
+  .grave-items{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;}
+  .ghost{
+    font-family:var(--mono); font-size:11.5px; color:#9d8fb5; opacity:.75;
+    border:1px solid rgba(168,85,247,.25); border-radius:8px; padding:3px 9px; background:rgba(168,85,247,.06);
+  }
+  .membar{margin-top:10px;}
+  .memtrack{height:10px; border-radius:6px; background:#1a2440; border:1px solid var(--line); overflow:hidden;}
+  .memfill{height:100%; background:linear-gradient(90deg,var(--green),#7dd87d); transition:width .6s, background .6s;}
+  .memfill.warn{background:linear-gradient(90deg,#e08b3c,var(--amber));}
+  .memfill.bad{background:linear-gradient(90deg,#c04141,var(--red));}
+  .memtext{font-size:10.5px; color:var(--muted); margin-top:4px; font-family:var(--mono);}
+
+  /* ---------- console ---------- */
+  .console{margin-top:26px; background:var(--panel2); border:1px solid var(--line); border-radius:14px; overflow:hidden;}
+  .console-head{
+    display:flex; align-items:center; gap:10px; padding:10px 16px;
+    border-bottom:1px solid var(--line); background:rgba(255,255,255,.02);
+    font-size:13px; color:var(--muted); flex-wrap:wrap;
+  }
+  .btns{display:flex; gap:8px; flex-wrap:wrap; margin-left:auto;}
+  button{
+    font-family:var(--mono); font-size:12px; color:var(--text);
+    background:#1d2a47; border:1px solid var(--line); border-radius:8px;
+    padding:6px 12px; cursor:pointer; transition:all .15s;
+  }
+  button:hover:not(:disabled){border-color:var(--amber); color:var(--amber); transform:translateY(-1px);}
+  button:disabled{opacity:.3; cursor:not-allowed;}
+  button.primary{border-color:var(--amber); color:var(--amber);}
+  button.fixloop{border-color:var(--green); color:var(--green);}
+  .logbox{padding:12px 16px; max-height:260px; overflow-y:auto; font-family:var(--mono); font-size:12.5px;}
+  .logline{margin-bottom:8px;}
+  .logline .cmd{color:var(--amber);}
+  .logline .expl{color:var(--muted); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:12px; margin-top:1px;}
+  .logline .expl b{color:var(--amber); font-weight:600;}
+  .logline .expl .say{color:var(--green); font-family:var(--mono);}
+  .logline.info{color:var(--cyan); font-family:system-ui,"Microsoft YaHei",sans-serif;}
+  .logline.ok{color:var(--green); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:12.5px;}
+  .logline.err{color:var(--red); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:12.5px;}
+
+  /* ---------- why cards ---------- */
+  .why{margin-top:26px; display:grid; grid-template-columns:repeat(3,1fr); gap:12px;}
+  .why-card{background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:14px 16px; font-size:13px;}
+  .why-card h3{font-size:13.5px; margin-bottom:6px;}
+  .why-card p{color:var(--muted); font-size:12.5px;}
+  .why-card b{color:var(--text);}
+  .w1 h3{color:var(--cyan);} .w2 h3{color:var(--purple);} .w3 h3{color:var(--amber);}
+
+  footer{margin-top:26px; text-align:center; color:var(--muted); font-size:12px;}
+  @media (max-width:900px){ .why{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>C++ 虚函数：<span class="dot-word">指针说了算</span> · <span class="dot-word">对象说了算</span></h1>
+  <p class="sub">治「通过基类指针调用，永远调到基类版本」—— 让同一行代码，对不同对象执行不同实现（多态）。全程只用代码本身说话，一关一关走到毕业。</p>
+  <div class="ladder">
+    两派调用：<span class="bad">按指针类型（静态绑定）＝编译期定死，一律调基类版</span> ｜ <span style="color:var(--green)">按对象类型（动态绑定）＝运行时查对象里的函数表</span>
+    &nbsp;‖&nbsp; 两个零件：<b>vptr</b>（每个对象开头藏一个指针，指向它所属类的函数表） · <b>vtable</b>（每个类一张的函数地址表，编译期生成）
+  </div>
+
+  <!-- 机制速览表 -->
+  <div class="ltable">
+    <table>
+      <tr><th>术语</th><th>物理上是什么</th><th>何时定下来</th><th>一句话</th></tr>
+      <tr><td class="real">静态绑定（无 virtual）</td><td class="phys">编译器只看变量的声明类型（Animal*），直接把调用写成基类版本的地址</td><td class="phys">编译期</td><td class="life">指针是什么类型，就当它是什么</td></tr>
+      <tr><td class="real">动态绑定（有 virtual）</td><td class="phys">运行时读对象开头的 vptr → 找到它所属类的函数表 → 查到派生版地址，跳过去</td><td class="phys">运行时</td><td class="life">对象实际是什么，就按什么办</td></tr>
+      <tr><td class="real">vptr（虚表指针）</td><td class="phys">藏在每个对象开头的一个指针（8 字节）；构造对象时自动写入，指向自己类的函数表</td><td class="phys">构造时</td><td class="life">对象随身带的"我家函数表在这"</td></tr>
+      <tr><td class="real">vtable（虚函数表）</td><td class="phys">每个类一张的函数地址表；盖了 virtual 的函数按名字登记在表里，供运行时查</td><td class="phys">编译期</td><td class="life">一类的函数登记表，全类共享一张</td></tr>
+    </table>
+  </div>
+
+  <!-- 动机卡：编译器的两难 -->
+  <div class="ltable" style="border-color:rgba(245,181,68,.4)">
+    <table>
+      <tr><th style="width:130px">🤔 为什么有两派</th><th>把你自己放到编译器的位置，正在翻译 p->speak() 这一行</th></tr>
+      <tr>
+        <td class="real">此刻你知道的</td>
+        <td class="phys">p 的声明类型是 Animal*。你<b>不知道</b>运行到这行时 p 指向狗还是猫——那要等运行时才发生。你只有两种策略可押。</td>
+      </tr>
+      <tr>
+        <td class="real">策略一：求快</td>
+        <td class="phys">按指针类型定死 → 写死跳 Animal::speak。零开销、可内联；但 p 实际指向 Dog 时<b>调错</b>（第①关现象）。→ C++ 的<b>默认</b></td>
+      </tr>
+      <tr>
+        <td class="real">策略二：求对</td>
+        <td class="phys">按对象类型查表 → 对象自带 vptr，运行时现查。永远正确；代价是每对象 8 字节 + 一跳查表 + 不能内联。→ 需要<b>你写 virtual</b> 才启用</td>
+      </tr>
+      <tr>
+        <td class="real">谁替你选</td>
+        <td class="life">Java/Python：替你全选策略二，开销人人背，关不掉。C++：默认策略一，把选择交给你——<b>为你用的东西付费，不用就不付</b>。和 unique_ptr 默认零开销、shared_ptr 才上计数，是同一个价值观。</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- journey -->
+  <div class="journey">
+    <div class="rail" id="rail"></div>
+    <div class="quest" id="quest"></div>
+  </div>
+
+  <div class="crashbar" id="crashbar">
+    <span class="boom">🛑</span>
+    <span id="crashtext"></span>
+    <button class="fix" id="b-revive">↺ 修复（重来本关）</button>
+  </div>
+
+  <div class="stage-scroll">
+  <div class="stage">
+
+    <!-- code -->
+    <div class="col c1">
+      <div class="col-head">
+        <div class="real">Code</div>
+        <div class="nick">故事板 · 代码</div>
+        <div class="duty">上面是类定义，下面是 main 里的调用</div>
+      </div>
+      <div class="codebox" id="code"></div>
+      <div class="cfoot">关键分界：函数盖了 <b>virtual</b>，调用走「按对象类型查表」；没盖的走「按指针类型」编译期定死。</div>
+    </div>
+
+    <div class="flow">
+      <div class="cmd">指针飞过去 ➜</div>
+      <div class="glyph">➜</div>
+      <div class="note">指针→对象</div>
+    </div>
+
+    <!-- stack -->
+    <div class="col c2">
+      <div class="col-head">
+        <div class="real">Stack</div>
+        <div class="nick">栈 · 变量的家</div>
+        <div class="duty">变量带着声明类型（Animal*）——非虚调用只看它</div>
+      </div>
+      <div id="stackVars"></div>
+      <div class="cfoot" id="stackfoot"></div>
+    </div>
+
+    <div class="flow">
+      <div class="cmd">调用落地 🔍</div>
+      <div class="glyph">🔍</div>
+      <div class="note">静态 or 动态</div>
+    </div>
+
+    <!-- heap -->
+    <div class="col c3">
+      <div class="col-head">
+        <div class="real">Heap + vtable</div>
+        <div class="nick">堆 · 对象的家</div>
+        <div class="duty">每个对象开头藏着 vptr；下面是各类的函数表</div>
+      </div>
+      <div id="heapLive"></div>
+      <div class="manuals">
+        <div class="man-head">📖 函数表 vtable · 每类一张，编译期生成</div>
+        <div class="man-items" id="manuals"></div>
+      </div>
+      <div class="graveyard">
+        <div class="grave-head">👻 泄漏坟场 · 和智能指针课同一个坟场</div>
+        <div class="grave-items" id="graveyard"></div>
+        <div class="membar">
+          <div class="memtrack"><div class="memfill" id="memfill"></div></div>
+          <div class="memtext" id="memtext"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <!-- console -->
+  <div class="console">
+    <div class="console-head">
+      <span>🕹️ 模拟机 —— 点按钮 = 写代码，看每声「叫」是怎么被喊出来的</span>
+      <div class="btns">
+        <button id="b-newanimal">new Animal()</button>
+        <button id="b-newdog">new Dog</button>
+        <button id="b-newcat">new Cat</button>
+        <button id="b-speak">p-&gt;speak()</button>
+        <button id="b-vcall">a.speak()（值对象）</button>
+        <button id="b-zoo">建数组循环调用</button>
+        <button id="b-virt">加 virtual</button>
+        <button id="b-ovr">✍️ Dog 写 speak(string mood)</button>
+        <button id="b-ovfix">✅ 加 override + 修正</button>
+        <button id="b-duck">添加 Duck 子类对象</button>
+        <button id="b-slice">Animal a = *dog（切片）</button>
+        <button id="b-xray">🔍 透视对象内存</button>
+        <button id="b-del">delete 基类指针</button>
+        <button id="b-vdtor">加 virtual ~Animal</button>
+        <button id="b-pure">speak 改为 = 0</button>
+        <button id="b-ctor">在构造函数里调 speak()</button>
+        <button id="b-reset">↺ 重来本关</button>
+      </div>
+    </div>
+    <div class="logbox" id="log"></div>
+  </div>
+
+  <!-- constraints -->
+  <div class="why">
+    <div class="why-card w1">
+      <h3>🏷️ 为什么不默认全虚</h3>
+      <p>vptr 是<b>每个对象多付 8 字节</b>、函数表是每类一张、virtual 调用是运行时多查一跳（还内联不了）。C++ 的信条是<b>不为你不用的东西付费</b>——所以 virtual 要显式写出来，不是默认。跟智能指针课同一个价值观：unique 默认零开销，shared 才上计数器。</p>
+    </div>
+    <div class="why-card w2">
+      <h3>⚖️ 按指针类型 vs 按对象类型，各付什么价</h3>
+      <p><b>按指针类型（静态绑定）</b>：编译期定死，快、可内联——但基类指针一律喊基类版。<b>按对象类型（动态绑定）</b>：运行时查表，同一段代码对狗汪对猫喵——代价是那 8 字节加一跳。选择哪个，等于选择你在为哪种灵活性付费。</p>
+    </div>
+    <div class="why-card w3">
+      <h3>🚨 为什么基类析构必须虚</h3>
+      <p>delete 基类指针时<b>只看声明类型</b>：是 Animal* 就只调 ~Animal，Dog 自己的成员（堆上的 name）全部漏掉——你亲眼在第⑦关看过它进坟场。<b>唯一解法：凡是要当基类用的类，析构函数加 virtual</b>。unique_ptr&lt;Animal&gt; 装 Dog 一样中招。</p>
+    </div>
+  </div>
+
+  <footer>四样东西带回 ZCode 复述：两种绑定（静态=按指针类型·动态=按对象类型）→ 两个零件（vptr·vtable）→ 三条规则（override 防手滑 ｜ 基类析构必虚 ｜ 多态只走指针/引用，值会切片）→ 纯虚函数（=0 抽象类不能实例化）｜ 下一遍钻洞：多重继承的多个 vptr、函数表里的 RTTI/typeid</footer>
+</div>
+
+<script>
+const KEY = 'cpp-virtual-functions-journey';
+
+/* ============ 叫声与类数据 ============ */
+const SPEAK = {
+  Animal:'动物发出含糊的声音……',
+  Dog:'汪汪！',
+  Cat:'喵～',
+  Duck:'嘎嘎！',
+};
+const EMOJI = {Animal:'🧱', Dog:'🐕', Cat:'🐈', Duck:'🦆'};
+
+/* ============ 关卡定义 ============ */
+const STAGES = [
+  { nm:'起点·导览', stageTag:'STAGE 0 / 10', title:'先认地形：两种绑定、两个零件',
+    start:'一张空场。上面机制速览表先扫一眼：静态绑定 / 动态绑定、vptr / vtable——四个术语各配一句大白话。',
+    task:'看一眼三列：<b>代码</b>＝类定义+调用，<b>栈</b>＝变量（带着声明类型），<b>堆</b>＝对象+各类函数表。然后点「开始」。',
+    watch:'先记住唯一前置：Dog 继承 Animal，所以 Animal* p = new Dog 是合法的。接下来你亲眼看 p->speak() 调到谁。',
+    pass:()=>flags.started },
+  { nm:'① 非虚调用', stageTag:'STAGE 1 / 10', title:'没有 virtual：一律调基类版',
+    start:'speak() 没有 virtual。模拟机开了 new / speak / 建数组三个按钮。',
+    task:'先按 <b>new Dog</b> 再按 <b>p-&gt;speak()</b>——p 指向的是 Dog 对象。然后按 <b>建数组循环调用</b>（数组里放 Dog 和 Cat 的对象）。',
+    watch:'输出全是<b>动物版</b>。看日志：编译器根本没看对象是谁，只看声明类型 Animal*。',
+    done:'静态绑定：编译期按指针类型定死调用。p 声明为 Animal*，就一律调 Animal::speak。',
+    pass:()=>flags.nonvirtSeen && flags.zooSeen },
+  { nm:'② 加 virtual', stageTag:'STAGE 2 / 10', title:'一个词改变调用结果',
+    start:'还是那批代码。',
+    task:'按 <b>加 virtual</b>——只加一个词。然后按 <b>p-&gt;speak()</b>，再按 <b>建数组循环调用</b>。',
+    watch:'同样的代码、同样的循环，狗输出汪、猫输出喵。看日志：这次调用改走「按对象类型查函数表」。',
+    done:'virtual = 这条调用改为运行时按对象类型查表。多态开关就这一个词。',
+    pass:()=>flags.virtOn && flags.polySeen && flags.virtZoo },
+  { nm:'③ 拆开看机器', stageTag:'STAGE 3 / 10', title:'vptr 和函数表长什么样',
+    start:'virtual 已加上，但「按对象类型查表」还是黑箱。',
+    task:'按 <b>🔍 透视对象内存</b>，把日志里的字节账读完。',
+    watch:'对象开头多了一个 <b>8 字节的指针</b>（vptr），同类对象指向同一张<b>函数表</b>（vtable，编译期生成），表里 speak 一栏写着 Dog::speak 的地址。没加 virtual 的类：没 vptr、没函数表、对象还小 8 字节。',
+    done:'查表全程：对象开头 vptr → 它类的函数表 → 按名字查到函数地址 → 跳过去。没有魔法，就一次查表。',
+    pass:()=>flags.xray },
+  { nm:'④ override 质检', stageTag:'STAGE 4 / 10', title:'签名写错：覆盖没发生',
+    start:'virtual 已加。但 Dog 的 speak 写错了一个地方。',
+    task:'按 <b>✍️ Dog 写 speak(string mood)</b>——签名多了一个参数。再按 <b>p-&gt;speak()</b> 看后果。然后按 <b>✅ 加 override + 修正</b>。',
+    watch:'签名不同＝函数表里根本没换行＝还是动物版，而且编译器一声不吭。加上 override 后：🛑 编译错误当场揪出——「你标了 override 但没覆盖任何函数」。',
+    done:'override 不改变行为，它是请编译器核对：你以为在覆盖，其实在写新函数时，编译期就报错。',
+    pass:()=>flags.badSig && flags.badSigCall && flags.ovFix },
+  { nm:'⑤ 多态的用处', stageTag:'STAGE 5 / 10', title:'加子类，循环零修改',
+    start:'数组循环已就位：狗汪猫喵。',
+    task:'按 <b>添加 Duck 子类对象</b>，再按 <b>建数组循环调用</b>。',
+    watch:'循环代码<b>一行没改</b>（看代码列），Duck 自己进了输出队列。同一行循环代码适配所有子类——这就是虚函数的核心用途。',
+    done:'多态的真实价值：调用方写一遍，新子类自动接上。插件系统、GUI 回调都靠这个。',
+    pass:()=>flags.duckIn && flags.duckSpeak },
+  { nm:'⑥ 对象切片', stageTag:'STAGE 6 / 10', title:'值拷贝不带 vptr',
+    start:'多态只对指针和引用生效。试试值？',
+    task:'按 <b>Animal a = *dog（切片）</b>，再按 <b>a.speak()（值对象）</b>。',
+    watch:'按值拷贝：只拷贝了 Animal 子对象的成员（age），<b>vptr 不会被拷贝</b>（a 身上没有 vptr）→ 没法查表，退回静态绑定 → 动物版。不崩，但多态静默失效。',
+    done:'三条规则之一：多态只走指针/引用。按值传递/赋值 = 切片 = 静默丢行为。',
+    pass:()=>flags.sliceSeen && flags.vsliceSeen },
+  { nm:'⑦ 虚析构', stageTag:'STAGE 7 / 10', title:'delete 时也只看声明类型',
+    start:'Animal* d = new Dog，Dog 的 name 是一块堆内存。析构函数还没加 virtual。',
+    task:'按 <b>delete 基类指针</b>，看坟场。然后按 <b>加 virtual ~Animal</b>，再 delete 一次。',
+    watch:'没加：只调 ~Animal，Dog 的 name 没人释放 → 👻 进坟场（就是智能指针课那个坟场，unique_ptr&lt;Animal&gt; 装 Dog 一样中招）。加了：按对象类型查表 → ~Dog 先释放成员 → 自动接着 ~Animal → 干净。',
+    done:'三条规则之二：凡是要当基类用的类，析构函数必须 virtual。',
+    pass:()=>flags.dtorLeak && flags.dtorFixed },
+  { nm:'⑧ 纯虚·抽象类', stageTag:'STAGE 8 / 10', title:'= 0：纯虚函数与抽象类',
+    start:'Animal::speak 本来就没有合理实现。',
+    task:'按 <b>speak 改为 = 0</b>（Animal 变抽象类）。再按 <b>new Animal()</b> 看编译器报错。最后按 <b>new Dog</b>——Dog 自己实现了 speak。',
+    watch:'= 0 = 函数表该栏空缺，派生类必须实现才能实例化。Animal 从此只当接口，不能 new。',
+    done:'抽象类 = 接口：规定"子类必须实现什么"，自己不提供实现。',
+    pass:()=>flags.pureErr && flags.pureOk },
+  { nm:'⑨ 极端案例', stageTag:'STAGE 9 / 10', title:'构造函数里调虚函数',
+    start:'Animal 的构造函数里写了一句 speak()——很多人以为会输出汪。',
+    task:'按 <b>在构造函数里调 speak()</b>，逐行看对象构造过程。',
+    watch:'构造顺序：先构造基类子对象 → <b>此刻 vptr 还指向 Animal 的函数表</b> → speak 调到动物版 → 然后才执行 Dog 的构造、vptr 改指 Dog 的函数表。构造/析构期间没有多态。',
+    done:'三条规则之三：构造和析构函数里，虚函数没有多态行为。',
+    pass:()=>flags.ctorCall },
+  { nm:'⑩ 毕业测', stageTag:'STAGE 10 / 10', title:'毕业测：3 道题',
+    start:'十关走完：两种绑定、两个零件、三条规则、纯虚函数，你全亲手摸过。',
+    task:'答对下面 3 道题就毕业（答错可以重选）。',
+    watch:'每题答完有解释。',
+    done:'毕业！自由模式解锁。',
+    pass:()=>quiz.length===3 && quiz.every(v=>v && v.ok) },
+];
+
+const QUIZ = [
+  { q:'1 / 3 · Animal::speak 没有 virtual。Animal* p = new Cat; p->speak(); 输出什么、为什么？',
+    opts:['喵～：p 指着的对象是 Cat','动物含糊声：编译期只看指针类型 Animal*，非虚调用定死','编译错误：类型不匹配'],
+    ans:1,
+    expl:'非虚 = 按指针类型，编译期定死。第①关的现象就是这么来的——对象是谁根本不参与决策。' },
+  { q:'2 / 3 · std::unique_ptr<Animal> u = std::make_unique<Dog>(); u 出作用域后，Dog 的 name（堆上字符串）没被释放。缺了什么？',
+    opts:['unique_ptr 不能装派生对象，得换 shared_ptr','Dog 的析构函数要手动调用一次','Animal 的析构函数不是 virtual——删除时只看指针类型，只调了 ~Animal'],
+    ans:2,
+    expl:'智能指针删除时也是按指针类型：unique_ptr<Animal> 只会调 ~Animal。第⑦关的原版事故。解法：~Animal 加 virtual。' },
+  { q:'3 / 3 · Animal a = *dogPtr; a.speak();（speak 是 virtual）为什么不多态？',
+    opts:['virtual 只对指针生效是编译器的规定，没有原因','切片：值拷贝只搬了 Animal 部分，vptr 没被拷过来，没表可查','a 出了作用域，对象已经死了'],
+    ans:1,
+    expl:'第⑥关亲手试过：值对象没有 vptr，动态绑定无从发生。所以多态只走指针/引用——传参数时用 Animal* 或 Animal&。' },
+];
+
+/* ============ 状态 ============ */
+let world = null;
+let flags = {};
+let stage = 0;
+let quiz = [null, null, null];
+const seen = new Set();
+const logLines = [];
+
+function addLog(cmd, type, expl){
+  logLines.unshift({cmd, type, expl});
+  if(logLines.length > 42) logLines.pop();
+}
+function fresh(key, cls){ if(seen.has(key)) return cls; seen.add(key); return cls + ' pop'; }
+
+/* ============ 世界 ============ */
+function blankWorld(){
+  return {
+    seq: 0,
+    heap: {},           // id -> {id, cls, alive, leaked, data, note}
+    vars: [],           // {name, staticType:'Animal*', target:id|null, kind:'ptr'|'value', valCls}
+    code: [],           // {t, c, html?}
+    virtSpeak:false, virtDtor:false, pure:false,
+    dogSigBad:false, overrideOn:false,
+    ctorHook:false,
+    crashed:false, crashReason:'',
+  };
+}
+function pushCode(text, comment, html){
+  world.code.push({t:text, c:comment||'', h:html||''});
+}
+function newObj(cls, data, note){
+  const id = ++world.seq;
+  world.heap[id] = {id, cls, alive:true, leaked:false, data:data||'', note:note||''};
+  return world.heap[id];
+}
+function addVar(v){ world.vars.push(v); return v; }
+function lastPtr(){ for(let i=world.vars.length-1;i>=0;i--) if(world.vars[i].kind==='ptr' && world.vars[i].target!==null) return world.vars[i]; return null; }
+function zooObjs(){ return world.vars.filter(v=>v.inZoo && v.target!==null && world.heap[v.target] && world.heap[v.target].alive); }
+
+/* ============ 代码生成 ============ */
+function classCode(){
+  const w = world;
+  pushCode('class Animal {', '基类');
+  if(w.ctorHook) pushCode('  public:', '');
+  if(w.ctorHook) pushCode('    Animal() { speak(); }', '⚠️ 构造函数里调虚函数', '    <span class="pk">Animal()</span> { speak(); }');
+  if(!w.ctorHook) pushCode('  public:', '');
+  if(w.pure){
+    pushCode('    virtual void speak() = 0;', '纯虚：函数表空缺，必须由子类填', '    <span class="vk">virtual</span> <span class="pk">void speak() = 0;</span>');
+  } else {
+    const v = w.virtSpeak ? '<span class="vk">virtual </span>' : '';
+    pushCode('    ' + (w.virtSpeak?'virtual ':'') + 'void speak()', w.virtSpeak?'virtual→按对象查表':'非虚→按指针定死', '    ' + v + 'void speak()');
+    pushCode('    { cout << "动物含糊声…"; }', '', '    { cout << <span class="ok-k">"动物含糊声…"</span>; }');
+  }
+  if(w.virtDtor) pushCode('    virtual ~Animal();', '虚析构：删除时按对象类型查表', '    <span class="vk">virtual</span> ~Animal();');
+  else pushCode('    ~Animal();', w.virtSpeak?'⚠️ 当基类用但析构没虚':'', '    ~Animal();');
+  pushCode('  protected: int age = 1;', '', '  <span class="cm">protected: int age = 1;</span>');
+  pushCode('};', '', '};');
+  pushCode('', '', '');
+  pushCode('class Dog : public Animal {', '派生：is-a', '<span class="vk">class Dog</span> : <span class="vk">public</span> Animal {');
+  pushCode('  public:', '', '  <span class="cm">public:</span>');
+  if(w.dogSigBad){
+    pushCode('    void speak(string mood)', '⚠️ 签名不同＝新函数，不是覆盖！', '    <span class="pk">void speak(string mood)</span>');
+  } else {
+    const o = w.overrideOn ? '<span class="ok-k"> override</span>' : '';
+    pushCode('    void speak()' + (w.overrideOn?' override':''), w.overrideOn?'override：编译器帮你核对签名':'', '    <span class="vk">void speak()</span>' + o);
+  }
+  pushCode('    { cout << "汪汪！"; }', '', '    { cout << <span class="ok-k">"汪汪！"</span>; }');
+  pushCode('    string name = "旺财";', 'Dog 自己的成员：堆内存', '    <span class="cm">string name = "旺财";  // Dog 自己的成员</span>');
+  pushCode('};', '', '};');
+}
+
+function mainCode(){
+  const w = world;
+  const ptr = w.vars.filter(v=>v.kind==='ptr');
+  pushCode('', '', '');
+  pushCode('int main() {', '', '<span class="vk">int main()</span> {');
+  if(w.sliceSeen){
+    pushCode('    Animal a = *dog;', '切片！', '    <span class="pk">Animal a = *dog;</span>');
+  }
+  if(w.lastCall){
+    pushCode('    ' + w.lastCall, '', '    ' + w.lastCall);
+  }
+  if(w.zooOpen){
+    pushCode('    vector<Animal*> zoo = {dog, cat' + (w.duckIn?', duck':'') + '};', '', '    vector&lt;Animal*&gt; zoo = {dog, cat' + (w.duckIn?', duck':'') + '};');
+    pushCode('    for (Animal* a : zoo)', '← 循环一行不改，行为自动扩展', '    <span class="vk">for</span> (Animal* a : zoo)');
+    pushCode('        a->speak();', '', '        a-&gt;speak();');
+  }
+  if(w.delCall){
+    pushCode('    ' + w.delCall, '', '    ' + w.delCall);
+  }
+  pushCode('}', '', '}');
+}
+
+function renderCode(){
+  world.code = [];
+  classCode();
+  mainCode();
+  const el = document.getElementById('code');
+  const lines = world.code.slice(-24);
+  el.innerHTML = lines.map((l,i)=>{
+    const body = l.h || l.t;
+    const cm = l.c ? `    <span class="cm">// ${l.c}</span>` : '';
+    const cls = 'cline' + (i === lines.length-1 ? ' hot' : '');
+    return `<div class="${cls}">${body}${cm}</div>`;
+  }).join('');
+}
+
+/* ============ 函数表生成 ============ */
+function vtableHTML(){
+  const w = world;
+  const rows = [];
+  const speakImpl = (cls, extra)=>{
+    if(w.pure && cls==='Animal') return '<span class="miss">（空缺 =0）</span>';
+    return '<span class="imp">' + cls + '::speak</span>' + (extra||'');
+  };
+  rows.push(`<div class="vtable animal ${w.hlAnimal?'hl':''}">
+    <div class="vt-title">📖 Animal 的函数表</div>
+    <div class="vt-row">${speakImpl('Animal')}${w.virtSpeak?'<span class="vb">💫virtual</span>':''}</div>
+    <div class="vt-row"><span class="imp">~Animal</span>${w.virtDtor?'<span class="vb">💫virtual</span>':''}</div>
+  </div>`);
+  rows.push(`<div class="vtable dog ${w.hlDog?'hl':''}">
+    <div class="vt-title">📖 Dog 的函数表</div>
+    <div class="vt-row">${w.dogSigBad ? '<span class="miss">speak → （没换行！签名不同没覆盖）</span>' : speakImpl('Dog')}<span class="vb">💫virtual</span></div>
+    <div class="vt-row"><span class="imp">~Dog</span></div>
+  </div>`);
+  if(w.duckIn) rows.push(`<div class="vtable duck">
+    <div class="vt-title">📖 Duck 的函数表</div>
+    <div class="vt-row">${speakImpl('Duck')}<span class="vb">💫virtual</span></div>
+  </div>`);
+  return rows.join('');
+}
+
+/* ============ 调用解析 ============ */
+function resolveCall(varName, targetId){
+  const o = world.heap[targetId];
+  if(world.virtSpeak && !world.pure){
+    if(o.cls === 'Dog' && world.dogSigBad){
+      addLog(varName + '->speak();', 'cmd',
+        '🔍 <b>按对象类型查表</b>：vptr 指向 <b>Dog 的函数表</b> → 查 speak 一栏——<b>根本没换行！</b>（签名多了一个参数 = 写了个新函数，表里这栏还挂着 Animal::speak）→ 跳到 Animal::speak → <span class="say">『' + SPEAK.Animal + '』</span>。virtual 还在生效，只是 Dog 没接上。');
+      return 'Animal';
+    }
+    const impl = o.cls;
+    addLog(varName + '->speak();', 'cmd',
+      '🔍 <b>按对象类型查表</b>：读对象 #' + targetId + ' 开头的 vptr → 指向 <b>' + impl + ' 的函数表</b> → 查到 speak = ' + impl + '::speak → 跳过去 → <span class="say">『' + SPEAK[impl] + '』</span>');
+    return impl;
+  }
+  addLog(varName + '->speak();', 'cmd',
+    '🏷️ <b>按指针类型</b>：变量 ' + varName + ' 的声明类型是 <b>Animal*</b>（编译期已定死，对象是谁根本不看）→ 跳到 Animal::speak → <span class="say">『' + SPEAK.Animal + '』</span>');
+  return 'Animal';
+}
+
+/* ============ 每关预置 ============ */
+function seedStage(n){
+  world = blankWorld();
+  seen.clear(); logLines.length = 0;
+  if(n === 1){
+    addLog(null, 'info', '本关世界：speak() 没盖 virtual。你马上会看到"指针类型说了算"的世界。');
+  } else if(n === 2){
+    const d = newObj('Dog', 'name="旺财" age=1');
+    addVar({name:'p', staticType:'Animal*', target:d.id, kind:'ptr'});
+    addLog(null, 'info', '上一关你已看过非虚调用：场上有 Dog 对象、p 的声明类型是 Animal*。这一关只加一个词，看调用结果怎么变。');
+  } else if(n === 3){
+    world.virtSpeak = true;
+    const d = newObj('Dog', 'name="旺财" age=1');
+    addVar({name:'p', staticType:'Animal*', target:d.id, kind:'ptr'});
+    pushCodeFlag();
+    addLog(null, 'info', 'virtual 已盖上（承接上一关）。现在把「按对象类型查表」拆开看。');
+  } else if(n === 4){
+    world.virtSpeak = true;
+    const d = newObj('Dog', 'name="旺财" age=1');
+    addVar({name:'p', staticType:'Animal*', target:d.id, kind:'ptr'});
+    addLog(null, 'info', '本关世界：virtual 已盖，Dog 的程序员正在写覆盖函数——手滑预警。');
+  } else if(n === 5){
+    world.virtSpeak = true;
+    world.zooOpen = true;
+    const d = newObj('Dog', 'name="旺财" age=1');
+    const c = newObj('Cat', 'name="咪咪" age=2');
+    addVar({name:'dog', staticType:'Animal*', target:d.id, kind:'ptr', inZoo:true});
+    addVar({name:'cat', staticType:'Animal*', target:c.id, kind:'ptr', inZoo:true});
+    world.lastCall = null;
+    addLog(null, 'info', 'zoo 循环已就位：狗汪猫喵。这一关看多态值几个钱。');
+  } else if(n === 6){
+    world.virtSpeak = true;
+    const d = newObj('Dog', 'name="旺财" age=1');
+    addVar({name:'dog', staticType:'Animal*', target:d.id, kind:'ptr'});
+    addLog(null, 'info', '多态目前都走指针。这一关故意用【值】试试——切片事故现场。');
+  } else if(n === 7){
+    world.virtSpeak = true;
+    const d = newObj('Dog', 'name = new char[]("旺财") age=1', 'name 是狗自己 new 的堆内存');
+    addVar({name:'d', staticType:'Animal*', target:d.id, kind:'ptr'});
+    addLog(null, 'info', '狗身上挂着一块堆内存（name）。现在 delete 它——注意析构函数还没盖 virtual。');
+  } else if(n === 7.5){
+    world.virtSpeak = true; world.virtDtor = true;
+    const d = newObj('Dog', 'name = new char[]("旺财") age=1');
+    addVar({name:'d', staticType:'Animal*', target:d.id, kind:'ptr'});
+    addLog(null, 'info', '（重建）~Animal 已加 virtual。再 delete 一次，看正确结局。');
+  } else if(n === 8){
+    world.virtSpeak = true;
+    addLog(null, 'info', '一个问题：Animal::speak 该输出什么？"动物含糊声"其实是敷衍——这一关把它改成诚实的 = 0。');
+  } else if(n === 9){
+    world.virtSpeak = true;
+    addLog(null, 'info', '本关世界：Animal 的构造函数里写了一句 speak()。new Dog 时会发生什么？');
+  } else {
+    addLog(null, 'info', n===0 ? '起点：空场。先扫一眼最上面的机制速览表，然后跟着任务卡走。' : '本关起点已就绪，按任务卡行动。');
+  }
+}
+function pushCodeFlag(){ /* 占位：代码列由 renderCode 动态生成 */ }
+
+/* ============ 持久化 ============ */
+function saveState(){
+  try{ localStorage.setItem(KEY, JSON.stringify({stage, quiz, flags})); }catch(e){}
+}
+function loadState(){
+  try{
+    const d = JSON.parse(localStorage.getItem(KEY));
+    if(!d) return false;
+    stage = d.stage||0; quiz = Array.isArray(d.quiz)?d.quiz:[null,null,null];
+    flags = d.flags||{};
+    return true;
+  }catch(e){ return false; }
+}
+
+/* ============ 关卡推进 ============ */
+function progress(){
+  let moved = false;
+  while(stage < STAGES.length && STAGES[stage].pass()){
+    const s = STAGES[stage];
+    addLog(null, 'ok', '✅ ' + s.nm + ' 通过：' + (s.done || ''));
+    stage++; moved = true;
+    if(stage < STAGES.length) seedStage(stage);
+  }
+  if(stage >= STAGES.length){
+    addLog(null, 'ok', '🏁 毕业！静态/动态绑定、vptr/vtable、三条规则、纯虚函数，全部亲手走通。自由模式解锁——随便按，做实验。');
+  }
+  if(moved){ renderAll(); }   // renderAll 含 saveState；必须连按钮区一起刷新，否则新关卡按钮停留在上一关的禁用态
+}
+
+/* ============ 动作 ============ */
+function doNewAnimal(){
+  if(world.pure){
+    flags.pureErr = true;
+    pushCodeErr();
+    addLog('Animal* a = new Animal();', 'err',
+      '🛑 编译错误：cannot declare variable to be of abstract type Animal —— speak 是 = 0，函数表该栏空缺的类是<b>抽象类</b>，不能实例化。');
+    renderAll(); progress(); return;
+  }
+  const o = newObj('Animal', 'age=1');
+  addVar({name:'a', staticType:'Animal*', target:o.id, kind:'ptr'});
+  addLog('Animal* a = new Animal();', 'cmd', '创建 Animal 对象。它调 speak 本来就只有 Animal 版，无信息量——重点是下一个实验：派生类对象。');
+  renderAll(); progress();
+}
+function doNewDog(){
+  if(world.pure) flags.pureOk = true;
+  if(world.ctorHook){ doCtorDemo(); return; }
+  const o = newObj('Dog', 'name="旺财" age=1');
+  addVar({name:'p', staticType:'Animal*', target:o.id, kind:'ptr'});
+  addLog('Animal* p = new Dog();', 'cmd',
+    '堆上创建 <b>Dog 对象</b>，但变量 p 的声明类型是 <b>Animal*</b>。完全合法：Dog 继承 Animal。记住这两个类型，下面全靠它。');
+  renderAll(); progress();
+}
+function doNewCat(){
+  const o = newObj('Cat', 'name="咪咪" age=2');
+  addVar({name:'c', staticType:'Animal*', target:o.id, kind:'ptr'});
+  addLog('Animal* c = new Cat();', 'cmd', '又创建一个 Cat 对象，真实类型 Cat，声明类型 Animal*。');
+  renderAll(); progress();
+}
+function doSpeak(){
+  const v = lastPtr();
+  if(!v){ addLog(null,'info','还没有指针可调用。先 new 一只。'); renderAll(); return; }
+  const impl = resolveCall(v.name, v.target);
+  if(world.virtSpeak && impl !== 'Animal'){
+    if(impl === 'Dog') flags.dogWoof = true;
+    flags.polySeen = flags.polySeen || (world.hlDog = true);
+  } else {
+    if(!world.virtSpeak || world.pure) flags.nonvirtSeen = true;
+    if(world.dogSigBad) flags.badSigCall = true;
+  }
+  renderAll(); progress();
+}
+function doZoo(){
+  // 保证 zoo 里有狗和猫
+  const have = zooObjs().map(v=>world.heap[v.target].cls);
+  if(!have.includes('Dog')){
+    const o = newObj('Dog', 'name="旺财" age=1');
+    addVar({name:'dog', staticType:'Animal*', target:o.id, kind:'ptr', inZoo:true});
+  }
+  if(!have.includes('Cat')){
+    const o = newObj('Cat', 'name="咪咪" age=2');
+    addVar({name:'cat', staticType:'Animal*', target:o.id, kind:'ptr', inZoo:true});
+  }
+  world.zooOpen = true;
+  const zoo = zooObjs();
+  addLog('for (Animal* a : zoo) a->speak();', 'cmd',
+    '数组 zoo 里放 ' + zoo.length + ' 个对象（' + zoo.map(v=>world.heap[v.target].cls).join('、') + '），循环调用 a->speak()——');
+  zoo.forEach(v=>{
+    const o = world.heap[v.target];
+    if(world.virtSpeak && !world.pure){
+      addLog(null, 'info', '· ' + v.name + ' → 🔍 按对象类型：<b>' + o.cls + '</b> → <span class="say">『' + SPEAK[o.cls] + '』</span>');
+    } else {
+      addLog(null, 'info', '· ' + v.name + ' → 🏷️ 按指针类型：全部 <span class="say">『' + SPEAK.Animal + '』</span>');
+    }
+  });
+  if(world.virtSpeak && !world.pure){
+    flags.virtZoo = true;
+    const ducks = zoo.filter(v=>world.heap[v.target].cls==='Duck');
+    if(ducks.length){ flags.duckSpeak = true; addLog(null, 'ok', '🕊️ 注意代码列：循环那三行<b>一个字没改</b>，Duck 自动接上了——同一行循环代码适配所有子类。'); }
+    else flags.polySeen = true;
+  } else {
+    flags.zooSeen = true;
+    if(zoo.length >= 2) addLog(null, 'err', '⚠️ 关键现象：一个 Dog 一个 Cat，输出却全是动物版。声明类型全是 Animal*，非虚调用就全体 Animal::speak。');
+  }
+  renderAll(); progress();
+}
+function doVirt(){
+  if(world.virtSpeak){ addLog(null,'info','已经加过 virtual 了。'); renderAll(); return; }
+  world.virtSpeak = true;
+  flags.virtOn = true;
+  addLog('virtual void speak();', 'ok',
+    '只加了 <b>virtual</b> 一个词。含义：这条调用的决策从「编译期按指针类型」改为「运行时按对象类型查函数表」。下面验证。');
+  renderAll(); progress();
+}
+function doOvr(){
+  world.dogSigBad = true;
+  flags.badSig = true;
+  addLog('void Dog::speak(string mood) { … }', 'cmd',
+    'Dog 的程序员本想覆盖 speak，手滑写成了 speak(<b>string mood</b>)——多了一个参数。<b>编译器一声不吭</b>，因为这是一个全新函数，语法完全合法。');
+  renderAll(); progress();
+}
+function doOvFix(){
+  if(!world.dogSigBad){ addLog(null,'info','先按「✍️ Dog 写 speak(string mood)」制造事故。'); renderAll(); return; }
+  addLog('void speak(string mood) override;', 'err',
+    '🛑 编译错误：\'void Dog::speak(std::string)\' marked \'override\', but does not override —— <b>override 让编译器当场揪出</b>：你以为在改函数表里 speak 那一行，其实写了个没人引用的新函数。');
+  world.dogSigBad = false;
+  world.overrideOn = true;
+  flags.ovFix = true;
+  addLog('void speak() override;', 'ok',
+    '修正：签名改回 speak()，并保留 override。从此以后再手滑，编译期就红——这行字不改变行为，只请编译器当质检。');
+  renderAll(); progress();
+}
+function doDuck(){
+  const o = newObj('Duck', 'name="嘎嘎" age=1');
+  addVar({name:'duck', staticType:'Animal*', target:o.id, kind:'ptr', inZoo:true});
+  world.duckIn = true;
+  flags.duckIn = true;
+  addLog('zoo.push_back(new Duck);', 'cmd',
+    '往数组里加一个 Duck 对象。看代码列：<b>循环一行没改</b>——调用方不需要认识 Duck，函数表自动接管。');
+  renderAll(); progress();
+}
+function doSlice(){
+  const v = world.vars.find(x=>x.name==='dog') || lastPtr();
+  if(!v){ addLog(null,'info','先 new 一只狗。'); renderAll(); return; }
+  world.sliceSeen = true;
+  flags.sliceSeen = true;
+  const o = world.heap[v.target];
+  addVar({name:'a', staticType:'Animal（值）', target:null, kind:'value', valCls:'Animal'});
+  addLog('Animal a = *dog;', 'err',
+    '🔪 <b>切片（object slicing）</b>：把 *dog 按值拷贝给 a——只拷贝了 Animal 子对象的成员（age），<b>name 没了，vptr 也不会被拷贝</b>。不报错、不崩溃，多态静默失效。');
+  renderAll(); progress();
+}
+function doVCall(){
+  const v = world.vars.find(x=>x.kind==='value');
+  if(!v){ addLog(null,'info','先按「Animal a = *dog（切片）」造一个值对象。'); renderAll(); return; }
+  flags.vsliceSeen = true;
+  addLog('a.speak();', 'cmd',
+    '🏷️ <b>按指针类型</b>：a 是值对象，身上<b>没有 vptr</b>（拷贝时没带走）→ 没表可查，退回编译期决策：a 的类型是 Animal → <span class="say">『' + SPEAK.Animal + '』</span>。virtual 还在，但没有 vptr 就没有动态绑定。');
+  renderAll(); progress();
+}
+function doXray(){
+  flags.xray = true;
+  world.hlDog = true; world.hlAnimal = true;
+  addLog('sizeof(Animal) / sizeof(Dog)?', 'cmd',
+    '📊 字节账：<b>没盖 virtual</b> 时 Animal = 4 字节（就一个 int），对象里没有 vptr，编译器连函数表都不生成。');
+  addLog(null, 'info',
+    '📊 <b>盖了 virtual</b> 后：对象开头多一个 <b>8 字节指针（vptr）</b>，加对齐 → sizeof = 16。构造对象时自动写入，指向它所属类的函数表。');
+  addLog(null, 'ok',
+    '🔍 全程没有魔法：<b>按对象类型 = 读对象开头的 vptr → 找到它类的函数表 → 按函数名查到地址 → 跳过去</b>。一次运行时查表而已。注意函数表是<b>每类一张</b>（1000 个 Dog 对象共享同一张 Dog 函数表），vptr 才是每个对象一个。');
+  renderAll(); progress();
+}
+function doDel(){
+  const v = lastPtr();
+  if(!v){ addLog(null,'info','没有指针可删。'); renderAll(); return; }
+  const o = world.heap[v.target];
+  if(!o.alive){ addLog(null,'info','这个对象已经删过了。'); renderAll(); return; }
+  world.delCall = 'delete d;';
+  if(world.virtDtor){
+    o.alive = false;
+    flags.dtorFixed = true;
+    addLog('delete d;', 'ok',
+      '🔍 按对象类型查表：vptr 指向 <b>Dog 的函数表</b> → 查 ~ 一栏 → <b>先调 ~Dog</b>（释放 Dog 的成员：name 那块堆内存）→ C++ 保证接着自动调 <b>~Animal</b> → 全部释放，坟场空空。');
+  } else {
+    o.alive = false; o.leaked = true;
+    flags.dtorLeak = true;
+    addLog('delete d;', 'err',
+      '🏷️ 按指针类型：变量 d 的声明类型是 <b>Animal*</b> → 只调了 <b>~Animal</b>。Dog 自己的成员——<b>name 那块堆内存——没人释放</b> → 👻 进坟场。和智能指针课同一个坟场：unique_ptr&lt;Animal&gt; 装 Dog 时删除动作一模一样，照样漏。');
+  }
+  renderAll(); progress();
+}
+function doVdtor(){
+  if(world.virtDtor){ addLog(null,'info','已经盖过章了。按 delete 看正确结局。'); renderAll(); return; }
+  seedStage(7.5);   // 重建场景：~Animal 已带 virtual，狗重新挂上 name
+  addLog('virtual ~Animal();', 'ok',
+    '给析构函数加上 virtual：删除基类指针时改走「按对象类型查表」。三条规则之二生效中——<b>凡是要当基类用的类，析构必须虚</b>。场景已重建，现在按 <b>delete 基类指针</b> 看正确结局。');
+  renderAll(); progress();
+}
+function doPure(){
+  if(world.pure){ addLog(null,'info','已经是 = 0 了。'); renderAll(); return; }
+  world.pure = true;
+  flags.pureSet = true;
+  addLog('virtual void speak() = 0;', 'cmd',
+    '函数表该栏改成<b>空缺（= 0）</b>：Animal 自己不提供 speak，派生类必须实现。Animal 从此是<b>抽象类</b>——只当接口，不能实例化。');
+  renderAll(); progress();
+}
+function doCtorDemo(){
+  world.ctorHook = true;
+  // 构造过程：先 Animal 子对象（vptr 暂指 Animal 函数表）
+  addLog('Animal* p = new Dog();', 'cmd', 'new Dog() 的构造顺序，逐帧看：');
+  addLog(null, 'info', '1️⃣ 先构造基类子对象：调用 <b>Animal()</b>。此刻 vptr 刚写入，<b>指向 Animal 的函数表</b>——编译器规定：基类构造期间，虚表还是基类的。');
+  addLog(null, 'err', '2️⃣ Animal() 里的 speak() 执行 → 按对象类型查表 → 查到的是 <b>Animal 的表</b> → <span class="say">『' + SPEAK.Animal + '』</span>——不是汪！');
+  addLog(null, 'info', '3️⃣ 基类构造完成，才执行 <b>Dog()</b>：初始化 name、vptr <b>改指 Dog 的函数表</b>。');
+  addLog(null, 'ok', '4️⃣ 构造完成后，p->speak() 才输出汪。结论：<b>构造和析构期间没有多态</b>——vptr 还没改指派生类（析构时则已退回基类）。');
+  const o = newObj('Dog', 'name="旺财" age=1', '构造过程中 vptr 经历了 Animal→Dog');
+  addVar({name:'p', staticType:'Animal*', target:o.id, kind:'ptr'});
+  flags.ctorCall = true;
+  renderAll(); progress();
+}
+function doReset(){
+  seedStage(stage === STAGES.length ? 1 : stage);
+  progress();
+  renderAll();
+}
+
+/* ============ 渲染 ============ */
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');}
+
+function renderRail(){
+  const el = document.getElementById('rail');
+  let html = '';
+  STAGES.forEach((s,i)=>{
+    let cls = 'pill';
+    if(stage >= STAGES.length || i < stage) cls += ' done';
+    else if(i === stage) cls += ' current';
+    const mark = (stage >= STAGES.length || i < stage) ? '✓ ' : '';
+    html += `<span class="${cls}">${mark}${esc(s.nm)}</span>`;
+    if(i < STAGES.length-1) html += '<span class="sep"></span>';
+  });
+  html += '<span class="sep"></span><span class="pill' + (stage>=STAGES.length?' current':'') + '">🏁 自由模式</span>';
+  el.innerHTML = html;
+}
+
+function quizHTML(){
+  return '<div class="quiz">' + QUIZ.map((it,i)=>{
+    const st = quiz[i];
+    const opts = it.opts.map((o,j)=>{
+      let cls = 'opt';
+      if(st){
+        if(j === it.ans) cls += ' correct';
+        else if(st.pick === j) cls += ' wrong';
+        else cls += ' dim';
+      }
+      const mark = st ? (j===it.ans ? ' ✅' : (st.pick===j ? ' ❌' : '')) : '';
+      return `<button class="${cls}" data-q="${i}" data-o="${j}" ${st && st.ok ? 'disabled':''}>${esc(o)}${mark}</button>`;
+    }).join('');
+    const expl = st ? `<div class="qexpl">${st.ok ? '✅' : '❌ 不对，再选一次。'} ${esc(it.expl)}</div>` : '';
+    return `<div class="qitem"><div class="qtext">${esc(it.q)}</div><div class="opts">${opts}</div>${expl}</div>`;
+  }).join('') + '</div>';
+}
+
+function renderQuest(){
+  const el = document.getElementById('quest');
+  if(stage >= STAGES.length){
+    el.className = 'quest free pop';
+    el.innerHTML = `
+      <div class="quest-head">
+        <span class="quest-stage" style="color:var(--green)">GRADUATED</span>
+        <span class="quest-title">🏁 终点：这条链你走通了</span>
+        <button class="skip" id="b-restart">↺ 从起点再走一遍</button>
+      </div>
+      <div class="q-row"><span class="k">📍 起点</span><span class="v">非虚调用：基类指针一律调到基类版本。</span></div>
+      <div class="q-row"><span class="k">🏁 终点</span><span class="v">两种绑定（静态=按指针类型·动态=按对象类型）→ 两个零件（vptr·vtable）→ 三条规则（override 防手滑 ｜ 基类析构必虚 ｜ 多态只走指针/引用）→ 纯虚函数（=0 抽象类）。</span></div>
+      <div class="q-row"><span class="k">🎮 现在</span><span class="v">自由模式：随便按。建议实验：加 override 后再写错一次签名；切片后透视内存；= 0 之后试图 new Animal。</span></div>
+      <div class="q-row"><span class="k">💬 回 ZCode</span><span class="v">合上页面复述四样东西：<b>两种绑定 → 两个零件 → 三条规则 → 纯虚函数</b>。说顺了喊"咔哒"。</span></div>`;
+    const rb = document.getElementById('b-restart');
+    if(rb) rb.onclick = ()=>{ localStorage.removeItem(KEY); flags={}; stage=0; quiz=[null,null,null]; seedStage(0); renderAll(); };
+    return;
+  }
+  const s = STAGES[stage];
+  el.className = 'quest';
+  el.innerHTML = `
+    <div class="quest-head">
+      <span class="quest-stage">${esc(s.stageTag)}</span>
+      <span class="quest-title">${esc(s.title)}</span>
+      <button class="skip" id="b-skip">跳过引导，直接自由模式 →</button>
+    </div>
+    <div class="q-row"><span class="k">📍 起点</span><span class="v">${s.start}</span></div>
+    <div class="q-row"><span class="k">🎯 任务</span><span class="v">${s.task}</span></div>
+    <div class="q-row"><span class="k">👀 看什么</span><span class="v">${s.watch}</span></div>
+    ${stage===0 ? '<div class="go"><button class="primary" id="b-begin">开始第 1 关 ▶</button></div>' : ''}
+    ${stage===STAGES.length-1 ? quizHTML() : ''}`;
+  const begin = document.getElementById('b-begin');
+  if(begin) begin.onclick = ()=>{ flags.started = true; progress(); renderAll(); };
+  const skip = document.getElementById('b-skip');
+  if(skip) skip.onclick = ()=>{ stage = STAGES.length; seedStage(1); renderAll(); };
+  el.querySelectorAll('.opt').forEach(btn=>{
+    btn.onclick = ()=>{
+      const i = +btn.dataset.q, j = +btn.dataset.o;
+      if(quiz[i] && quiz[i].ok) return;
+      quiz[i] = {pick:j, ok: j===QUIZ[i].ans};
+      renderQuest(); renderRail(); progress(); saveState();
+    };
+  });
+}
+
+function renderStack(){
+  const el = document.getElementById('stackVars');
+  const foot = document.getElementById('stackfoot');
+  const vars = world.vars;
+  if(!vars.length){
+    el.innerHTML = '<div class="empty">（栈上没有变量）<br>造一个：new Dog / new Cat</div>';
+    foot.innerHTML = '';
+    return;
+  }
+  el.innerHTML = vars.map(v=>{
+    const isVal = v.kind === 'value';
+    let target;
+    if(isVal){
+      target = '🧱 值对象·住在栈上（没有 vptr，没法查表）';
+    } else if(v.target === null){
+      target = '→ <span style="color:var(--amber)">nullptr</span>';
+    } else {
+      const o = world.heap[v.target];
+      target = o.alive ? '→ ' + EMOJI[o.cls] + ' ' + o.cls + ' #' + o.id + '（真实类型）' : '→ <span style="color:var(--red)">已删</span>';
+    }
+    return `<div class="var-card ${isVal?'value':'ptr'} ${fresh('var-'+v.name,'')}">
+      <div class="vhead">🏷️ ${esc(v.name)} <span class="vtype">${esc(v.staticType)}</span><span class="vscope">stack</span></div>
+      <div class="vtarget">${target}</div>
+    </div>`;
+  }).join('');
+  foot.innerHTML = '非虚调用只看<b style="color:var(--amber)">声明类型</b>；盖了 virtual 才读对象里的 vptr。';
+}
+
+function renderHeap(){
+  const live = document.getElementById('heapLive');
+  const objs = Object.values(world.heap).filter(o=>o.alive && !o.leaked);
+  if(!objs.length){
+    live.innerHTML = '<div class="empty">（堆是空的）<br>对象由 new 诞生</div>';
+  } else {
+    live.innerHTML = objs.map(o=>{
+      const canScan = world.virtSpeak;
+      const tag = canScan
+        ? `<span class="obj-tag" id="tag-${o.id}">vptr → ${o.cls} 函数表</span>`
+        : `<span class="obj-tag notag">无 vptr（没盖 virtual）</span>`;
+      return `<div class="obj-card ${o.cls.toLowerCase()} ${fresh('obj-'+o.id,'')}">
+        <div class="obj-head">${EMOJI[o.cls]} ${o.cls} #${o.id} ${tag}</div>
+        <div class="obj-holders">数据：<b>${esc(o.data)}</b>${o.note ? '<div style="opacity:.7">' + esc(o.note) + '</div>' : ''}</div>
+      </div>`;
+    }).join('');
+  }
+  // manuals
+  document.getElementById('manuals').innerHTML = vtableHTML();
+  // graveyard
+  const gy = document.getElementById('graveyard');
+  const ghosts = Object.values(world.heap).filter(o=>o.leaked);
+  gy.innerHTML = ghosts.length
+    ? ghosts.map(o=>`<span class="ghost">👻 ${o.cls}#${o.id} 的 name（析构没虚，漏了）</span>`).join('')
+    : '<span style="font-size:11.5px;color:var(--muted)">干干净净，暂无泄漏。</span>';
+  // memory bar
+  const leaked = ghosts.length;
+  const pct = Math.min(8 + leaked * 20, 95);
+  const fill = document.getElementById('memfill');
+  fill.style.width = pct + '%';
+  fill.className = 'memfill' + (leaked===0 ? '' : ' warn');
+  document.getElementById('memtext').textContent = leaked===0
+    ? '堆内存 8% · 无泄漏'
+    : '堆内存 ' + pct + '% · 泄漏 ' + leaked + ' 块（虚析构缺席的代价）';
+}
+
+function renderLog(){
+  document.getElementById('log').innerHTML = logLines.map(l=>{
+    if(l.type==='info') return `<div class="logline info">ℹ️ ${l.expl}</div>`;
+    if(l.type==='ok')   return `<div class="logline ok">${l.expl}</div>`;
+    if(l.type==='err')  return `<div class="logline err">🛑 ${l.expl}</div>`;
+    return `<div class="logline"><div class="cmd">$ ${l.cmd}</div><div class="expl">→ ${l.expl}</div></div>`;
+  }).join('');
+}
+
+function updateButtons(){
+  const st = stage >= STAGES.length ? 'free' : String(stage);
+  const plan = {
+    '0':  {},
+    '1':  {ne:1,nc:0,sp:1,zoo:1},
+    '2':  {ne:1,nc:1,sp:1,zoo:1,vi:1},
+    '3':  {ne:1,sp:1,xr:1},
+    '4':  {ne:1,sp:1,ov:1,of:1},
+    '5':  {zoo:1,du:1},
+    '6':  {ne:1,sl:1,vc:1},
+    '7':  {de:1,vd:1},
+    '8':  {pu:1,na:1,ne:1},
+    '9':  {ct:1},
+    '10': {},
+    'free':{na:1,ne:1,nc:1,sp:1,vc:1,zoo:1,vi:1,ov:1,of:1,du:1,sl:1,xr:1,de:1,vd:1,pu:1,ct:1},
+  }[st] || {};
+  const on = k => !!plan[k];
+  document.getElementById('b-newanimal').disabled = !on('na');
+  document.getElementById('b-newdog').disabled    = !on('ne');
+  document.getElementById('b-newcat').disabled    = !on('nc');
+  document.getElementById('b-speak').disabled     = !on('sp');
+  document.getElementById('b-vcall').disabled     = !on('vc');
+  document.getElementById('b-zoo').disabled       = !on('zoo');
+  document.getElementById('b-virt').disabled      = !on('vi');
+  document.getElementById('b-ovr').disabled       = !on('ov');
+  document.getElementById('b-ovfix').disabled     = !on('of');
+  document.getElementById('b-duck').disabled      = !on('du');
+  document.getElementById('b-slice').disabled     = !on('sl');
+  document.getElementById('b-xray').disabled      = !on('xr');
+  document.getElementById('b-del').disabled       = !on('de');
+  document.getElementById('b-vdtor').disabled     = !on('vd');
+  document.getElementById('b-pure').disabled      = !on('pu');
+  document.getElementById('b-ctor').disabled      = !on('ct');
+}
+
+function renderAll(){
+  renderRail(); renderQuest(); renderCode(); renderStack(); renderHeap(); renderLog(); updateButtons();
+  saveState();
+}
+
+/* ============ 绑定 ============ */
+document.getElementById('b-newanimal').onclick = doNewAnimal;
+document.getElementById('b-newdog').onclick    = doNewDog;
+document.getElementById('b-newcat').onclick    = doNewCat;
+document.getElementById('b-speak').onclick     = doSpeak;
+document.getElementById('b-vcall').onclick     = doVCall;
+document.getElementById('b-zoo').onclick       = doZoo;
+document.getElementById('b-virt').onclick      = doVirt;
+document.getElementById('b-ovr').onclick       = doOvr;
+document.getElementById('b-ovfix').onclick     = doOvFix;
+document.getElementById('b-duck').onclick      = doDuck;
+document.getElementById('b-slice').onclick     = doSlice;
+document.getElementById('b-xray').onclick      = doXray;
+document.getElementById('b-del').onclick       = doDel;
+document.getElementById('b-vdtor').onclick     = doVdtor;
+document.getElementById('b-pure').onclick      = doPure;
+document.getElementById('b-ctor').onclick      = ()=>{ world.ctorHook = true; doCtorDemo(); };
+document.getElementById('b-reset').onclick     = doReset;
+document.getElementById('b-revive').onclick    = doReset;
+
+/* ============ 启动 ============ */
+if(!loadState()){ flags = {}; stage = 0; quiz = [null,null,null]; }
+else{ addLog(null, 'ok', '欢迎回来：进度已恢复（第 ' + Math.min(stage+1, STAGES.length) + ' / ' + STAGES.length + ' 关）。↺ 可从起点再走一遍。'); }
+seedStage(stage === STAGES.length ? 1 : stage);
+renderAll();
+</script>
+</body>
+</html>

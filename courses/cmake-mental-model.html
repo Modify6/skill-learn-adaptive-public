@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Modern CMake —— 生成器不是编译器 · 一切皆 Target</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#151f36; --panel2:#0f1729;
+    --line:#26334d; --text:#dde6f5; --muted:#a6b9d9;
+    --blue:#3b82f6; --green:#22c55e; --purple:#a855f7;
+    --amber:#f5b544; --cyan:#38bdf8; --red:#f87171;
+    --mono:"Cascadia Code",Consolas,"JetBrains Mono",monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:radial-gradient(1200px 600px at 50% -100px,#16223d 0%,var(--bg) 60%);
+    color:var(--text);
+    font-family:system-ui,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+    padding:30px 18px 70px; line-height:1.65;
+  }
+  body.shake{animation:shake .5s;}
+  @keyframes shake{
+    0%,100%{transform:translateX(0);} 20%{transform:translateX(-9px);}
+    40%{transform:translateX(8px);} 60%{transform:translateX(-6px);} 80%{transform:translateX(4px);}
+  }
+  .wrap{max-width:1240px; margin:0 auto;}
+
+  /* ---------- header ---------- */
+  h1{font-size:26px; letter-spacing:.5px;}
+  h1 .dot-word{color:var(--amber);}
+  .sub{color:var(--muted); margin-top:6px; font-size:14.5px;}
+  .ladder{
+    margin-top:12px; padding:8px 14px; border:1px dashed var(--line); border-radius:10px;
+    font-size:12.5px; color:var(--muted); background:rgba(255,255,255,.02);
+    font-family:var(--mono);
+  }
+  .ladder b{color:var(--cyan); font-weight:600;}
+  .ladder .bad{color:var(--red);}
+
+  /* ---------- landing table (机制落地表) ---------- */
+  .ltable{margin-top:12px; border:1px solid var(--line); border-radius:10px; overflow:hidden; font-size:12px;}
+  .ltable table{width:100%; border-collapse:collapse;}
+  .ltable th{
+    background:rgba(255,255,255,.03); color:var(--muted); font-size:11px; font-weight:600;
+    padding:6px 10px; text-align:left; border-bottom:1px solid var(--line); letter-spacing:1px;
+  }
+  .ltable td{padding:6px 10px; border-bottom:1px solid rgba(38,51,77,.5); vertical-align:top;}
+  .ltable tr:last-child td{border-bottom:none;}
+  .ltable .nick{color:var(--amber); font-weight:700; font-family:var(--mono); white-space:nowrap;}
+  .ltable .real{color:var(--cyan); font-family:var(--mono);}
+  .ltable .phys{color:var(--text);}
+  .ltable .life{color:var(--muted);}
+
+  /* ---------- journey rail ---------- */
+  .journey{margin-top:22px;}
+  .rail{display:flex; align-items:center; gap:6px; overflow-x:auto; padding:4px 2px 10px;}
+  .pill{
+    flex:none; font-size:11.5px; padding:4px 11px; border-radius:999px;
+    border:1px solid var(--line); color:var(--muted); white-space:nowrap; background:var(--panel2);
+  }
+  .pill.done{color:var(--green); border-color:rgba(34,197,94,.55);}
+  .pill.current{color:var(--amber); border-color:var(--amber); box-shadow:0 0 10px rgba(245,181,68,.25); font-weight:700;}
+  .sep{flex:none; width:14px; height:2px; background:var(--line);}
+
+  /* ---------- quest card ---------- */
+  .quest{
+    border:1px solid rgba(245,181,68,.45); border-left:4px solid var(--amber);
+    background:linear-gradient(90deg, rgba(245,181,68,.07), var(--panel2) 45%);
+    border-radius:12px; padding:14px 18px;
+  }
+  .quest.free{border-color:rgba(34,197,94,.45); border-left-color:var(--green);
+    background:linear-gradient(90deg, rgba(34,197,94,.07), var(--panel2) 45%);}
+  .quest-head{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .quest-stage{font-family:var(--mono); font-size:11px; color:var(--amber); letter-spacing:1px;}
+  .quest-title{font-size:16px; font-weight:700;}
+  .skip{margin-left:auto; font-size:12px; color:var(--muted); cursor:pointer; border:none; background:none; text-decoration:underline dotted;}
+  .skip:hover{color:var(--text);}
+  .q-row{display:flex; gap:12px; margin-top:9px; font-size:13.5px;}
+  .q-row .k{flex:none; width:88px; color:var(--muted); font-weight:600;}
+  .q-row .v{color:var(--text);}
+  .q-row .v b{color:var(--amber);}
+  .quest .go{margin-top:12px;}
+  .quest .go button{
+    font-size:13px; padding:7px 18px; border-color:var(--amber); color:var(--amber);
+    font-family:system-ui,"Microsoft YaHei",sans-serif; font-weight:700;
+  }
+
+  /* quiz */
+  .quiz{margin-top:6px;}
+  .qitem{margin-top:12px; padding-top:10px; border-top:1px dashed var(--line);}
+  .qitem .qtext{font-size:13.5px; font-weight:600;}
+  .opts{display:flex; flex-direction:column; gap:6px; margin-top:8px;}
+  .opt{
+    text-align:left; font-size:12.5px; font-family:var(--mono),system-ui,sans-serif;
+    background:#182338; color:var(--text); border:1px solid var(--line); border-radius:6px;
+    padding:8px 12px; cursor:pointer;
+  }
+  .opt.correct{border-color:var(--green); color:var(--green); background:rgba(34,197,94,.1);}
+  .opt.wrong{border-color:var(--red); color:var(--red); background:rgba(248,113,113,.08);}
+  .opt.dim{opacity:.4;}
+  .qexpl{font-size:12px; color:var(--muted); margin-top:6px;}
+
+  /* ---------- crash banner ---------- */
+  .crashbar{
+    margin-top:18px; border:1px solid rgba(248,113,113,.6); border-radius:12px;
+    background:linear-gradient(90deg, rgba(248,113,113,.16), rgba(248,113,113,.04));
+    padding:12px 18px; font-size:14px; color:#ffc9c9; display:none;
+  }
+  .crashbar.show{display:flex; align-items:center; gap:12px; flex-wrap:wrap;}
+  .crashbar .boom{font-size:22px;}
+  .crashbar b{color:#fff;}
+  .crashbar .fix{margin-left:auto;}
+
+  /* ---------- stage (3 columns) ---------- */
+  .stage-scroll{overflow-x:auto; margin-top:20px; padding-bottom:6px;}
+  .stage{
+    min-width:1120px;
+    display:grid;
+    grid-template-columns:1.1fr 1.3fr 1fr;
+    gap:0 12px; align-items:stretch;
+  }
+  .col-head{margin-bottom:10px; text-align:center;}
+  .col-head .nick{font-size:17px; font-weight:700;}
+  .col-head .real{font-family:var(--mono); font-size:11.5px; color:var(--cyan); letter-spacing:1px; text-transform:uppercase;}
+  .col-head .duty{font-size:12px; color:var(--muted); margin-top:2px;}
+  .col{
+    background:var(--panel2); border:1px solid var(--line); border-radius:14px;
+    padding:14px; display:flex; flex-direction:column; gap:12px; min-height:490px;
+  }
+  .c1 .nick{color:var(--cyan);} .c2 .nick{color:var(--amber);} .c3 .nick{color:var(--green);}
+
+  /* Code Column */
+  .codebox{
+    background:#080d18; border:1px solid var(--line); border-radius:10px;
+    padding:12px; font-family:var(--mono); font-size:12px; line-height:1.75;
+    flex:1; overflow-y:auto;
+  }
+  .codeline{padding:1px 6px; border-radius:4px; transition:background .2s;}
+  .codeline.active{background:rgba(245,181,68,.18); color:var(--amber); border-left:3px solid var(--amber);}
+  .codeline .kw{color:#ff7b72;}
+  .codeline .cmd{color:#d2a8ff; font-weight:bold;}
+  .codeline .arg{color:#79c0ff;}
+  .codeline .cm{color:#8b949e; font-style:italic;}
+  .codeline .scope{color:var(--amber); font-weight:bold;}
+
+  /* Target Backpack Column */
+  .targets-box{display:flex; flex-direction:column; gap:10px; flex:1;}
+  .target-card{
+    background:#0d1424; border:1px solid var(--line); border-radius:10px;
+    padding:10px 12px; font-family:var(--mono); font-size:12px;
+    position:relative; transition:all .3s ease;
+  }
+  .target-card.active{border-color:var(--amber); box-shadow:0 0 10px rgba(245,181,68,.3);}
+  .tc-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;}
+  .tc-name{font-weight:700; color:var(--text); font-size:13.5px;}
+  .tc-type{
+    font-size:10px; padding:2px 6px; border-radius:4px; text-transform:uppercase;
+  }
+  .type-exe{background:rgba(56,189,248,.15); color:var(--cyan); border:1px solid rgba(56,189,248,.3);}
+  .type-lib{background:rgba(168,85,247,.15); color:var(--purple); border:1px solid rgba(168,85,247,.3);}
+  .type-iface{background:rgba(34,197,94,.15); color:var(--green); border:1px solid rgba(34,197,94,.3);}
+
+  .tc-section{margin-top:6px; font-size:11px;}
+  .tc-sec-title{color:var(--muted); font-size:10px; font-weight:600; text-transform:uppercase;}
+  .tc-tags{display:flex; gap:4px; flex-wrap:wrap; margin-top:2px;}
+  .tc-tag{
+    padding:2px 6px; border-radius:4px; font-size:10.5px; border:1px solid var(--line); background:#162238;
+  }
+  .scope-pub{border-color:rgba(34,197,94,.4); color:var(--green);}
+  .scope-pri{border-color:rgba(245,181,68,.4); color:var(--amber);}
+  .scope-iface{border-color:rgba(56,189,248,.4); color:var(--cyan);}
+
+  /* Build & Generator View Column */
+  .gen-box{display:flex; flex-direction:column; gap:12px; flex:1;}
+  .gen-panel{
+    background:#0d1527; border:1px solid var(--line); border-radius:10px;
+    padding:10px 12px; font-size:12px; font-family:var(--mono);
+  }
+  .gen-title{
+    color:var(--cyan); font-weight:700; font-size:11.5px; margin-bottom:6px;
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .art-list{display:flex; flex-direction:column; gap:6px;}
+  .art-item{
+    background:#141f36; padding:6px 10px; border-radius:6px; border:1px solid var(--line);
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .art-name{color:var(--text); font-weight:600;}
+  .art-status{font-size:10px; color:var(--green);}
+
+  /* Stats Bar */
+  .stats-bar{
+    display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;
+    margin-top:auto; padding-top:10px; border-top:1px dashed var(--line);
+  }
+  .stat-item{background:#0e172a; padding:6px 8px; border-radius:6px; border:1px solid var(--line); text-align:center;}
+  .stat-val{font-size:14px; font-weight:700; color:var(--text); font-family:var(--mono);}
+  .stat-val.good{color:var(--green);}
+  .stat-val.warn{color:var(--amber);}
+  .stat-val.bad{color:var(--red);}
+  .stat-lbl{font-size:10px; color:var(--muted);}
+
+  /* ---------- console ---------- */
+  .console{margin-top:26px; background:var(--panel2); border:1px solid var(--line); border-radius:14px; overflow:hidden;}
+  .console-head{
+    display:flex; align-items:center; gap:10px; padding:10px 16px;
+    border-bottom:1px solid var(--line); background:rgba(255,255,255,.02);
+    font-size:13px; color:var(--muted); flex-wrap:wrap;
+  }
+  .btns{display:flex; gap:8px; flex-wrap:wrap; margin-left:auto;}
+  button{
+    font-family:var(--mono); font-size:12px; color:var(--text);
+    background:#1d2a47; border:1px solid var(--line); border-radius:8px;
+    padding:6px 12px; cursor:pointer; transition:all .15s;
+  }
+  button:hover:not(:disabled){border-color:var(--amber); color:var(--amber); transform:translateY(-1px);}
+  button:disabled{opacity:.3; cursor:not-allowed;}
+  button.primary{border-color:var(--amber); color:var(--amber);}
+  button.action-btn{border-color:var(--cyan); color:var(--cyan);}
+  button.fix-btn{border-color:var(--green); color:var(--green);}
+  button.danger-btn{border-color:var(--red); color:var(--red);}
+
+  .logbox{padding:12px 16px; max-height:240px; overflow-y:auto; font-family:var(--mono); font-size:12.5px;}
+  .logline{margin-bottom:8px;}
+  .logline .cmd{color:var(--amber);}
+  .logline .expl{color:var(--muted); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:12px; margin-top:1px;}
+  .logline .expl b{color:var(--amber); font-weight:600;}
+  .logline.info{color:var(--cyan); font-family:system-ui,"Microsoft YaHei",sans-serif;}
+  .logline.ok{color:var(--green); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:12.5px;}
+  .logline.err{color:var(--red); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:12.5px;}
+
+  /* ---------- details cards ---------- */
+  .why{margin-top:22px; display:grid; grid-template-columns:repeat(3,1fr); gap:12px;}
+  .why-card{background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:14px 16px; font-size:13px;}
+  .why-card h3{font-size:13.5px; margin-bottom:6px;}
+  .why-card p{color:var(--muted); font-size:12.5px;}
+  .why-card b{color:var(--text);}
+  .w1 h3{color:var(--cyan);} .w2 h3{color:var(--amber);} .w3 h3{color:var(--green);}
+
+  footer{margin-top:26px; text-align:center; color:var(--muted); font-size:12px;}
+  @media (max-width:900px){ .why{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Modern CMake：<span class="dot-word">生成器不是编译器</span> · <span class="dot-word">一切皆 Target</span></h1>
+  <p class="sub">治「跨平台编译脚本各写一套、全局变量污染到处穿透、PRIVATE/PUBLIC 傻傻分不清」—— 从手敲编译命令的灾难出发，掌握基于 Target（目标）与属性传递的现代构建心智模型。</p>
+
+  <div class="ladder">
+    核心定性：<b>CMake 本身不编译任何一行 C/C++ 代码（它是元构建生成器）</b>，它读取平台无关的 CMakeLists.txt，生成特定平台的 Makefile/Ninja。
+    &nbsp;‖&nbsp; 黄金心智法则：<b>一切皆 Target（add_executable / add_library）</b>，彻底淘汰全局变量；通过 <b>PRIVATE · INTERFACE · PUBLIC</b> 精确控制属性传递链条。
+  </div>
+
+  <!-- 机制落地表 -->
+  <div class="ltable">
+    <table>
+      <tr><th>指令 / 概念</th><th>物理上是什么</th><th>本质角色</th><th>核心职责与法则</th></tr>
+      <tr><td class="real">cmake -B build</td><td class="phys">配置与生成阶段：解析 CMakeLists.txt，产出 Makefile / Ninja 脚本</td><td class="nick">生成器（Generator）</td><td>在此阶段不调用编译器，只做环境检测与构建规则生成</td></tr>
+      <tr><td class="real">cmake --build build</td><td class="phys">执行构建阶段：驱动底层 make/ninja 调用 g++/clang 编译代码</td><td class="life">真正的编译执行</td><td>跨平台编译统一入口，免去手动敲 make 或 msbuild 的差异</td></tr>
+      <tr><td class="real">add_executable / add_library</td><td class="phys">在 CMake 内存中注册一个 Target 实体（可执行文件或库）</td><td class="life">创建目标实体</td><td>现代 CMake 的一等公民，后续所有配置都挂载在具体 Target 上</td></tr>
+      <tr><td class="real">target_include_directories</td><td class="phys">给 Target 的属性背包塞入头文件搜索路径（-I 目录）</td><td class="life">装配头文件背包</td><td>取代老旧全局的 include_directories()，杜绝路径污染</td></tr>
+      <tr><td class="real">target_link_libraries</td><td class="phys">建立 Target 之间的依赖边，并顺带传递头文件与编译宏属性</td><td class="life">建立依赖与继承边</td><td>不仅链接 .a/.so，更把依赖目标的 PUBLIC/INTERFACE 属性传过来</td></tr>
+      <tr><td class="real">PRIVATE / PUBLIC / INTERFACE</td><td class="phys">控制属性背包向后传递的可见性范围</td><td class="nick">“传递性三剑客”</td><td><b>PRIVATE</b>=仅自己用；<b>INTERFACE</b>=仅别人用；<b>PUBLIC</b>=自己和别人都要用</td></tr>
+    </table>
+  </div>
+
+  <!-- journey rail -->
+  <div class="journey">
+    <div class="rail" id="rail"></div>
+    <div class="quest" id="quest"></div>
+  </div>
+
+  <!-- crash / error banner -->
+  <div class="crashbar" id="crashbar">
+    <span class="boom">🛑</span>
+    <span id="crashtext"></span>
+    <button class="fix-btn fix" id="b-revive">↺ 恢复状态（继续）</button>
+  </div>
+
+  <!-- visual stage (3 cols) -->
+  <div class="stage-scroll">
+    <div class="stage">
+
+      <!-- Col 1: Code -->
+      <div class="col c1">
+        <div class="col-head">
+          <div class="nick">CMakeLists.txt 脚本</div>
+          <div class="real">CMAKELISTS.TXT SCRIPT</div>
+          <div class="duty">观察现代 CMake 的纯正 Target 式声明写法</div>
+        </div>
+        <div class="codebox" id="codebox"></div>
+      </div>
+
+      <!-- Col 2: Target Backpacks -->
+      <div class="col c2">
+        <div class="col-head">
+          <div class="nick">Target 属性背包（核心实体）</div>
+          <div class="real">TARGET ENTITIES & PROPERTIES</div>
+          <div class="duty">透视每个 Target 的源码、头文件路径、宏定义与可见性</div>
+        </div>
+        <div class="targets-box" id="targets-box"></div>
+      </div>
+
+      <!-- Col 3: Generated Build System & Artifacts -->
+      <div class="col c3">
+        <div class="col-head">
+          <div class="nick">底层构建与产物视图</div>
+          <div class="real">BUILD ARTIFACTS & GENERATOR</div>
+          <div class="duty">产出的 Makefile 规则与最终编译二进制文件</div>
+        </div>
+        <div class="gen-box">
+
+          <div class="gen-panel">
+            <div class="gen-title">
+              <span>🛠️ 平台生成器状态 (build/)</span>
+              <span id="gen-state" style="color:var(--amber);">未配置</span>
+            </div>
+            <div id="gen-desc" style="font-size:11px;color:var(--muted);">
+              等待执行 cmake -B build ...
+            </div>
+          </div>
+
+          <div class="gen-panel" style="flex:1;">
+            <div class="gen-title">
+              <span>📦 编译产出实体 (Artifacts)</span>
+            </div>
+            <div class="art-list" id="art-list">
+              <div style="color:var(--muted);font-size:11px;padding:8px 0;">尚未执行构建，暂无二进制产物</div>
+            </div>
+          </div>
+
+          <!-- Stats Dashboard -->
+          <div class="stats-bar">
+            <div class="stat-item">
+              <div class="stat-val" id="stat-targets">0</div>
+              <div class="stat-lbl">Target 总数</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-val" id="stat-includes">0</div>
+              <div class="stat-lbl">头文件路径作用域</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-val good" id="stat-pollution">0%</div>
+              <div class="stat-lbl">全局变量污染度</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Console Controls & Logs -->
+  <div class="console">
+    <div class="console-head">
+      <span>控制台 & 操作面板</span>
+      <div class="btns" id="btns"></div>
+    </div>
+    <div class="logbox" id="logbox"></div>
+  </div>
+
+  <!-- Why cards -->
+  <div class="why">
+    <div class="why-card w1">
+      <h3>🔍 为什么坚决不要用 include_directories()？</h3>
+      <p>老式 CMake 的 <code>include_directories()</code> 是<b>全局污染</b>的：一旦在根目录写了一次，所有子目录的所有 Target 都会被强行塞入该路径，极易导致同名头文件互相覆盖撞车，引发诡异的编译错误。现代 CMake 必须使用 <code>target_include_directories()</code>！</p>
+    </div>
+    <div class="why-card w2">
+      <h3>🎯 怎么理解 PRIVATE / INTERFACE / PUBLIC？</h3>
+      <p>一句话判定原则：<br>
+      • <b>PRIVATE</b>：我实现用，我的头文件对外不暴露该类型（下游不用）；<br>
+      • <b>INTERFACE</b>：我自己不编译（如 Header-only 库），仅为了让依赖我的下游获取配置；<br>
+      • <b>PUBLIC</b>：我自己实现要用，且我暴露的头文件里包含了对方的类型，下游必须跟着依赖。</p>
+    </div>
+    <div class="why-card w3">
+      <h3>🚀 为什么推荐 cmake -B build 目录外构建？</h3>
+      <p>目录外构建（Out-of-source Build）把生成的 Makefile、.o、二进制全部集中在 <code>build/</code> 文件夹中。只要 <code>rm -rf build</code> 就能一秒得到干净的源码仓库，绝不会把源文件目录搞得乌烟瘴气。</p>
+    </div>
+  </div>
+
+  <footer>
+    Modern CMake 核心准则：目标驱动依赖 · 杜绝全局污染 · 精准传递作用域 ｜ 构建 C++ 工业级工程的稳固地基
+  </footer>
+
+</div>
+
+<script>
+const KEY = 'cmake-mental-model-journey-v1';
+
+/* ============ 关卡定义 ============ */
+const STAGES = [
+  { nm:'起点·导览', stageTag:'STAGE 0 / 8', title:'先认地形：生成器非编译器 · 一切皆 Target',
+    start:'欢迎来到 Modern CMake 心智模型沙盒！上方机制落地表指出了 CMake 的真实身份：它不是编译器，而是生成 Makefile 的元构建器。',
+    task:'熟悉三列舞台：<b>CMakeLists.txt 脚本</b>、<b>Target 属性背包（核心模型）</b>、<b>构建系统与编译产物</b>。点击右侧「开始旅程」。',
+    watch:'带着问题思考：为什么现代 C++ 工程不再到处声明全局路径，而是把所有头文件、依赖库都装进具体 Target 的属性背包里？',
+    pass:()=>flags.started },
+
+  { nm:'① 手敲命令的痛', stageTag:'STAGE 1 / 8', title:'多文件编译地狱：手工敲命令有多脆弱',
+    start:'假设我们有一个项目：main.cpp 依赖 math.cpp，还带有头文件目录 include/。',
+    task:'点击 <b>模拟手工敲 g++ 命令</b>，观察繁杂的命令行参数。',
+    watch:'看日志：每次修改依赖都要人工手敲 -Iinclude、-Llib、-lxxx；更致命的是换到 Windows 就无法执行这套命令！必须有跨平台的抽象层。',
+    pass:()=>flags.manualDone },
+
+  { nm:'② 极简三行声明', stageTag:'STAGE 2 / 8', title:'现代 CMake 最简起点：可执行文件 Target',
+    start:'创建最简 CMakeLists.txt，包含 cmake_minimum_required、project 和 add_executable。',
+    task:'点击 <b>写入极简三行配置</b> ➔ 点击 <b>cmake -B build (配置生成)</b>。',
+    watch:'第二列出现第一个 Target：<b>app (可执行文件)</b>；第三列成功在 build/ 目录生成了特定平台的 Makefile！耗时 0 毫秒编译，因为生成器只负责产出规则！',
+    pass:()=>flags.basicAdded && flags.configuredDone },
+
+  { nm:'③ 拆解独立库模块', stageTag:'STAGE 3 / 8', title:'add_library：创建库 Target 实体',
+    start:'业务膨胀，我们需要把数学逻辑独立成一个库 calc。',
+    task:'点击 <b>add_library(calc STATIC calc.cpp)</b>。',
+    watch:'第二列中诞生了新的 Target 实体：<b>calc (静态库)</b>，它拥有自己独立的源文件背包。现代 CMake 的核心就是不断定义各种 Target。',
+    pass:()=>flags.libAdded },
+
+  { nm:'④ 建立链接与依赖', stageTag:'STAGE 4 / 8', title:'target_link_libraries：绑定 Target 依赖',
+    start:'现在我们有 app 和 calc 两个 Target，但 app 还无法使用 calc 的功能。',
+    task:'点击 <b>target_link_libraries(app calc)</b> ➔ 点击 <b>cmake --build build (执行编译)</b>。',
+    watch:'看第二列：两个 Target 之间建立了依赖边！看第三列：构建器驱动编译器成功生成了 <b>libcalc.a</b> 静态库与最终的 <b>app</b> 二进制！',
+    pass:()=>flags.linkedDone && flags.buildDone },
+
+  { nm:'⑤ PRIVATE 的隔离', stageTag:'STAGE 5 / 8', title:'传递性规则 1：PRIVATE 仅自用不传递',
+    start:'calc 库内部使用了一个三方内部头文件 src/internal/，外部使用者绝对不需要知道它。',
+    task:'点击 <b>target_include_directories(calc PRIVATE src/internal)</b>。',
+    watch:'看 calc 的属性背包：出现了黄色标记的 <b>PRIVATE: src/internal</b>。关键点：<b>app 没有继承这个路径！</b>app 不会受到污染，内部实现被完美封装！',
+    pass:()=>flags.privateDone },
+
+  { nm:'⑥ PUBLIC 的继承', stageTag:'STAGE 6 / 8', title:'传递性规则 2：PUBLIC 自用且顺延传递',
+    start:'calc 库对外暴露的头文件放在 include/ 下，calc 自身和下游 app 必须都能引用到它。',
+    task:'点击 <b>target_include_directories(calc PUBLIC include/)</b>。',
+    watch:'看 app 的属性背包：app 自动继承了 <b>include/</b> 目录！你<b>根本不需要在 app 上重复写一遍 target_include_directories</b>！这就是 PUBLIC 的自动传递魔法！',
+    pass:()=>flags.publicDone },
+
+  { nm:'⑦ INTERFACE 纯头文件', stageTag:'STAGE 7 / 8', title:'传递性规则 3：Header-only 纯头文件库',
+    start:'现代 C++ 大量使用纯头文件库（如 nlohmann/json，没有 cpp 文件）。',
+    task:'点击 <b>add_library(json INTERFACE)</b> ➔ 点击 <b>target_link_libraries(app json)</b>。',
+    watch:'json 是纯接口（INTERFACE），自己不生成任何 .a/.so 二进制，但一旦链接到 app，它的头文件路径就会自动注入给 app！零编译开销！',
+    pass:()=>flags.ifaceAdded && flags.ifaceLinked },
+
+  { nm:'⑧ 毕业测验', stageTag:'STAGE 8 / 8', title:'毕业测：3 道硬核实战题',
+    start:'太棒了！从生成器非编译器的定位、一切皆 Target、再到 PRIVATE/PUBLIC/INTERFACE 的属性传递模型，你全亲身实践过了。',
+    task:'答对下面 3 道单选题即可毕业（答错可重选）。',
+    watch:'每题均配有详尽的原理解释。',
+    pass:()=>quiz.length===3 && quiz.every(v=>v && v.ok) },
+
+  { nm:'⑨ 自由模式', stageTag:'STAGE 9 / 8', title:'自由沙盒：随时实验',
+    start:'你已经完全掌握了 Modern CMake 的核心心智模型！',
+    task:'所有按钮已完全解锁，你可以随意定义 Target、配置依赖、体验跨平台构建。',
+    watch:'探索不同依赖拓扑下的属性流转。',
+    pass:()=>true }
+];
+
+const QUIZ = [
+  { q:'1 / 3 · 执行 cmake -B build 与 cmake --build build 的本质区别是什么？',
+    opts:[
+      '没有任何区别，只是两种不同的简写方式',
+      'cmake -B build 只负责解析配置并生成底层 Makefile/Ninja（不编译代码）；cmake --build 才是真正驱动编译器编译生成二进制',
+      'cmake -B build 编译 Debug 版本，cmake --build 编译 Release 版本'
+    ],
+    ans:1,
+    expl:'真相：CMake 本质是元构建系统生成器。第一步 cmake -B build 产出特定平台的构建文件；第二步 cmake --build 统一调用底层工具（make/ninja）真正编译代码。' },
+
+  { q:'2 / 3 · 为什么说现代 CMake 坚决提倡用 target_include_directories 取代 include_directories？',
+    opts:[
+      '因为 target_include_directories 的字母更多，写起来更规范',
+      '老式 include_directories 是全局污染的，会导致所有模块互相覆盖头文件；target 式把路径精准绑定在具体 Target 背包中',
+      '因为 include_directories 已经在 C++20 中被语法移除'
+    ],
+    ans:1,
+    expl:'经典心智模型：全局变量是大型工程的万恶之源。target_include_directories 将头文件搜索路径封装在目标内部，杜绝跨模块头文件路径污染。' },
+
+  { q:'3 / 3 · 库 A 链接了库 B（target_link_libraries(A PUBLIC B)），如果程序 App 链接了 A（target_link_libraries(App PRIVATE A)），App 能否自动获得 B 的 PUBLIC 头文件路径？',
+    opts:[
+      '不能，App 必须显式再次链接 B',
+      '能，因为 B 在 A 中是 PUBLIC 声明的，会自动沿依赖链传递给下游 App',
+      '取决于 B 是静态库还是动态库'
+    ],
+    ans:1,
+    expl:'第⑥关亲身体验：PUBLIC = PRIVATE + INTERFACE。B 的公共属性会自动注入给 A，并跟随 A 继续向下游 App 传递，无需重复声明。' },
+];
+
+/* ============ 核心状态 ============ */
+let stage = 0;
+let flags = {};
+let quiz = [null, null, null];
+let crashActive = false;
+
+// Targets 实体
+let targets = [];
+
+// 构建产物
+let artifacts = [];
+let genState = '未配置';
+let genDesc = '等待执行 cmake -B build ...';
+
+// 统计
+let stats = {
+  targets: 0,
+  includes: 0,
+  pollution: 0
+};
+
+// CMakeLists.txt 文本行
+let codeLines = [
+  { text: '# Modern CMakeLists.txt', cls: 'cm' },
+  { text: '# 待添加目标与配置...', cls: 'cm', id: 'init-line' }
+];
+let activeLineId = 'init-line';
+
+// 日志
+const logLines = [];
+function addLog(cmd, type, expl){
+  logLines.unshift({cmd, type, expl});
+  if(logLines.length > 32) logLines.pop();
+}
+
+/* ============ 业务动作 ============ */
+
+// 1. 模拟手敲命令
+function doManualCompile(){
+  if(crashActive) return;
+  addLog('g++ main.cpp math.cpp -Iinclude -o app', 'err', '【手动敲命令之痛】：必须硬编码包含路径 -Iinclude，依赖一多极其冗长。更严重的是，该命令在 Windows CMD 下无法跨平台执行！');
+  flags.manualDone = true;
+  render();
+}
+
+// 2. 写入极简三行
+function doAddBasicApp(){
+  if(crashActive) return;
+  codeLines = [
+    { text: 'cmake_minimum_required(VERSION 3.20)', cls: 'cmd', id: 'min-line' },
+    { text: 'project(MyApp LANGUAGES CXX)', cls: 'cmd', id: 'proj-line' },
+    { text: '', cls: '' },
+    { text: '# 定义可执行目标 app', cls: 'cm' },
+    { text: 'add_executable(app main.cpp)', cls: 'cmd', id: 'add-app-line' }
+  ];
+  activeLineId = 'add-app-line';
+
+  if(!targets.find(t => t.name === 'app')){
+    targets.push({
+      name: 'app',
+      type: '可执行文件 (EXE)',
+      typeClass: 'type-exe',
+      sources: ['main.cpp'],
+      includes: [],
+      links: []
+    });
+  }
+
+  stats.targets = targets.length;
+  addLog('add_executable(app main.cpp);', 'ok', '【创建 Target app】：在 CMake 内存中注册了名为 app 的可执行文件实体。此时尚未调用任何编译器。');
+  flags.basicAdded = true;
+  render();
+}
+
+// 3. cmake -B build
+function doConfigure(){
+  if(crashActive) return;
+  genState = '已生成 Makefile';
+  genDesc = '配置成功！在 build/ 目录生成了平台构建脚本 Makefile 与 CMakeCache.txt。零代码编译。';
+  activeLineId = 'add-app-line';
+  addLog('cmake -B build', 'info', '【执行配置阶段】：读取 CMakeLists.txt，检测当前平台编译器 (g++)，在 build/ 目录生成 Makefile！耗时 0.05s。');
+  flags.configuredDone = true;
+  render();
+}
+
+// 4. 添加独立库 calc
+function doAddLib(){
+  if(crashActive) return;
+  codeLines.splice(codeLines.length - 1, 0,
+    { text: '# 定义数学库 calc', cls: 'cm' },
+    { text: 'add_library(calc STATIC calc.cpp)', cls: 'cmd', id: 'add-calc-line' },
+    { text: '', cls: '' }
+  );
+  activeLineId = 'add-calc-line';
+
+  if(!targets.find(t => t.name === 'calc')){
+    targets.push({
+      name: 'calc',
+      type: '静态库 (STATIC)',
+      typeClass: 'type-lib',
+      sources: ['calc.cpp'],
+      includes: [],
+      links: []
+    });
+  }
+
+  stats.targets = targets.length;
+  addLog('add_library(calc STATIC calc.cpp);', 'ok', '【创建 Target calc】：独立的静态库实体在 CMake 中就位。');
+  flags.libAdded = true;
+  render();
+}
+
+// 5. 建立链接关系并编译
+function doLinkAndBuild(){
+  if(crashActive) return;
+  const app = targets.find(t => t.name === 'app');
+  if(app && !app.links.includes('calc')){
+    app.links.push('calc');
+    codeLines.push({ text: 'target_link_libraries(app PRIVATE calc)', cls: 'cmd', id: 'link-line' });
+    activeLineId = 'link-line';
+  }
+
+  // 模拟构建产出
+  artifacts = [
+    { name: 'libcalc.a', type: '静态二进制库', status: '编译完成 (g++ -c)' },
+    { name: 'app', type: '可执行二进制', status: '链接完成 (g++ -o app)' }
+  ];
+
+  addLog('target_link_libraries(app PRIVATE calc);', 'ok', '【依赖边建立】：app 链接 calc。');
+  addLog('cmake --build build', 'ok', '【调用真实编译】：驱动 make 完成编译！生成 libcalc.a 与二进制 app！');
+  flags.linkedDone = true;
+  flags.buildDone = true;
+  render();
+}
+
+// 6. PRIVATE 隔离
+function doAddPrivateInclude(){
+  if(crashActive) return;
+  const calc = targets.find(t => t.name === 'calc');
+  if(calc && !calc.includes.find(i => i.path === 'src/internal/')){
+    calc.includes.push({ path: 'src/internal/', scope: 'PRIVATE', cls: 'scope-pri' });
+    codeLines.splice(codeLines.length - 1, 0,
+      { text: 'target_include_directories(calc PRIVATE src/internal/)', cls: 'cmd', id: 'pri-line' }
+    );
+    activeLineId = 'pri-line';
+  }
+
+  stats.includes = 1;
+  addLog('target_include_directories(calc PRIVATE src/internal/);', 'info', '【PRIVATE 仅自用】：calc 内部可以访问 src/internal/，但该路径绝不传递给下游 app，实现高内聚隔离！');
+  flags.privateDone = true;
+  render();
+}
+
+// 7. PUBLIC 继承
+function doAddPublicInclude(){
+  if(crashActive) return;
+  const calc = targets.find(t => t.name === 'calc');
+  if(calc && !calc.includes.find(i => i.path === 'include/')){
+    calc.includes.push({ path: 'include/', scope: 'PUBLIC', cls: 'scope-pub' });
+    codeLines.splice(codeLines.length - 1, 0,
+      { text: 'target_include_directories(calc PUBLIC include/)', cls: 'cmd', id: 'pub-line' }
+    );
+    activeLineId = 'pub-line';
+  }
+
+  // app 自动获得该属性！
+  const app = targets.find(t => t.name === 'app');
+  if(app && !app.includes.find(i => i.path === 'include/ (继承自 calc)')){
+    app.includes.push({ path: 'include/ (继承自 calc)', scope: 'INHERITED', cls: 'scope-pub' });
+  }
+
+  stats.includes = 2;
+  addLog('target_include_directories(calc PUBLIC include/);', 'ok', '【PUBLIC 自动继承】：calc 对外暴露 include/。因为 app 链接了 calc，app 自动获得 include/ 搜索路径，无需手动再写！');
+  flags.publicDone = true;
+  render();
+}
+
+// 8. INTERFACE Header-only 库
+function doAddInterfaceJson(){
+  if(crashActive) return;
+  codeLines.splice(codeLines.length - 1, 0,
+    { text: '# 定义 Header-only 纯头文件库', cls: 'cm' },
+    { text: 'add_library(json INTERFACE)', cls: 'cmd', id: 'add-json-line' },
+    { text: 'target_include_directories(json INTERFACE third_party/json/include)', cls: 'cmd', id: 'json-inc-line' },
+    { text: '', cls: '' }
+  );
+  activeLineId = 'add-json-line';
+
+  if(!targets.find(t => t.name === 'json')){
+    targets.push({
+      name: 'json',
+      type: '纯接口 (INTERFACE)',
+      typeClass: 'type-iface',
+      sources: ['[无 cpp 编译源]'],
+      includes: [{ path: 'third_party/json/include', scope: 'INTERFACE', cls: 'scope-iface' }],
+      links: []
+    });
+  }
+
+  stats.targets = targets.length;
+  addLog('add_library(json INTERFACE);', 'ok', '【INTERFACE 纯头文件库】：没有 cpp 源码，本身不产出 .a/.so，仅作为一个属性包向后传递！');
+  flags.ifaceAdded = true;
+  render();
+}
+
+function doLinkInterfaceJson(){
+  if(crashActive) return;
+  const app = targets.find(t => t.name === 'app');
+  if(app && !app.links.includes('json')){
+    app.links.push('json');
+    app.includes.push({ path: 'third_party/json/include (继承自 json)', scope: 'INHERITED', cls: 'scope-iface' });
+    codeLines.push({ text: 'target_link_libraries(app PRIVATE json)', cls: 'cmd', id: 'link-json-line' });
+    activeLineId = 'link-json-line';
+  }
+
+  addLog('target_link_libraries(app PRIVATE json);', 'ok', '【接口继承成功】：app 链接了 json 接口，瞬间获得其头文件路径！零编译消耗！');
+  flags.ifaceLinked = true;
+  render();
+}
+
+function doRevive(){
+  crashActive = false;
+  document.getElementById('crashbar').classList.remove('show');
+  render();
+}
+
+/* ============ 渲染与关卡系统 ============ */
+
+function renderRail(){
+  const rail = document.getElementById('rail');
+  rail.innerHTML = STAGES.map((s, idx)=>{
+    const cls = idx === stage ? 'pill current' : (idx < stage ? 'pill done' : 'pill');
+    return `<div class="${cls}" onclick="jumpStage(${idx})">${s.nm}</div>${idx < STAGES.length - 1 ? '<div class="sep"></div>' : ''}`;
+  }).join('');
+}
+
+function renderQuest(){
+  const s = STAGES[stage];
+  const q = document.getElementById('quest');
+  const isFree = stage === STAGES.length - 1;
+  q.className = isFree ? 'quest free' : 'quest';
+
+  let bodyHtml = `
+    <div class="quest-head">
+      <span class="quest-stage">${s.stageTag}</span>
+      <span class="quest-title">${s.title}</span>
+      ${stage < STAGES.length - 1 ? `<button class="skip" onclick="jumpStage(${stage + 1})">跳过本关 →</button>` : ''}
+    </div>
+    <div class="q-row"><div class="k">📍 起点状态</div><div class="v">${s.start}</div></div>
+    <div class="q-row"><div class="k">🎯 任务</div><div class="v">${s.task}</div></div>
+    <div class="q-row"><div class="k">👀 观察点</div><div class="v">${s.watch}</div></div>
+  `;
+
+  if(stage === 8){
+    // 测验关
+    bodyHtml += `
+      <div class="quiz">
+        ${QUIZ.map((qz, qidx)=>{
+          const res = quiz[qidx];
+          return `
+            <div class="qitem">
+              <div class="qtext">${qz.q}</div>
+              <div class="opts">
+                ${qz.opts.map((opt, oidx)=>{
+                  let cls = 'opt';
+                  if(res !== null){
+                    if(oidx === qz.ans) cls += ' correct';
+                    else if(oidx === res.pick) cls += ' wrong';
+                    else cls += ' dim';
+                  }
+                  return `<button class="${cls}" onclick="answerQuiz(${qidx}, ${oidx})">${opt}</button>`;
+                }).join('')}
+              </div>
+              ${res !== null ? `<div class="qexpl">${res.ok ? '✅ 答对了！' : '❌ 答错了。'} ${qz.expl}</div>` : ''}
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  if(stage === 0){
+    bodyHtml += `<div class="go"><button onclick="startJourney()">开始旅程（进入第 1 关）→</button></div>`;
+  } else if(s.pass() && stage < STAGES.length - 1 && stage !== 8){
+    bodyHtml += `<div class="go"><button class="primary" onclick="jumpStage(${stage + 1})">✅ 本关目标达成！进入下一关 →</button></div>`;
+  } else if(stage === 8 && s.pass()){
+    bodyHtml += `<div class="go"><button class="primary" onclick="jumpStage(9)">🎉 测验全对！毕业并解锁自由模式 →</button></div>`;
+  }
+
+  q.innerHTML = bodyHtml;
+}
+
+function renderCode(){
+  const box = document.getElementById('codebox');
+  box.innerHTML = codeLines.map(l => {
+    const act = (l.id && l.id === activeLineId) ? 'active' : '';
+    return `<div class="codeline ${l.cls} ${act}">${escapeHtml(l.text)}</div>`;
+  }).join('');
+}
+
+function renderTargets(){
+  const box = document.getElementById('targets-box');
+  if(targets.length === 0){
+    box.innerHTML = `<div style="color:var(--muted);font-size:12px;text-align:center;padding:30px;">尚未创建任何 Target 实体</div>`;
+    return;
+  }
+  box.innerHTML = targets.map(t => {
+    return `
+      <div class="target-card">
+        <div class="tc-head">
+          <span class="tc-name">${t.name}</span>
+          <span class="tc-type ${t.typeClass}">${t.type}</span>
+        </div>
+        <div class="tc-section">
+          <div class="tc-sec-title">Sources (源文件)</div>
+          <div class="tc-tags">${t.sources.map(s => `<span class="tc-tag">${s}</span>`).join('')}</div>
+        </div>
+        <div class="tc-section">
+          <div class="tc-sec-title">Include Dirs (头文件路径)</div>
+          <div class="tc-tags">
+            ${t.includes.length === 0 ? '<span style="color:var(--muted);font-size:10px;">(无专有头文件路径)</span>' :
+              t.includes.map(i => `<span class="tc-tag ${i.cls}">[${i.scope}] ${i.path}</span>`).join('')}
+          </div>
+        </div>
+        <div class="tc-section">
+          <div class="tc-sec-title">Links (依赖的目标 Target)</div>
+          <div class="tc-tags">
+            ${t.links.length === 0 ? '<span style="color:var(--muted);font-size:10px;">(无依赖)</span>' :
+              t.links.map(l => `<span class="tc-tag" style="border-color:var(--cyan);color:var(--cyan);">→ ${l}</span>`).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  document.getElementById('stat-targets').innerText = targets.length;
+  document.getElementById('stat-includes').innerText = stats.includes;
+  document.getElementById('stat-pollution').innerText = '0%';
+}
+
+function renderGenerator(){
+  document.getElementById('gen-state').innerText = genState;
+  document.getElementById('gen-desc').innerText = genDesc;
+
+  const aList = document.getElementById('art-list');
+  if(artifacts.length === 0){
+    aList.innerHTML = `<div style="color:var(--muted);font-size:11px;padding:8px 0;">尚未执行构建，暂无二进制产物</div>`;
+  } else {
+    aList.innerHTML = artifacts.map(a => {
+      return `
+        <div class="art-item">
+          <div>
+            <div class="art-name">${a.name}</div>
+            <div style="font-size:10px;color:var(--muted);">${a.type}</div>
+          </div>
+          <span class="art-status">${a.status}</span>
+        </div>
+      `;
+    }).join('');
+  }
+}
+
+function renderConsoleButtons(){
+  const btns = document.getElementById('btns');
+  const isFree = stage === STAGES.length - 1;
+  let btnHtml = '';
+
+  if(stage === 1 || isFree){
+    btnHtml += `<button class="danger-btn" onclick="doManualCompile()">模拟手工敲 g++ 命令</button>`;
+  }
+  if(stage === 2 || isFree){
+    btnHtml += `<button class="primary" onclick="doAddBasicApp()">写入极简三行配置</button>`;
+    btnHtml += `<button class="action-btn" onclick="doConfigure()">cmake -B build (配置)</button>`;
+  }
+  if(stage === 3 || isFree){
+    btnHtml += `<button class="action-btn" onclick="doAddLib()">add_library(calc STATIC)</button>`;
+  }
+  if(stage === 4 || isFree){
+    btnHtml += `<button class="primary" onclick="doLinkAndBuild()">target_link_libraries & build</button>`;
+  }
+  if(stage === 5 || isFree){
+    btnHtml += `<button class="action-btn" onclick="doAddPrivateInclude()">calc 设 PRIVATE 头文件</button>`;
+  }
+  if(stage === 6 || isFree){
+    btnHtml += `<button class="fix-btn" onclick="doAddPublicInclude()">calc 设 PUBLIC 头文件 (继承)</button>`;
+  }
+  if(stage === 7 || isFree){
+    btnHtml += `<button class="action-btn" onclick="doAddInterfaceJson()">add_library(json INTERFACE)</button>`;
+    btnHtml += `<button class="fix-btn" onclick="doLinkInterfaceJson()">app 链接 json 接口库</button>`;
+  }
+
+  btnHtml += `<button onclick="resetWorldState()">↺ 重置环境</button>`;
+  btns.innerHTML = btnHtml;
+}
+
+function renderLogs(){
+  const box = document.getElementById('logbox');
+  if(logLines.length === 0){
+    box.innerHTML = `<div style="color:var(--muted);font-size:12px;">日志就绪，点击上方控制台按钮执行操作...</div>`;
+    return;
+  }
+  box.innerHTML = logLines.map(l => {
+    return `
+      <div class="logline ${l.type}">
+        <span class="cmd">${escapeHtml(l.cmd)}</span>
+        <div class="expl">${l.expl}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function render(){
+  renderRail();
+  renderQuest();
+  renderCode();
+  renderTargets();
+  renderGenerator();
+  renderConsoleButtons();
+  renderLogs();
+  saveState();
+}
+
+function startJourney(){
+  flags.started = true;
+  jumpStage(1);
+}
+
+function jumpStage(idx){
+  stage = idx;
+  render();
+}
+
+function answerQuiz(qidx, oidx){
+  const qz = QUIZ[qidx];
+  const ok = oidx === qz.ans;
+  quiz[qidx] = { pick: oidx, ok };
+  if(ok){
+    addLog(`测验第 ${qidx+1} 题`, 'ok', `回答正确！${qz.expl}`);
+  } else {
+    addLog(`测验第 ${qidx+1} 题`, 'err', `回答错误，再想想看！`);
+  }
+  render();
+}
+
+function resetWorldState(){
+  targets = [];
+  artifacts = [];
+  genState = '未配置';
+  genDesc = '等待执行 cmake -B build ...';
+  codeLines = [
+    { text: '# Modern CMakeLists.txt', cls: 'cm' },
+    { text: '# 待添加目标与配置...', cls: 'cm', id: 'init-line' }
+  ];
+  activeLineId = 'init-line';
+  stats = { targets: 0, includes: 0, pollution: 0 };
+  addLog('环境已重置', 'info', '已清空所有 Target 与生成状态。');
+  render();
+}
+
+function escapeHtml(str){
+  if(!str) return '';
+  return str.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+/* ============ 持久化 ============ */
+function saveState(){
+  try{
+    localStorage.setItem(KEY, JSON.stringify({ stage, flags, quiz }));
+  }catch(e){}
+}
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(KEY);
+    if(raw){
+      const data = JSON.parse(raw);
+      if(typeof data.stage === 'number') stage = data.stage;
+      if(data.flags) flags = data.flags;
+      if(Array.isArray(data.quiz)) quiz = data.quiz;
+    }
+  }catch(e){}
+}
+
+window.onload = function(){
+  loadState();
+  document.getElementById('b-revive').onclick = doRevive;
+  render();
+};
+</script>
+</body>
+</html>

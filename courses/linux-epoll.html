@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Linux epoll —— 挨个去问 · 有事按铃</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#151f36; --panel2:#0f1729;
+    --line:#26334d; --text:#dde6f5; --muted:#a6b9d9;
+    --blue:#3b82f6; --green:#22c55e; --purple:#a855f7;
+    --amber:#f5b544; --cyan:#38bdf8; --red:#f87171;
+    --mono:"Cascadia Code",Consolas,"JetBrains Mono",monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:radial-gradient(1200px 600px at 50% -100px,#16223d 0%,var(--bg) 60%);
+    color:var(--text);
+    font-family:system-ui,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+    padding:30px 18px 70px; line-height:1.65;
+  }
+  body.shake{animation:shake .5s;}
+  @keyframes shake{
+    0%,100%{transform:translateX(0);} 20%{transform:translateX(-9px);}
+    40%{transform:translateX(8px);} 60%{transform:translateX(-6px);} 80%{transform:translateX(4px);}
+  }
+  .wrap{max-width:1240px; margin:0 auto;}
+
+  /* ---------- header ---------- */
+  h1{font-size:26px; letter-spacing:.5px;}
+  h1 .dot-word{color:var(--amber);}
+  .sub{color:var(--muted); margin-top:6px; font-size:14.5px;}
+  .ladder{
+    margin-top:12px; padding:8px 14px; border:1px dashed var(--line); border-radius:10px;
+    font-size:12.5px; color:var(--muted); background:rgba(255,255,255,.02);
+    font-family:var(--mono);
+  }
+  .ladder b{color:var(--cyan); font-weight:600;}
+  .ladder .bad{color:var(--red);}
+
+  /* ---------- landing table (绰号落地表) ---------- */
+  .ltable{margin-top:12px; border:1px solid var(--line); border-radius:10px; overflow:hidden; font-size:12px;}
+  .ltable table{width:100%; border-collapse:collapse;}
+  .ltable th{
+    background:rgba(255,255,255,.03); color:var(--muted); font-size:11px; font-weight:600;
+    padding:6px 10px; text-align:left; border-bottom:1px solid var(--line); letter-spacing:1px;
+  }
+  .ltable td{padding:6px 10px; border-bottom:1px solid rgba(38,51,77,.5); vertical-align:top;}
+  .ltable tr:last-child td{border-bottom:none;}
+  .ltable .nick{color:var(--amber); font-weight:700; font-family:var(--mono); white-space:nowrap;}
+  .ltable .real{color:var(--cyan); font-family:var(--mono);}
+  .ltable .phys{color:var(--text);}
+  .ltable .life{color:var(--muted);}
+
+  /* ---------- journey rail ---------- */
+  .journey{margin-top:22px;}
+  .rail{display:flex; align-items:center; gap:6px; overflow-x:auto; padding:4px 2px 10px;}
+  .pill{
+    flex:none; font-size:11.5px; padding:4px 11px; border-radius:999px;
+    border:1px solid var(--line); color:var(--muted); white-space:nowrap; background:var(--panel2);
+  }
+  .pill.done{color:var(--green); border-color:rgba(34,197,94,.55);}
+  .pill.current{color:var(--amber); border-color:var(--amber); box-shadow:0 0 10px rgba(245,181,68,.25); font-weight:700;}
+  .sep{flex:none; width:14px; height:2px; background:var(--line);}
+
+  /* ---------- quest card ---------- */
+  .quest{
+    border:1px solid rgba(245,181,68,.45); border-left:4px solid var(--amber);
+    background:linear-gradient(90deg, rgba(245,181,68,.07), var(--panel2) 45%);
+    border-radius:12px; padding:14px 18px;
+  }
+  .quest.free{border-color:rgba(34,197,94,.45); border-left-color:var(--green);
+    background:linear-gradient(90deg, rgba(34,197,94,.07), var(--panel2) 45%);}
+  .quest-head{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .quest-stage{font-family:var(--mono); font-size:11px; color:var(--amber); letter-spacing:1px;}
+  .quest-title{font-size:16px; font-weight:700;}
+  .skip{margin-left:auto; font-size:12px; color:var(--muted); cursor:pointer; border:none; background:none; text-decoration:underline dotted;}
+  .skip:hover{color:var(--text);}
+  .q-row{display:flex; gap:12px; margin-top:9px; font-size:13.5px;}
+  .q-row .k{flex:none; width:88px; color:var(--muted); font-weight:600;}
+  .q-row .v{color:var(--text);}
+  .q-row .v b{color:var(--amber);}
+  .quest .go{margin-top:12px;}
+  .quest .go button{
+    font-size:13px; padding:7px 18px; border-color:var(--amber); color:var(--amber);
+    font-family:system-ui,"Microsoft YaHei",sans-serif; font-weight:700;
+  }
+
+  /* quiz */
+  .quiz{margin-top:6px;}
+  .qitem{margin-top:12px; padding-top:10px; border-top:1px dashed var(--line);}
+  .qitem .qtext{font-size:13.5px; font-weight:600;}
+  .opts{display:flex; flex-direction:column; gap:6px; margin-top:8px;}
+  .opt{
+    text-align:left; font-size:12.5px; font-family:var(--mono),system-ui,sans-serif;
+    background:#182338; color:var(--text); border:1px solid var(--line); border-radius:6px;
+    padding:8px 12px; cursor:pointer;
+  }
+  .opt.correct{border-color:var(--green); color:var(--green); background:rgba(34,197,94,.1);}
+  .opt.wrong{border-color:var(--red); color:var(--red); background:rgba(248,113,113,.08);}
+  .opt.dim{opacity:.4;}
+  .qexpl{font-size:12px; color:var(--muted); margin-top:6px;}
+
+  /* ---------- crash banner ---------- */
+  .crashbar{
+    margin-top:18px; border:1px solid rgba(248,113,113,.6); border-radius:12px;
+    background:linear-gradient(90deg, rgba(248,113,113,.16), rgba(248,113,113,.04));
+    padding:12px 18px; font-size:14px; color:#ffc9c9; display:none;
+  }
+  .crashbar.show{display:flex; align-items:center; gap:12px; flex-wrap:wrap;}
+  .crashbar .boom{font-size:22px;}
+  .crashbar b{color:#fff;}
+  .crashbar .fix{margin-left:auto;}
+
+  /* ---------- stage (3 columns) ---------- */
+  .stage-scroll{overflow-x:auto; margin-top:20px; padding-bottom:6px;}
+  .stage{
+    min-width:1120px;
+    display:grid;
+    grid-template-columns:1.05fr 1.35fr 1fr;
+    gap:0 12px; align-items:stretch;
+  }
+  .col-head{margin-bottom:10px; text-align:center;}
+  .col-head .nick{font-size:17px; font-weight:700;}
+  .col-head .real{font-family:var(--mono); font-size:11.5px; color:var(--cyan); letter-spacing:1px; text-transform:uppercase;}
+  .col-head .duty{font-size:12px; color:var(--muted); margin-top:2px;}
+  .col{
+    background:var(--panel2); border:1px solid var(--line); border-radius:14px;
+    padding:14px; display:flex; flex-direction:column; gap:12px; min-height:490px;
+  }
+  .c1 .nick{color:var(--cyan);} .c2 .nick{color:var(--amber);} .c3 .nick{color:var(--green);}
+
+  /* Code Column */
+  .codebox{
+    background:#080d18; border:1px solid var(--line); border-radius:10px;
+    padding:12px; font-family:var(--mono); font-size:12px; line-height:1.75;
+    flex:1; overflow-y:auto;
+  }
+  .codeline{padding:1px 6px; border-radius:4px; transition:background .2s;}
+  .codeline.active{background:rgba(245,181,68,.18); color:var(--amber); border-left:3px solid var(--amber);}
+  .codeline .kw{color:#ff7b72;}
+  .codeline .tp{color:#79c0ff;}
+  .codeline .fn{color:#d2a8ff;}
+  .codeline .cm{color:#8b949e; font-style:italic;}
+  .codeline .num{color:#79c0ff;}
+  .codeline .tag{color:var(--green); font-weight:bold;}
+
+  /* Kernel Column: Red-Black Tree & Ready List */
+  .kernel-box{display:flex; flex-direction:column; gap:12px; flex:1;}
+  .sub-panel{
+    background:#0d1424; border:1px solid var(--line); border-radius:10px;
+    padding:10px 12px; font-family:var(--mono); font-size:12px;
+  }
+  .sub-title{
+    display:flex; justify-content:space-between; align-items:center;
+    color:var(--amber); font-weight:700; font-size:12px; margin-bottom:8px;
+    border-bottom:1px dashed var(--line); padding-bottom:4px;
+  }
+  .rbtree{
+    display:flex; flex-wrap:wrap; gap:8px; min-height:85px; align-items:center;
+  }
+  .rbt-node{
+    background:#162238; border:1px solid var(--cyan); border-radius:8px;
+    padding:6px 10px; font-size:11.5px; display:flex; flex-direction:column; gap:2px;
+    transition:all .3s ease; position:relative; min-width:96px;
+  }
+  .rbt-node.active{
+    border-color:var(--amber); box-shadow:0 0 10px rgba(245,181,68,.4); transform:scale(1.03);
+  }
+  .rbt-node.has-data{
+    border-color:var(--green); background:rgba(34,197,94,.1);
+  }
+  .rbt-fd{color:var(--text); font-weight:bold;}
+  .rbt-ev{color:var(--muted); font-size:10px;}
+  .rbt-mode{
+    display:inline-block; font-size:9.5px; padding:1px 4px; border-radius:3px;
+    margin-top:2px; width:fit-content; font-weight:700;
+  }
+  .mode-lt{background:rgba(56,189,248,.2); color:var(--cyan);}
+  .mode-et{background:rgba(245,181,68,.2); color:var(--amber);}
+
+  /* Ready List (rdllist) */
+  .rdllist{
+    display:flex; gap:8px; min-height:75px; align-items:center; overflow-x:auto; padding:4px 0;
+  }
+  .rd-item{
+    background:#1a2818; border:1px solid var(--green); border-radius:8px;
+    padding:6px 12px; font-size:11.5px; display:flex; flex-direction:column;
+    animation:pop .3s ease; min-width:90px;
+  }
+  .rd-item .fd{color:var(--green); font-weight:bold;}
+  .rd-item .bytes{color:var(--muted); font-size:10px;}
+  .empty-tip{color:var(--muted); font-size:11.5px; font-style:italic; padding:10px 0;}
+
+  /* User Space Column: Clients & Events array */
+  .user-box{display:flex; flex-direction:column; gap:12px; flex:1;}
+  .client-list{display:flex; flex-direction:column; gap:8px;}
+  .client-item{
+    background:#0d1527; border:1px solid var(--line); border-radius:8px;
+    padding:8px 10px; display:flex; justify-content:space-between; align-items:center;
+    font-size:12px; font-family:var(--mono);
+  }
+  .client-item.busy{border-color:var(--green);}
+  .client-name{color:var(--text); font-weight:600;}
+  .client-buf{font-size:11px; color:var(--muted);}
+  .client-buf b{color:var(--amber);}
+
+  /* Stats Bar */
+  .stats-bar{
+    display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;
+    margin-top:auto; padding-top:10px; border-top:1px dashed var(--line);
+  }
+  .stat-item{background:#0e172a; padding:6px 8px; border-radius:6px; border:1px solid var(--line); text-align:center;}
+  .stat-val{font-size:14px; font-weight:700; color:var(--text); font-family:var(--mono);}
+  .stat-val.good{color:var(--green);}
+  .stat-val.warn{color:var(--amber);}
+  .stat-val.bad{color:var(--red);}
+  .stat-lbl{font-size:10px; color:var(--muted);}
+
+  /* ---------- console ---------- */
+  .console{margin-top:26px; background:var(--panel2); border:1px solid var(--line); border-radius:14px; overflow:hidden;}
+  .console-head{
+    display:flex; align-items:center; gap:10px; padding:10px 16px;
+    border-bottom:1px solid var(--line); background:rgba(255,255,255,.02);
+    font-size:13px; color:var(--muted); flex-wrap:wrap;
+  }
+  .btns{display:flex; gap:8px; flex-wrap:wrap; margin-left:auto;}
+  button{
+    font-family:var(--mono); font-size:12px; color:var(--text);
+    background:#1d2a47; border:1px solid var(--line); border-radius:8px;
+    padding:6px 12px; cursor:pointer; transition:all .15s;
+  }
+  button:hover:not(:disabled){border-color:var(--amber); color:var(--amber); transform:translateY(-1px);}
+  button:disabled{opacity:.3; cursor:not-allowed;}
+  button.primary{border-color:var(--amber); color:var(--amber);}
+  button.action-btn{border-color:var(--cyan); color:var(--cyan);}
+  button.fix-btn{border-color:var(--green); color:var(--green);}
+  button.danger-btn{border-color:var(--red); color:var(--red);}
+
+  .logbox{padding:12px 16px; max-height:250px; overflow-y:auto; font-family:var(--mono); font-size:12.5px;}
+  .logline{margin-bottom:8px;}
+  .logline .cmd{color:var(--amber);}
+  .logline .expl{color:var(--muted); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:12px; margin-top:1px;}
+  .logline .expl b{color:var(--amber); font-weight:600;}
+  .logline.info{color:var(--cyan); font-family:system-ui,"Microsoft YaHei",sans-serif;}
+  .logline.ok{color:var(--green); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:12.5px;}
+  .logline.err{color:var(--red); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:12.5px;}
+
+  /* ---------- details cards ---------- */
+  .why{margin-top:22px; display:grid; grid-template-columns:repeat(3,1fr); gap:12px;}
+  .why-card{background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:14px 16px; font-size:13px;}
+  .why-card h3{font-size:13.5px; margin-bottom:6px;}
+  .why-card p{color:var(--muted); font-size:12.5px;}
+  .why-card b{color:var(--text);}
+  .w1 h3{color:var(--cyan);} .w2 h3{color:var(--amber);} .w3 h3{color:var(--green);}
+
+  footer{margin-top:26px; text-align:center; color:var(--muted); font-size:12px;}
+  @keyframes pop{ 0%{transform:scale(.8);opacity:0;} 100%{transform:scale(1);opacity:1;} }
+  @media (max-width:900px){ .why{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Linux epoll：<span class="dot-word">挨个去问</span> · <span class="dot-word">有事按铃</span></h1>
+  <p class="sub">治「万级连接下 CPU 全被无脑遍历吃光、每次调用重复在内核拷贝大数组」—— 让 Linux 服务器从 select 的「班主任挨个点名」进化到 epoll 的「前台门铃秒级取件」。透视红黑树与就绪链表的底层协作。</p>
+
+  <div class="ladder">
+    时代演进：<span class="bad">select/poll ＝ 每次拷全量数组入内核 + 盲目 O(N) 挨个巡检，万级连接直接累死！</span> ｜ <span style="color:var(--green)">epoll ＝ 内核常驻红黑树 + 网卡硬件中断挂就绪链表，O(就绪数) 极速返回！</span>
+    &nbsp;‖&nbsp; 两个核心零件：<b>红黑树（RB-Tree）</b>（高效管理上万个监听连接，增删改查 O(log N)） · <b>就绪双向链表（rdllist）</b>（只有活跃连接才会被挂进来，wait 只看链表）。
+  </div>
+
+  <!-- 绰号与机制落地表 -->
+  <div class="ltable">
+    <table>
+      <tr><th>系统调用 / 机制</th><th>物理上是什么</th><th>生活同类 / 绰号</th><th>解决的核心麻烦</th></tr>
+      <tr><td class="real">select / poll</td><td class="phys">用户态传入 fd_set 数组，内核遍历 0 到 N-1 查状态</td><td class="life">班主任每天把一万个学生挨个问一遍：“你写完了吗？”</td><td>N 很大但活跃极少时，99.9% 的 CPU 耗在无用空转上</td></tr>
+      <tr><td class="real">epoll_create(1024)</td><td class="phys">在内核空间分配一块专用的 eventpoll 结构体（含红黑树+就绪链表）</td><td class="nick">“在内核开一间快递收发室”</td><td>建立内核常驻大本营，摆脱每次调用都要重复传输 fd 数组的痛点</td></tr>
+      <tr><td class="real">epoll_ctl(ADD/DEL/MOD)</td><td class="phys">往内核的红黑树中添加/删除/修改监控的 socket 文件描述符</td><td class="life">把学生的学号登记到前台名册上（只登一次）</td><td>增删查改均为 O(log N)，内核牢牢记住所有监听对象</td></tr>
+      <tr><td class="real">epoll_wait(events, max)</td><td class="phys">检查就绪链表（rdllist），非空直接拷出；为空则挂起进程休眠</td><td class="life">坐等门铃响，前台推着装满快件的小推车直接出来交接</td><td><b>复杂度降为 O(活跃数)</b>！无论管 1 万还是 100 万连接，瞬间秒回！</td></tr>
+      <tr><td class="real">LT 水平触发 (默认)</td><td class="phys">只要 socket 缓冲区还有未读完的数据，每次 wait 就会一直报警</td><td class="life">操心的老妈：“你碗里还有半碗饭！快吃！快吃！”</td><td>防漏读，安全简单，但可能触发过多次无谓通知</td></tr>
+      <tr><td class="real">ET 边缘触发 (EPOLLET)</td><td class="phys">只在数据“从无到有”的状态跳变瞬间通知一次！</td><td class="life">快递门铃只叮咚响一声，绝不按第二下</td><td>极致性能，但<b>必须搭配非阻塞 IO 且 while 循环读到 EAGAIN</b>！</td></tr>
+    </table>
+  </div>
+
+  <!-- journey rail -->
+  <div class="journey">
+    <div class="rail" id="rail"></div>
+    <div class="quest" id="quest"></div>
+  </div>
+
+  <!-- crash / error banner -->
+  <div class="crashbar" id="crashbar">
+    <span class="boom">🛑</span>
+    <span id="crashtext"></span>
+    <button class="fix-btn fix" id="b-revive">↺ 恢复状态（继续）</button>
+  </div>
+
+  <!-- visual stage (3 cols) -->
+  <div class="stage-scroll">
+    <div class="stage">
+
+      <!-- Col 1: Code -->
+      <div class="col c1">
+        <div class="col-head">
+          <div class="nick">服务端 C 代码</div>
+          <div class="real">SERVER CODE & LOOP</div>
+          <div class="duty">观察标准 epoll 事件循环的 C 语言经典写法</div>
+        </div>
+        <div class="codebox" id="codebox"></div>
+      </div>
+
+      <!-- Col 2: Kernel Inside -->
+      <div class="col c2">
+        <div class="col-head">
+          <div class="nick">Linux 内核空间（内核对象）</div>
+          <div class="real">KERNEL SPACE (EVENTPOLL)</div>
+          <div class="duty">看常驻红黑树、网卡中断回调与就绪双向链表</div>
+        </div>
+        <div class="kernel-box">
+
+          <!-- Red-black tree -->
+          <div class="sub-panel">
+            <div class="sub-title">
+              <span>🌳 红黑树关注集（RB-Tree / 注册的 FD）</span>
+              <span id="rbt-count">0 个节点</span>
+            </div>
+            <div class="rbtree" id="rbtree">
+              <div class="empty-tip">尚未调用 epoll_create / epoll_ctl，树为空</div>
+            </div>
+          </div>
+
+          <!-- Ready list -->
+          <div class="sub-panel" style="flex:1;">
+            <div class="sub-title">
+              <span>🔔 就绪双向链表（rdllist / 活跃事件队列）</span>
+              <span id="rdl-count">0 个就绪</span>
+            </div>
+            <div class="rdllist" id="rdllist">
+              <div class="empty-tip">当前没有就绪连接（所有客户端静默）</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Col 3: User Space & Clients -->
+      <div class="col c3">
+        <div class="col-head">
+          <div class="nick">用户空间与客户端</div>
+          <div class="real">USER SPACE & CLIENTS</div>
+          <div class="duty">客户端发送网络包，以及用户态 events 接收数组</div>
+        </div>
+        <div class="user-box">
+
+          <div class="sub-panel">
+            <div class="sub-title">
+              <span>🌐 模拟客户端连接（Socket FD）</span>
+            </div>
+            <div class="client-list" id="client-list"></div>
+          </div>
+
+          <div class="sub-panel" style="flex:1;">
+            <div class="sub-title">
+              <span>📦 用户态缓冲区 events[MAX]</span>
+            </div>
+            <div id="user-events" style="font-family:var(--mono);font-size:11.5px;color:var(--muted);padding:4px 0;">
+              尚未执行 epoll_wait()
+            </div>
+          </div>
+
+          <!-- Stats Dashboard -->
+          <div class="stats-bar">
+            <div class="stat-item">
+              <div class="stat-val" id="stat-total-fds">0</div>
+              <div class="stat-lbl">监控连接总数</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-val" id="stat-scans">0 次</div>
+              <div class="stat-lbl">内核盲目遍历消耗</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-val good" id="stat-efficiency">O(1)</div>
+              <div class="stat-lbl">唤醒算法复杂度</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Console Controls & Logs -->
+  <div class="console">
+    <div class="console-head">
+      <span>控制台 & 操作面板</span>
+      <div class="btns" id="btns"></div>
+    </div>
+    <div class="logbox" id="logbox"></div>
+  </div>
+
+  <!-- Why cards -->
+  <div class="why">
+    <div class="why-card w1">
+      <h3>🔍 为什么 select 最多只支持 1024 个连接？</h3>
+      <p>select 底层使用的是固定长度的位图（Bitmask，<code>fd_set</code>），在 <code>&lt;sys/select.h&gt;</code> 中宏写死了 <code>FD_SETSIZE = 1024</code>。更要命的是，每次调用都必须重新将这 1024 位的位图全量拷入内核，极度昂贵！</p>
+    </div>
+    <div class="why-card w2">
+      <h3>🌳 为什么 epoll 采用红黑树而不是哈希表？</h3>
+      <p>因为监控的 FD 数量是动态变化的，哈希表在发生扩容（Rehash）或内存分配时可能产生难以预测的高延迟，且哈希表需要预分配巨大桶内存。红黑树兼具 <b>O(log N) 的严格查找/增删性能</b> 和 <b>极小内存开销</b>，不会发生卡顿抖动。</p>
+    </div>
+    <div class="why-card w3">
+      <h3>⚡ ET 边缘触发为什么必须死磕非阻塞 IO？</h3>
+      <p>因为 ET 模式在数据到达时<b>只按一次门铃</b>！如果你用阻塞的 <code>read()</code> 循环读，当最后一次把数据读空时，阻塞 <code>read()</code> 会让整个工作线程彻底卡死；而如果不循环读干，剩余数据再也不会触发通知，产生灾难性死锁！</p>
+    </div>
+  </div>
+
+  <footer>
+    Linux epoll 核心三步：epoll_create 建立内核大本营 → epoll_ctl 红黑树增删改查 → epoll_wait 就绪链表极速取件 ｜ 从此终结 C10K 噩梦
+  </footer>
+
+</div>
+
+<script>
+const KEY = 'linux-epoll-journey-v1';
+
+/* ============ 关卡定义 ============ */
+const STAGES = [
+  { nm:'起点·导览', stageTag:'STAGE 0 / 9', title:'先认地形：班主任点名 vs 门铃就绪链表',
+    start:'欢迎来到 Linux epoll 高性能网络内核沙盒！上方机制落地表列出了 epoll_create、epoll_ctl、epoll_wait、红黑树、就绪链表与 LT/ET 模式。',
+    task:'熟悉三列舞台：<b>代码列</b>、<b>Linux 内核空间（红黑树+就绪链表）</b>、<b>用户空间与客户端</b>。点击右侧「开始旅程」。',
+    watch:'带着问题思考：当有 10,000 个客户端连着服务器，只有 2 个在发送聊天消息时，操作系统怎样才能不去无脑轮询其余 9,998 个空闲连接？',
+    pass:()=>flags.started },
+
+  { nm:'① select 的痛', stageTag:'STAGE 1 / 9', title:'C10K 噩梦：10,000 个连接只有 2 个活跃',
+    start:'模拟器中已模拟了 10,000 个连接，其中 9,998 个处于静默空闲状态。',
+    task:'点击 <b>模拟 select 轮询 (全量扫描)</b>，观察内核的遍历次数。',
+    watch:'看统计面板：为了找出这 2 个活跃连接，内核被迫把 10,000 个描述符<b>逐个轮询了 10,000 次！</b>如果每秒调用 100 次，CPU 将进行 100 万次无谓空转！这就是传统 select 无法承受万级并发的根因。',
+    pass:()=>flags.selectScanned },
+
+  { nm:'② 建立内核大本营', stageTag:'STAGE 2 / 9', title:'epoll_create：一劳永逸的内核收发室',
+    start:'我们不再用 select。现在准备进入 epoll 时代。',
+    task:'点击 <b>int epfd = epoll_create(1);</b>，在内核创建 eventpoll 结构。',
+    watch:'看第二列内核空间：内核成功创建了专用的 <b>红黑树</b> 与 <b>就绪双向链表</b>。这是常驻在内核空间的大本营，后续不再需要重复传递连接数组！',
+    pass:()=>flags.epollCreated },
+
+  { nm:'③ 登记挂树', stageTag:'STAGE 3 / 9', title:'epoll_ctl：只注册一次，红黑树常驻',
+    start:'客户端 A (FD 4) 和客户端 B (FD 5) 连了进来。',
+    task:'点击 <b>epoll_ctl(ADD, FD 4 & 5)</b>，将它们加入监控集合。',
+    watch:'看红黑树区：FD 4 和 FD 5 被添加进了内核的红黑树中！增删查复杂度为 O(log N)。从此内核牢牢记住了它们，每次等待不再需要重复拷贝数组。',
+    pass:()=>flags.epollCtlAdded },
+
+  { nm:'④ 网卡中断与挂链', stageTag:'STAGE 4 / 9', title:'数据到达：硬件中断触发回调，精准入链',
+    start:'FD 4 和 FD 5 在树上静静等待。此时客户端 A (FD 4) 发送了 1024 字节数据。',
+    task:'点击 <b>客户端 A (FD 4) 发送数据包</b>，透视网卡中断与回调发生的过程。',
+    watch:'<b>最核心的机制发生在这里：</b>网卡产生硬件中断 → 操作系统调用注册好的回调函数（ep_poll_callback）→ <b>只有 FD 4 被直接挂进了【就绪双向链表（rdllist）】！</b>红黑树上其他没发数据的几万个节点完全不用动！',
+    pass:()=>flags.packetSent },
+
+  { nm:'⑤ epoll_wait 瞬间返回', stageTag:'STAGE 5 / 9', title:'O(就绪数) 极速取件：不用扫描整棵树',
+    start:'此时就绪链表里已经排着准备好的 FD 4。',
+    task:'点击 <b>nready = epoll_wait(...)</b>，看用户态如何秒级收件。',
+    watch:'看内核消耗：<b>内核盲目遍历次数为 0！</b> epoll_wait 仅仅是把就绪链表里的 FD 4 取出来拷给用户态的 events 数组。如果有 10,000 个连接，此时依然只耗费 O(1) 的时间！',
+    pass:()=>flags.epollWaitDone },
+
+  { nm:'⑥ LT 水平触发', stageTag:'STAGE 6 / 9', title:'操心的老妈：没读完就一直催！',
+    start:'默认模式是 LT（水平触发）。FD 4 缓冲区里有 1024 字节，但我们只读了 512 字节。',
+    task:'点击 <b>只读 512 字节 (剩余 512)</b>，然后再次点击 <b>再次 epoll_wait()</b>。',
+    watch:'因为是 LT 模式，只要缓冲区里还有残留未读数据，下一次 epoll_wait <b>依然会立即报警并返回就绪！</b>像个操心的老妈一直催你把饭吃完。安全防漏，但频繁唤醒会消耗 CPU。',
+    pass:()=>flags.ltRepeated },
+
+  { nm:'⑦ ET 边缘触发与死锁', stageTag:'STAGE 7 / 9', title:'门铃只响一声：死磕非阻塞与 while 读干',
+    start:'我们将 FD 4 改为 ET 模式（EPOLLET，边缘触发），并发送新数据。',
+    task:'点击 <b>切换为 ET 模式并发送数据</b> ➔ 点击 <b>普通读取 512 字节 (留下一半)</b> ➔ 再次点击 <b>再次 epoll_wait() 观察卡死</b>！',
+    watch:'<b>惊天大坑：</b>ET 模式在门铃响过一次后，后续数据不再发生“从无到有”的状态跳跃，<b>再也不通知了！</b>剩下的 512 字节在内核里睡大觉，造成死锁！直到你点击 <b>使用 while 循环读到 EAGAIN</b> 彻底解决！',
+    pass:()=>flags.etDeadlockSeen && flags.etFixed },
+
+  { nm:'⑧ 毕业测验', stageTag:'STAGE 8 / 9', title:'毕业测：3 道硬核实战题',
+    start:'太棒了！从 select 的盲目轮询、到 epoll 的红黑树与就绪链表、再到 LT/ET 触发模式的深水区，你全亲身踩过坑了。',
+    task:'答对下面 3 道单选题即可毕业（答错可重选）。',
+    watch:'每题均配有详尽的底层原理解释。',
+    pass:()=>quiz.length===3 && quiz.every(v=>v && v.ok) },
+
+  { nm:'⑨ 自由模式', stageTag:'STAGE 9 / 9', title:'自由沙盒：随时实验',
+    start:'你已经完全掌握了 Linux epoll 的核心心智模型与系统调用！',
+    task:'所有按钮已完全解锁，你可以随意模拟万级连接、数据收发、LT/ET 切换。',
+    watch:'探索不同场景下的性能与事件流动。',
+    pass:()=>true }
+];
+
+const QUIZ = [
+  { q:'1 / 3 · 为什么说 epoll 处理 10,000 个并发连接比 select 快得多？',
+    opts:[
+      '因为 epoll 采用了多线程并行去轮询这 10,000 个 socket',
+      'epoll 不用每次重复拷入全量数组，且通过中断回调只把活跃连接挂入就绪链表，避免了 O(N) 盲目轮询',
+      '因为 epoll 的底层使用了更高频率的硬件时钟信号'
+    ],
+    ans:1,
+    expl:'真相：select 的致命伤是每次调用全量拷贝数组 + 内核盲目 O(N) 遍历；epoll 靠内核常驻红黑树存储监听集 + 网卡中断回调精准入就绪链表，时间复杂度与总连接数无关！' },
+
+  { q:'2 / 3 · epoll 的 LT（水平触发）与 ET（边缘触发）核心区别是什么？',
+    opts:[
+      'LT 只能监听读事件，ET 只能监听写事件',
+      'LT 模式速度更快，ET 模式兼容性更好',
+      'LT 只要缓冲区有数据就一直通知；ET 只在数据从无到有的“状态跳变”瞬间通知一次'
+    ],
+    ans:2,
+    expl:'第⑥和第⑦关亲眼所见：LT 像老妈，有剩饭就一直催；ET 像门铃，只按一下，后续即使缓冲区还有残余数据也不会再按铃。' },
+
+  { q:'3 / 3 · 为什么在 ET（边缘触发）模式下，socket 必须设置为非阻塞（O_NONBLOCK）且使用 while 循环读到 EAGAIN？',
+    opts:[
+      '如果用阻塞 read，当数据读空时线程会卡死在 read 调用；如果不读到 EAGAIN，残留数据将永远无法再次触发通知',
+      '这是 Linux 编译器的强制语法要求，否则报编译错误',
+      '非阻塞模式可以自动提高网卡带宽'
+    ],
+    ans:0,
+    expl:'经典考点与生产事故常客：ET 模式只通知一次，必须 while 循环读空；如果使用阻塞 read，最后一次没有数据时就会卡死线程！因此必须是非阻塞 + 循环读干到返回 EAGAIN。' },
+];
+
+/* ============ 核心状态 ============ */
+let stage = 0;
+let flags = {};
+let quiz = [null, null, null];
+let crashActive = false;
+
+// 内核数据
+let epfdCreated = false;
+let rbtreeNodes = [];
+let readyList = [];
+
+// 客户端数据
+let clients = [
+  { fd: 4, name: 'Client A (聊天)', bufBytes: 0, mode: 'LT' },
+  { fd: 5, name: 'Client B (上传)', bufBytes: 0, mode: 'LT' },
+  { fd: 6, name: 'Client C (空闲)', bufBytes: 0, mode: 'LT' }
+];
+
+// 用户态 events
+let userEventsStr = '尚未执行 epoll_wait()';
+
+// 统计
+let stats = {
+  totalFds: 10000,
+  scans: 0,
+  efficiency: 'O(N)'
+};
+
+// C 代码与高亮
+let codeLines = [
+  { text: '// Linux epoll High-Performance Server', cls: 'cm' },
+  { text: '#include <sys/epoll.h>', cls: 'kw' },
+  { text: '#include <fcntl.h>', cls: 'kw' },
+  { text: '', cls: '' },
+  { text: 'int main() {', cls: 'kw' },
+  { text: '    // 1. 创建内核 eventpoll 实例（红黑树+就绪链表）', cls: 'cm' },
+  { text: '    int epfd = epoll_create(1);', cls: 'fn', id: 'create-line' },
+  { text: '', cls: '' },
+  { text: '    // 2. 将监听 socket 加入内核红黑树（只做一次）', cls: 'cm' },
+  { text: '    struct epoll_event ev;', cls: 'tp' },
+  { text: '    ev.events = EPOLLIN; ev.data.fd = client_fd;', cls: 'tp' },
+  { text: '    epoll_ctl(epfd, EPOLL_CTL_ADD, client_fd, &ev);', cls: 'fn', id: 'ctl-line' },
+  { text: '', cls: '' },
+  { text: '    // 3. 事件主循环', cls: 'cm' },
+  { text: '    struct epoll_event events[MAX_EVENTS];', cls: 'tp' },
+  { text: '    while (1) {', cls: 'kw' },
+  { text: '        int n = epoll_wait(epfd, events, MAX_EVENTS, -1);', cls: 'fn', id: 'wait-line' },
+  { text: '        for (int i = 0; i < n; i++) {', cls: 'kw' },
+  { text: '            handle_read(events[i].data.fd);', cls: 'tp', id: 'handle-line' },
+  { text: '        }', cls: 'kw' },
+  { text: '    }', cls: 'kw' },
+  { text: '}', cls: 'kw' }
+];
+let activeLineId = 'create-line';
+
+// 日志
+const logLines = [];
+function addLog(cmd, type, expl){
+  logLines.unshift({cmd, type, expl});
+  if(logLines.length > 32) logLines.pop();
+}
+
+/* ============ 业务动作 ============ */
+
+// 1. 模拟 select 轮询
+function doSelectScan(){
+  if(crashActive) return;
+  stats.scans += 10000;
+  stats.efficiency = 'O(N) 极慢';
+  addLog('select(max_fd+1, &readfds, ...);', 'err', '【select 扫描 10,000 次】：为了找 2 个活跃连接，内核被迫遍历从 0 到 9999 的所有文件描述符！CPU 浪费 10,000 次空转！');
+  flags.selectScanned = true;
+  render();
+}
+
+// 2. 创建 epoll
+function doEpollCreate(){
+  if(crashActive) return;
+  epfdCreated = true;
+  activeLineId = 'create-line';
+  stats.efficiency = 'O(1) 准备就绪';
+  addLog('int epfd = epoll_create(1);', 'ok', '【内核大本营就绪】：在内核空间分配 struct eventpoll。一棵空的红黑树和一个空的就绪双向链表初始化完毕！返回文件描述符 epfd = 3。');
+  flags.epollCreated = true;
+  render();
+}
+
+// 3. epoll_ctl 注册节点
+function doEpollCtlAdd(){
+  if(crashActive || !epfdCreated) return;
+  if(rbtreeNodes.length === 0){
+    rbtreeNodes.push({ fd: 4, ev: 'EPOLLIN', mode: 'LT' });
+    rbtreeNodes.push({ fd: 5, ev: 'EPOLLIN', mode: 'LT' });
+  }
+  activeLineId = 'ctl-line';
+  addLog('epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &ev);', 'ok', '【红黑树上挂载】：FD 4 和 FD 5 注册进内核红黑树。增删改查都是 O(log N)。从此内核常驻监视，无需重复传参！');
+  flags.epollCtlAdded = true;
+  render();
+}
+
+// 4. 客户端发包 -> 网卡中断 -> 回调挂链
+function doSendPacket(fd, bytes = 1024){
+  if(crashActive) return;
+  const c = clients.find(cl => cl.fd === fd);
+  if(!c) return;
+
+  const wasEmpty = c.bufBytes === 0;
+  c.bufBytes += bytes;
+
+  // 检查是否已经在就绪链表
+  let inReady = readyList.find(r => r.fd === fd);
+  let shouldNotify = false;
+
+  if(c.mode === 'LT'){
+    // LT 模式：只要有数据就进链表
+    if(!inReady){
+      readyList.push({ fd, bytes: c.bufBytes });
+      shouldNotify = true;
+    } else {
+      inReady.bytes = c.bufBytes;
+    }
+  } else {
+    // ET 模式：只有从无到有 (wasEmpty) 才触发通知！
+    if(wasEmpty){
+      if(!inReady) readyList.push({ fd, bytes: c.bufBytes });
+      shouldNotify = true;
+    }
+  }
+
+  // 标亮红黑树节点
+  const rbt = rbtreeNodes.find(n => n.fd === fd);
+  if(rbt) rbt.hasData = true;
+
+  if(shouldNotify){
+    addLog(`网卡中断: 收到包 -> FD ${fd} (${bytes} B)`, 'ok', `【硬件中断 + ep_poll_callback 回调】：网卡收到电信号触发中断，内核直接把 FD ${fd} 挂入就绪链表（rdllist）！其余上万个静默连接完全不受影响！`);
+  } else {
+    addLog(`网卡收到包 -> FD ${fd} (${bytes} B)`, 'info', `数据追加到缓冲区（当前 ${c.bufBytes} B），但在 ET 模式下由于非跳变状态，不按门铃！`);
+  }
+
+  flags.packetSent = true;
+  render();
+}
+
+// 5. epoll_wait 消费就绪链表
+function doEpollWait(){
+  if(crashActive || !epfdCreated) return;
+  activeLineId = 'wait-line';
+
+  if(readyList.length === 0){
+    userEventsStr = 'epoll_wait() 阻塞休眠中：当前就绪链表为空，进程已让出 CPU。';
+    addLog('nready = epoll_wait(epfd, events, 10, -1);', 'info', '就绪链表为空，当前工作线程安全休眠（Sleep），CPU 使用率为 0%！');
+    render();
+    return;
+  }
+
+  const count = readyList.length;
+  userEventsStr = `就绪返回 nready = ${count} 个事件：\n` + readyList.map(r => `  -> events: FD ${r.fd} (可读数据 ${r.bytes} B)`).join('\n');
+
+  addLog(`nready = epoll_wait() 返回 ${count} 个就绪事件`, 'ok', `【O(就绪数) 秒级返回】：无需扫描 10,000 个连接！直接从就绪链表把活跃的 FD 端出来交给用户态！遍历消耗为 0！`);
+
+  // 如果是 LT 模式，检查是否缓冲区还有数据，没有读完的话留在链表或下次进；如果是 ET，通知完从链表摘除
+  readyList = [];
+  flags.epollWaitDone = true;
+  render();
+}
+
+// 6. LT 读取部分数据 (512 字节)
+function doLTReadPartial(){
+  if(crashActive) return;
+  const c = clients.find(cl => cl.fd === 4);
+  if(!c || c.bufBytes <= 0){
+    addLog('read(4, buf, 512)', 'err', 'FD 4 缓冲区无数据可读！请先点击发送数据。');
+    return;
+  }
+
+  c.bufBytes -= 512;
+  activeLineId = 'handle-line';
+  addLog('read(4, buf, 512);', 'info', `读取了 512 字节，但还残留 ${c.bufBytes} 字节！在 LT 水平触发模式下，内核看你还没吃完饭，下一次 epoll_wait 依然会立即报警！`);
+
+  // LT 只要有剩余，下一次 wait 依然拉进链表
+  if(c.mode === 'LT' && c.bufBytes > 0){
+    if(!readyList.find(r => r.fd === 4)){
+      readyList.push({ fd: 4, bytes: c.bufBytes });
+    }
+    flags.ltRepeated = true;
+  }
+  render();
+}
+
+// 7. 切换 ET 模式
+function doSwitchToET(){
+  if(crashActive) return;
+  const c = clients.find(cl => cl.fd === 4);
+  if(c) c.mode = 'ET';
+  const rbt = rbtreeNodes.find(n => n.fd === 4);
+  if(rbt) rbt.mode = 'ET';
+
+  addLog('epoll_ctl(epfd, MOD, 4, EPOLLIN | EPOLLET);', 'info', '【切换为 ET 边缘触发】：门铃改为“仅状态从无到有跳变时响一声”。');
+  render();
+}
+
+// 触发 ET 卡死事故
+function doTriggerETDeadlock(){
+  const c = clients.find(cl => cl.fd === 4);
+  if(c && c.mode === 'ET' && c.bufBytes > 0 && readyList.length === 0){
+    crashActive = true;
+    document.body.classList.add('shake');
+    setTimeout(()=>document.body.classList.remove('shake'), 500);
+
+    const crashBar = document.getElementById('crashbar');
+    const crashText = document.getElementById('crashtext');
+    crashText.innerHTML = '<b>💥 经典生产事故：ET 模式数据残留死锁！</b> 缓冲区内还残留了 512 字节，但因为没有新数据到达（没有状态跳变），门铃不再按响！<code>epoll_wait</code> 永远不会再通知 FD 4！客户端卡死在等待中！';
+    crashBar.classList.add('show');
+    flags.etDeadlockSeen = true;
+  } else {
+    addLog('检查状态', 'info', '请先切换到 ET 模式，发包后只读取一半，然后点 epoll_wait。');
+  }
+  render();
+}
+
+// 修复 ET：非阻塞 while 循环读到 EAGAIN
+function doETReadWhileEAGAIN(){
+  const c = clients.find(cl => cl.fd === 4);
+  if(!c) return;
+
+  const total = c.bufBytes;
+  c.bufBytes = 0;
+  readyList = readyList.filter(r => r.fd !== 4);
+  const rbt = rbtreeNodes.find(n => n.fd === 4);
+  if(rbt) rbt.hasData = false;
+
+  if(crashActive){
+    crashActive = false;
+    document.getElementById('crashbar').classList.remove('show');
+  }
+
+  addLog('while((n = read(4, buf, sizeof(buf))) > 0) ...', 'ok', `【正确解法（非阻塞 + while 循环读干）】：一口气读光所有剩余的 ${total} 字节，直到 read 返回 -1 且 errno == EAGAIN！死锁彻底化解！`);
+  flags.etFixed = true;
+  render();
+}
+
+function doRevive(){
+  crashActive = false;
+  document.getElementById('crashbar').classList.remove('show');
+  render();
+}
+
+/* ============ 渲染与关卡系统 ============ */
+
+function renderRail(){
+  const rail = document.getElementById('rail');
+  rail.innerHTML = STAGES.map((s, idx)=>{
+    const cls = idx === stage ? 'pill current' : (idx < stage ? 'pill done' : 'pill');
+    return `<div class="${cls}" onclick="jumpStage(${idx})">${s.nm}</div>${idx < STAGES.length - 1 ? '<div class="sep"></div>' : ''}`;
+  }).join('');
+}
+
+function renderQuest(){
+  const s = STAGES[stage];
+  const q = document.getElementById('quest');
+  const isFree = stage === STAGES.length - 1;
+  q.className = isFree ? 'quest free' : 'quest';
+
+  let bodyHtml = `
+    <div class="quest-head">
+      <span class="quest-stage">${s.stageTag}</span>
+      <span class="quest-title">${s.title}</span>
+      ${stage < STAGES.length - 1 ? `<button class="skip" onclick="jumpStage(${stage + 1})">跳过本关 →</button>` : ''}
+    </div>
+    <div class="q-row"><div class="k">📍 起点状态</div><div class="v">${s.start}</div></div>
+    <div class="q-row"><div class="k">🎯 任务</div><div class="v">${s.task}</div></div>
+    <div class="q-row"><div class="k">👀 观察点</div><div class="v">${s.watch}</div></div>
+  `;
+
+  if(stage === 8){
+    // 测验关
+    bodyHtml += `
+      <div class="quiz">
+        ${QUIZ.map((qz, qidx)=>{
+          const res = quiz[qidx];
+          return `
+            <div class="qitem">
+              <div class="qtext">${qz.q}</div>
+              <div class="opts">
+                ${qz.opts.map((opt, oidx)=>{
+                  let cls = 'opt';
+                  if(res !== null){
+                    if(oidx === qz.ans) cls += ' correct';
+                    else if(oidx === res.pick) cls += ' wrong';
+                    else cls += ' dim';
+                  }
+                  return `<button class="${cls}" onclick="answerQuiz(${qidx}, ${oidx})">${opt}</button>`;
+                }).join('')}
+              </div>
+              ${res !== null ? `<div class="qexpl">${res.ok ? '✅ 答对了！' : '❌ 答错了。'} ${qz.expl}</div>` : ''}
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  if(stage === 0){
+    bodyHtml += `<div class="go"><button onclick="startJourney()">开始旅程（进入第 1 关）→</button></div>`;
+  } else if(s.pass() && stage < STAGES.length - 1 && stage !== 8){
+    bodyHtml += `<div class="go"><button class="primary" onclick="jumpStage(${stage + 1})">✅ 本关目标达成！进入下一关 →</button></div>`;
+  } else if(stage === 8 && s.pass()){
+    bodyHtml += `<div class="go"><button class="primary" onclick="jumpStage(9)">🎉 测验全对！毕业并解锁自由模式 →</button></div>`;
+  }
+
+  q.innerHTML = bodyHtml;
+}
+
+function renderCode(){
+  const box = document.getElementById('codebox');
+  box.innerHTML = codeLines.map(l => {
+    const act = (l.id && l.id === activeLineId) ? 'active' : '';
+    return `<div class="codeline ${l.cls} ${act}">${escapeHtml(l.text)}</div>`;
+  }).join('');
+}
+
+function renderKernel(){
+  // 红黑树
+  const rbtBox = document.getElementById('rbtree');
+  const rbtCount = document.getElementById('rbt-count');
+  rbtCount.innerText = `${rbtreeNodes.length} 个节点`;
+
+  if(rbtreeNodes.length === 0){
+    rbtBox.innerHTML = `<div class="empty-tip">尚未调用 epoll_create / epoll_ctl，树为空</div>`;
+  } else {
+    rbtBox.innerHTML = rbtreeNodes.map(n => {
+      return `
+        <div class="rbt-node ${n.hasData ? 'has-data' : ''}">
+          <span class="rbt-fd">FD ${n.fd}</span>
+          <span class="rbt-ev">${n.ev}</span>
+          <span class="rbt-mode ${n.mode === 'LT' ? 'mode-lt' : 'mode-et'}">${n.mode} 模式</span>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // 就绪链表
+  const rdlBox = document.getElementById('rdllist');
+  const rdlCount = document.getElementById('rdl-count');
+  rdlCount.innerText = `${readyList.length} 个就绪`;
+
+  if(readyList.length === 0){
+    rdlBox.innerHTML = `<div class="empty-tip">当前没有就绪连接（所有客户端静默）</div>`;
+  } else {
+    rdlBox.innerHTML = readyList.map(r => {
+      return `
+        <div class="rd-item">
+          <span class="fd">🔔 FD ${r.fd}</span>
+          <span class="bytes">${r.bytes} 字节就绪</span>
+        </div>
+      `;
+    }).join('');
+  }
+}
+
+function renderUserSpace(){
+  const clBox = document.getElementById('client-list');
+  clBox.innerHTML = clients.map(c => {
+    return `
+      <div class="client-item ${c.bufBytes > 0 ? 'busy' : ''}">
+        <div>
+          <span class="client-name">${c.name}</span>
+          <div class="client-buf">未读数据: <b>${c.bufBytes} 字节</b> [${c.mode}]</div>
+        </div>
+        <button onclick="doSendPacket(${c.fd}, 1024)">发包 +1KB</button>
+      </div>
+    `;
+  }).join('');
+
+  document.getElementById('user-events').innerText = userEventsStr;
+
+  // 统计面板
+  document.getElementById('stat-total-fds').innerText = stats.totalFds.toLocaleString();
+  document.getElementById('stat-scans').innerText = stats.scans.toLocaleString() + ' 次';
+  document.getElementById('stat-efficiency').innerText = stats.efficiency;
+}
+
+function renderConsoleButtons(){
+  const btns = document.getElementById('btns');
+  const isFree = stage === STAGES.length - 1;
+  let btnHtml = '';
+
+  if(stage === 1 || isFree){
+    btnHtml += `<button class="danger-btn" onclick="doSelectScan()">模拟 select 轮询 (全量扫描)</button>`;
+  }
+  if(stage === 2 || isFree){
+    btnHtml += `<button class="action-btn" onclick="doEpollCreate()">int epfd = epoll_create(1)</button>`;
+  }
+  if(stage === 3 || isFree){
+    btnHtml += `<button class="action-btn" onclick="doEpollCtlAdd()">epoll_ctl(ADD, FD 4 & 5)</button>`;
+  }
+  if(stage === 4 || isFree){
+    btnHtml += `<button class="primary" onclick="doSendPacket(4, 1024)">客户端 A (FD 4) 发包 1KB</button>`;
+  }
+  if(stage === 5 || isFree){
+    btnHtml += `<button class="fix-btn" onclick="doEpollWait()">nready = epoll_wait(...)</button>`;
+  }
+  if(stage === 6 || isFree){
+    btnHtml += `<button class="action-btn" onclick="doLTReadPartial()">只读 512 字节 (剩余 512)</button>`;
+    btnHtml += `<button class="fix-btn" onclick="doEpollWait()">再次 epoll_wait()</button>`;
+  }
+  if(stage === 7 || isFree){
+    btnHtml += `<button class="primary" onclick="doSwitchToET(); doSendPacket(4, 1024);">切换为 ET 模式并发送 1KB</button>`;
+    btnHtml += `<button class="action-btn" onclick="doLTReadPartial()">普通读取 512 字节 (留下一半)</button>`;
+    btnHtml += `<button class="danger-btn" onclick="doEpollWait(); doTriggerETDeadlock();">再次 epoll_wait() 观察卡死</button>`;
+    btnHtml += `<button class="fix-btn" onclick="doETReadWhileEAGAIN()">✅ while 循环读到 EAGAIN (破解)</button>`;
+  }
+
+  btnHtml += `<button onclick="resetWorldState()">↺ 重置环境</button>`;
+  btns.innerHTML = btnHtml;
+}
+
+function renderLogs(){
+  const box = document.getElementById('logbox');
+  if(logLines.length === 0){
+    box.innerHTML = `<div style="color:var(--muted);font-size:12px;">日志就绪，点击上方控制台按钮执行操作...</div>`;
+    return;
+  }
+  box.innerHTML = logLines.map(l => {
+    return `
+      <div class="logline ${l.type}">
+        <span class="cmd">${escapeHtml(l.cmd)}</span>
+        <div class="expl">${l.expl}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function render(){
+  renderRail();
+  renderQuest();
+  renderCode();
+  renderKernel();
+  renderUserSpace();
+  renderConsoleButtons();
+  renderLogs();
+  saveState();
+}
+
+function startJourney(){
+  flags.started = true;
+  jumpStage(1);
+}
+
+function jumpStage(idx){
+  stage = idx;
+  render();
+}
+
+function answerQuiz(qidx, oidx){
+  const qz = QUIZ[qidx];
+  const ok = oidx === qz.ans;
+  quiz[qidx] = { pick: oidx, ok };
+  if(ok){
+    addLog(`测验第 ${qidx+1} 题`, 'ok', `回答正确！${qz.expl}`);
+  } else {
+    addLog(`测验第 ${qidx+1} 题`, 'err', `回答错误，再想想看！`);
+  }
+  render();
+}
+
+function resetWorldState(){
+  epfdCreated = false;
+  rbtreeNodes = [];
+  readyList = [];
+  clients.forEach(c => { c.bufBytes = 0; c.mode = 'LT'; });
+  userEventsStr = '尚未执行 epoll_wait()';
+  stats.scans = 0;
+  stats.efficiency = 'O(1)';
+  activeLineId = 'create-line';
+  addLog('环境已重置', 'info', '内核 eventpoll 对象已释放，各连接就绪。');
+  render();
+}
+
+function escapeHtml(str){
+  if(!str) return '';
+  return str.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+/* ============ 持久化 ============ */
+function saveState(){
+  try{
+    localStorage.setItem(KEY, JSON.stringify({ stage, flags, quiz }));
+  }catch(e){}
+}
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(KEY);
+    if(raw){
+      const data = JSON.parse(raw);
+      if(typeof data.stage === 'number') stage = data.stage;
+      if(data.flags) flags = data.flags;
+      if(Array.isArray(data.quiz)) quiz = data.quiz;
+    }
+  }catch(e){}
+}
+
+window.onload = function(){
+  loadState();
+  document.getElementById('b-revive').onclick = doRevive;
+  render();
+};
+</script>
+</body>
+</html>

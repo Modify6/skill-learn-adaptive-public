@@ -1,0 +1,1322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TCP vs UDP 机器内部模型 —— 操作系统内核与物理网络本质</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#151f36; --panel2:#0f1729;
+    --line:#26334d; --text:#dde6f5; --muted:#a6b9d9;
+    --blue:#3b82f6; --green:#22c55e; --purple:#a855f7;
+    --amber:#f5b544; --cyan:#38bdf8; --red:#f87171;
+    --mono:"Cascadia Code",Consolas,"JetBrains Mono",monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:radial-gradient(1200px 600px at 50% -100px,#16223d 0%,var(--bg) 60%);
+    color:var(--text);
+    font-family:system-ui,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+    padding:30px 18px 70px; line-height:1.65;
+  }
+  .wrap{max-width:1240px; margin:0 auto;}
+
+  /* ---------- header ---------- */
+  h1{font-size:26px; letter-spacing:.5px;}
+  h1 .dot-word{color:var(--amber);}
+  .sub{color:var(--muted); margin-top:6px; font-size:14.5px;}
+
+  /* ---------- hierarchy badge ---------- */
+  .ladder-badge{
+    display:inline-flex; align-items:center; gap:8px; margin-top:10px; padding:4px 10px;
+    background:#162442; border:1px solid #2e446d; border-radius:6px; font-size:12px;
+    color:var(--cyan); font-family:var(--mono); font-weight:600;
+  }
+
+  /* ---------- landing table ---------- */
+  .ltable{margin-top:14px; border:1px solid var(--line); border-radius:10px; overflow:hidden; font-size:12px;}
+  .ltable table{width:100%; border-collapse:collapse;}
+  .ltable th{
+    background:rgba(255,255,255,.03); color:var(--muted); font-size:11px; font-weight:600;
+    padding:6px 10px; text-align:left; border-bottom:1px solid var(--line); letter-spacing:1px;
+  }
+  .ltable td{padding:6px 10px; border-bottom:1px solid rgba(38,51,77,.5); vertical-align:top;}
+  .ltable tr:last-child td{border-bottom:none;}
+  .ltable .nick{color:var(--amber); font-weight:700; font-family:var(--mono); white-space:nowrap;}
+  .ltable .real{color:var(--cyan); font-family:var(--mono);}
+  .ltable .phys{color:var(--text);}
+  .ltable .life{color:var(--muted);}
+
+  /* ---------- journey rail ---------- */
+  .journey{margin-top:20px;}
+  .rail{display:flex; align-items:center; gap:5px; overflow-x:auto; padding:4px 2px 10px;}
+  .pill{
+    flex:none; font-size:11px; padding:4px 9px; border-radius:999px;
+    border:1px solid var(--line); color:var(--muted); white-space:nowrap; background:var(--panel2);
+    cursor:pointer;
+  }
+  .pill.done{color:var(--green); border-color:rgba(34,197,94,.55);}
+  .pill.current{color:var(--amber); border-color:var(--amber); box-shadow:0 0 10px rgba(245,181,68,.25); font-weight:700;}
+  .sep{flex:none; width:10px; height:2px; background:var(--line);}
+
+  /* ---------- quest card ---------- */
+  .quest{
+    border:1px solid rgba(245,181,68,.45); border-left:4px solid var(--amber);
+    background:linear-gradient(90deg, rgba(245,181,68,.07), var(--panel2) 45%);
+    border-radius:12px; padding:14px 18px;
+  }
+  .quest.free{border-color:rgba(34,197,94,.45); border-left-color:var(--green);
+    background:linear-gradient(90deg, rgba(34,197,94,.07), var(--panel2) 45%);}
+  .quest-head{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .quest-stage{font-family:var(--mono); font-size:11px; color:var(--amber); letter-spacing:1px;}
+  .quest-title{font-size:16px; font-weight:700;}
+  .skip{font-size:12px; color:var(--muted); cursor:pointer; border:none; background:none; text-decoration:underline dotted; padding:0;}
+  .skip:hover{color:var(--text);}
+  .replay-btn{
+    font-size:11px; padding:3px 8px; border-radius:6px; background:#182338;
+    color:var(--cyan); border:1px solid var(--line); cursor:pointer; margin-left:auto;
+  }
+  .replay-btn:hover{border-color:var(--cyan); background:#1e2d48;}
+  .q-row{display:flex; gap:12px; margin-top:9px; font-size:13.5px;}
+  .q-row .k{flex:none; width:88px; color:var(--muted); font-weight:600;}
+  .q-row .v{color:var(--text);}
+  .q-row .v b{color:var(--amber);}
+  .quest .go{margin-top:12px;}
+  .quest .go button{
+    font-size:13px; padding:7px 18px; border-color:var(--amber); color:var(--amber);
+    font-family:system-ui,"Microsoft YaHei",sans-serif; font-weight:700;
+  }
+
+  /* quiz */
+  .quiz{margin-top:6px;}
+  .qitem{margin-top:12px; padding-top:10px; border-top:1px dashed var(--line);}
+  .qitem .qtext{font-size:13.5px; font-weight:600;}
+  .opts{display:flex; flex-direction:column; gap:6px; margin-top:8px;}
+  .opt{
+    text-align:left; font-size:12.5px; font-family:var(--mono),system-ui,sans-serif;
+    background:#182338; color:var(--text); border:1px solid var(--line); border-radius:6px;
+    padding:8px 12px; cursor:pointer;
+  }
+  .opt.correct{border-color:var(--green); color:var(--green); background:rgba(34,197,94,.1);}
+  .opt.wrong{border-color:var(--red); color:var(--red); background:rgba(248,113,113,.08);}
+  .opt.dim{opacity:.4;}
+  .qexpl{font-size:12px; color:var(--muted); margin-top:6px;}
+
+  /* ---------- stage (3 columns) ---------- */
+  .stage-scroll{overflow-x:auto; margin-top:20px; padding-bottom:6px;}
+  .stage{
+    min-width:1120px;
+    display:grid;
+    grid-template-columns:1fr 1.4fr 1.05fr;
+    gap:0 12px; align-items:stretch;
+  }
+  .col-head{margin-bottom:10px; text-align:center;}
+  .col-head .nick{font-size:17px; font-weight:700;}
+  .col-head .real{font-family:var(--mono); font-size:11.5px; color:var(--cyan); letter-spacing:1px; text-transform:uppercase;}
+  .col-head .duty{font-size:12px; color:var(--muted); margin-top:2px;}
+  .col{
+    background:var(--panel2); border:1px solid var(--line); border-radius:14px;
+    padding:14px; display:flex; flex-direction:column; gap:12px; min-height:510px;
+  }
+  .c1 .nick{color:var(--cyan);} .c2 .nick{color:var(--amber);} .c3 .nick{color:var(--green);}
+
+  /* Column 1: Code Box */
+  .codebox-wrap{
+    background:#080d18; border:1px solid var(--line); border-radius:10px;
+    overflow:hidden; display:flex; flex-direction:column; flex:1; min-height:240px;
+  }
+  .codebox-topbar{
+    background:#0f172a; padding:6px 12px; border-bottom:1px solid var(--line);
+    display:flex; align-items:center; justify-content:space-between;
+    font-size:11px; font-family:var(--mono); color:var(--muted);
+  }
+  .codebox-dots{display:flex; gap:5px;}
+  .codebox-dot{width:8px; height:8px; border-radius:50%;}
+  .dot-r{background:#f87171;} .dot-y{background:#f5b544;} .dot-g{background:#22c55e;}
+  .codebox{
+    padding:12px; font-family:var(--mono); font-size:11.5px;
+    white-space:pre; overflow:auto; tab-size:4;
+    line-height:1.7; flex:1; color:#dde6f5;
+  }
+  .codebox .cm{color:#78909c; font-style:italic;}
+  .codebox .kw{color:#c792ea; font-weight:700;}
+  .codebox .fn{color:#82aaff; font-weight:700;}
+  .codebox .str{color:#c3e88d;}
+  .codebox .type{color:#ffcb6b;}
+  .codebox .val{color:#f78c6c;}
+  .codeline .val{color:#f78c6c;}
+
+  .header-card{
+    background:#0d1527; border:1px solid var(--line); border-radius:10px; padding:10px;
+    font-size:11px; font-family:var(--mono);
+  }
+  .header-title{color:var(--cyan); font-weight:700; margin-bottom:6px; display:flex; justify-content:space-between;}
+  .proto-bar{
+    display:flex; height:24px; border-radius:4px; overflow:hidden; font-family:var(--mono);
+    font-size:10px; margin-top:6px; border:1px solid #233557;
+  }
+  .proto-seg{display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700;}
+  .proto-seg.udp{background:#7c3aed; flex:1;}
+  .proto-seg.tcp{background:#2563eb; flex:2.5;}
+  .proto-seg.payload{background:#059669; flex:5;}
+
+  /* Column 2: Kernel Physical Machine */
+  .kernel-box{display:flex; flex-direction:column; gap:10px; flex:1;}
+  .state-banner{
+    background:#101a2f; border:1px dashed var(--line); border-radius:8px;
+    padding:6px 10px; font-size:11.5px; font-family:var(--mono); color:var(--muted);
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .state-badge{padding:2px 8px; border-radius:4px; font-size:10.5px; font-weight:700; background:#1b2947; color:var(--cyan);}
+  .state-badge.est{background:rgba(34,197,94,.15); color:var(--green); border:1px solid rgba(34,197,94,.4);}
+  .state-badge.wait{background:rgba(245,181,68,.15); color:var(--amber); border:1px solid rgba(245,181,68,.4);}
+
+  .endpoints-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .host-card{
+    background:#111c33; border:1px solid var(--line); border-radius:10px; padding:10px;
+    display:flex; flex-direction:column; gap:6px; font-size:11px;
+  }
+  .host-head{display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--line); padding-bottom:4px;}
+  .host-title{font-weight:700; color:var(--text); font-family:var(--mono);}
+
+  /* Buffer Stage (环形水池) */
+  .buffer-box{
+    background:#080e1b; border:1px solid var(--line); border-radius:8px; padding:8px;
+    display:flex; flex-direction:column; gap:4px;
+  }
+  .buffer-label{font-size:10px; font-family:var(--mono); color:var(--muted); display:flex; justify-content:space-between;}
+  .slots-row{display:flex; gap:4px; height:28px;}
+  .slot{
+    flex:1; border-radius:4px; background:#15223c; border:1px solid #233457;
+    display:flex; align-items:center; justify-content:center; font-family:var(--mono);
+    font-size:10.5px; font-weight:700; color:var(--muted); position:relative;
+  }
+  .slot.in-use{background:rgba(59,130,246,.25); border-color:var(--blue); color:var(--cyan);}
+  .slot.ack-wait{background:rgba(245,181,68,.25); border-color:var(--amber); color:var(--amber);}
+  .slot.blocked{background:rgba(248,113,113,.25); border-color:var(--red); color:var(--red); box-shadow:0 0 8px rgba(248,113,113,.3);}
+  .slot.read-ok{background:rgba(34,197,94,.25); border-color:var(--green); color:var(--green);}
+
+  /* Wire Simulation */
+  .wire-track{
+    height:36px; background:#080e1b; border:1px solid var(--line); border-radius:8px;
+    position:relative; overflow:hidden; display:flex; align-items:center; padding:0 10px;
+  }
+  .wire-label{font-size:10px; font-family:var(--mono); color:var(--muted);}
+  .wire-particle{
+    position:absolute; width:48px; height:22px; border-radius:4px; font-family:var(--mono);
+    font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center;
+    background:var(--amber); color:#000; box-shadow:0 0 10px var(--amber);
+    transition:left 0.8s ease-in-out;
+  }
+  .wire-particle.ack{background:var(--cyan); color:#000; box-shadow:0 0 10px var(--cyan);}
+  .wire-particle.fin{background:var(--red); color:#fff; box-shadow:0 0 10px var(--red);}
+  .wire-particle.syn{background:var(--purple); color:#fff; box-shadow:0 0 10px var(--purple);}
+  .wire-particle.lost{background:var(--red); color:#fff; box-shadow:0 0 10px var(--red);}
+
+  /* Column 3: Wireshark Packet Sniffer */
+  .pcap-box{display:flex; flex-direction:column; gap:10px; flex:1;}
+  .pcap-panel{
+    background:#0d1527; border:1px solid var(--line); border-radius:10px;
+    padding:10px; font-size:11px; font-family:var(--mono); flex:1; display:flex; flex-direction:column;
+  }
+  .pcap-title{color:var(--cyan); font-weight:700; margin-bottom:6px; display:flex; justify-content:space-between;}
+  .pcap-table-wrap{flex:1; overflow-y:auto; max-height:220px;}
+  .pcap-table{width:100%; border-collapse:collapse;}
+  .pcap-table th{color:var(--muted); font-size:9.5px; text-align:left; padding:3px 4px; border-bottom:1px solid var(--line); position:sticky; top:0; background:#0d1527;}
+  .pcap-table td{padding:4px; font-size:10px; border-bottom:1px solid rgba(38,51,77,.4);}
+  .pcap-table tr:hover{background:#18253f;}
+  .tag-syn{color:var(--purple); font-weight:700;}
+  .tag-ack{color:var(--cyan); font-weight:700;}
+  .tag-fin{color:var(--red); font-weight:700;}
+  .tag-data{color:var(--amber); font-weight:700;}
+
+  /* Stats Bar */
+  .stats-bar{
+    display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;
+    margin-top:auto; padding-top:10px; border-top:1px dashed var(--line);
+  }
+  .stat-item{background:#0e172a; padding:6px 6px; border-radius:6px; border:1px solid var(--line); text-align:center;}
+  .stat-val{font-size:13px; font-weight:700; color:var(--text); font-family:var(--mono);}
+  .stat-val.good{color:var(--green);}
+  .stat-val.warn{color:var(--amber);}
+  .stat-val.bad{color:var(--red);}
+  .stat-lbl{font-size:10px; color:var(--muted);}
+
+  /* ---------- console ---------- */
+  .console{margin-top:24px; background:var(--panel2); border:1px solid var(--line); border-radius:14px; overflow:hidden;}
+  .console-head{
+    display:flex; align-items:center; gap:10px; padding:10px 16px;
+    border-bottom:1px solid var(--line); background:rgba(255,255,255,.02);
+    font-size:13px; color:var(--muted); flex-wrap:wrap;
+  }
+  .btns{display:flex; gap:8px; flex-wrap:wrap; margin-left:auto;}
+  button{
+    font-family:var(--mono); font-size:12px; color:var(--text);
+    background:#1d2a47; border:1px solid var(--line); border-radius:8px;
+    padding:6px 12px; cursor:pointer; transition:all .15s;
+  }
+  button:hover:not(:disabled){border-color:var(--amber); color:var(--amber); transform:translateY(-1px);}
+  button:disabled{opacity:.3; cursor:not-allowed;}
+  button.primary{border-color:var(--amber); color:var(--amber);}
+  button.action-btn{border-color:var(--cyan); color:var(--cyan);}
+  .clear-btn{font-size:11px; padding:4px 8px; color:var(--muted); background:#151f34; border:1px solid var(--line);}
+  .clear-btn.armed{border-color:var(--red); color:var(--red); background:#28151f;}
+
+  .logbox{padding:12px 16px; max-height:220px; overflow-y:auto; font-family:var(--mono); font-size:12px;}
+  .logline{margin-bottom:6px;}
+  .logline .cmd{color:var(--amber); font-weight:700;}
+  .logline .expl{color:var(--muted); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:11.5px; margin-top:1px;}
+  .logline.ok{color:var(--green);}
+  .logline.err{color:var(--red);}
+  .logline.info{color:var(--cyan);}
+
+  /* ---------- details cards ---------- */
+  .why{margin-top:22px; display:grid; grid-template-columns:repeat(3,1fr); gap:12px;}
+  .why-card{background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:14px 16px; font-size:13px;}
+  .why-card h3{font-size:13.5px; margin-bottom:6px;}
+  .why-card p{color:var(--muted); font-size:12px;}
+  .why-card b{color:var(--text);}
+  .w1 h3{color:var(--cyan);} .w2 h3{color:var(--amber);} .w3 h3{color:var(--green);}
+
+  footer{margin-top:26px; text-align:center; color:var(--muted); font-size:12px;}
+  @media (max-width:900px){ .why{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>TCP vs UDP：<span class="dot-word">操作系统内核机器</span> · <span class="dot-word">物理网络本质</span></h1>
+  <p class="sub">治「背完三次握手四次挥手转头就忘、对队头阻塞没有画面感」：撬开操作系统内核，透视极简发信机（UDP）与带锁环形水池（TCP）的底层齿轮运转。</p>
+
+  <div class="ladder-badge">
+    🧱 DDS 知识体系依赖阶梯 · 第 1 层地基专属课（自底向上 · 逐层建立实体感）
+  </div>
+
+  <!-- 机制落地对照表 -->
+  <div class="ltable">
+    <table>
+      <thead>
+        <tr>
+          <th>心智模型 (绰号)</th>
+          <th>网络真名</th>
+          <th>操作系统内核物理机制</th>
+          <th>工程收益 vs 致命代价</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="nick">极简发信飞镖</td>
+          <td class="real">UDP (SOCK_DGRAM)</td>
+          <td class="phys">内核无状态机，贴 8 字节小标签直接踹给网卡，当场释放内存存根</td>
+          <td class="life">极低延迟、零握手开销；代价是丢包乱序不管</td>
+        </tr>
+        <tr>
+          <td class="nick">带锁环形水池</td>
+          <td class="real">TCP (SOCK_STREAM)</td>
+          <td class="phys">内核分配 Send/Recv Buffer 环形队列 + 滑动窗口指针 + 状态机</td>
+          <td class="life">保证字节流绝对可靠不丢；代价是引发队头阻塞</td>
+        </tr>
+        <tr>
+          <td class="nick">对表与量水池</td>
+          <td class="real">三次握手 (SYN/ACK)</td>
+          <td class="phys">交换随机初始序号 ISN，互相通报接收缓冲区空闲窗口大小 (Win)</td>
+          <td class="life">建立可靠通信的前提；代价是多消耗 1.5 RTT 往返时延</td>
+        </tr>
+        <tr>
+          <td class="nick">水龙头卡死</td>
+          <td class="real">队头阻塞 (HoL Blocking)</td>
+          <td class="phys">Recv Buffer 出现序号空洞（缺包#2），内核拒绝对上层交出已收到的#3#4</td>
+          <td class="life">高频控制算法收到几百毫秒前的“过期幻觉”，机器人撞墙</td>
+        </tr>
+        <tr>
+          <td class="nick">双管独立关断</td>
+          <td class="real">四次挥手 (FIN/ACK)</td>
+          <td class="phys">全双工独立两条发送水管，A 关发送管不影响 B 继续发，2×2=4 次确认</td>
+          <td class="life">优雅完全释放内核缓冲区与端口句柄</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 关卡轨道 -->
+  <div class="journey">
+    <div class="rail" id="rail"></div>
+  </div>
+
+  <!-- 任务卡 -->
+  <div class="quest" id="quest"></div>
+
+  <!-- 三列舞台 -->
+  <div class="stage-scroll">
+    <div class="stage">
+
+      <!-- Column 1: C 语言 API 与报文头透视 -->
+      <div class="col c1">
+        <div class="col-head">
+          <div class="nick">系统调用与报文头</div>
+          <div class="real">Socket API & Headers</div>
+          <div class="duty">观察 C 语言系统调用如何指挥内核驱动</div>
+        </div>
+
+        <div class="codebox-wrap">
+          <div class="codebox-topbar">
+            <div class="codebox-dots">
+              <span class="codebox-dot dot-r"></span>
+              <span class="codebox-dot dot-y"></span>
+              <span class="codebox-dot dot-g"></span>
+            </div>
+            <span id="codebox-filename">udp_sender.c</span>
+            <span style="font-size:10px; color:var(--muted); font-family:var(--mono);">POSIX C</span>
+          </div>
+          <div class="codebox" id="codebox"></div>
+        </div>
+
+        <div class="header-card">
+          <div class="header-title">
+            <span>📦 协议报头物理尺寸透视</span>
+            <span id="proto-type-badge" style="color:var(--purple);">UDP: 8 字节</span>
+          </div>
+          <div class="proto-bar">
+            <div class="proto-seg" id="hdr-seg" style="background:#7c3aed; flex:1;">8B Header</div>
+            <div class="proto-seg payload" style="flex:5;">User Payload (Data)</div>
+          </div>
+          <div id="hdr-fields" style="font-size:10.5px; color:var(--muted); margin-top:6px; line-height:1.5;">
+            <b>UDP 头 (8B)</b>: SrcPort(2B) | DstPort(2B) | Length(2B) | Checksum(2B)
+          </div>
+        </div>
+      </div>
+
+      <!-- Column 2: 操作系统内核物理透视 -->
+      <div class="col c2">
+        <div class="col-head">
+          <div class="nick">操作系统内核内部机器</div>
+          <div class="real">Kernel Buffers & Wire Flow</div>
+          <div class="duty">透视环形双水池、滑窗指针与队头阻塞红灯</div>
+        </div>
+
+        <div class="kernel-box">
+          <!-- 状态机指示 -->
+          <div class="state-banner">
+            <span>🔌 TCP 连接状态机:</span>
+            <span class="state-badge" id="tcp-state">CLOSED</span>
+          </div>
+
+          <!-- 双端内核主机 -->
+          <div class="endpoints-grid">
+            <!-- Client Host -->
+            <div class="host-card">
+              <div class="host-head">
+                <span class="host-title">💻 Client (192.168.1.10:8000)</span>
+                <span style="color:var(--muted);">发送端</span>
+              </div>
+              <div class="buffer-box">
+                <div class="buffer-label">
+                  <span>Send Buffer (环形发送池)</span>
+                  <span id="send-buf-stat">0/4 KB</span>
+                </div>
+                <div class="slots-row" id="send-slots">
+                  <div class="slot">#1</div><div class="slot">#2</div><div class="slot">#3</div><div class="slot">#4</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Server Host -->
+            <div class="host-card">
+              <div class="host-head">
+                <span class="host-title">🖥️ Server (192.168.1.20:80)</span>
+                <span style="color:var(--muted);">接收端</span>
+              </div>
+              <div class="buffer-box">
+                <div class="buffer-label">
+                  <span>Recv Buffer (环形接收池)</span>
+                  <span id="recv-buf-stat">0/4 KB</span>
+                </div>
+                <div class="slots-row" id="recv-slots">
+                  <div class="slot">#1</div><div class="slot">#2</div><div class="slot">#3</div><div class="slot">#4</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 物理网线与包粒子飞行 -->
+          <div class="wire-track">
+            <span class="wire-label">[网卡物理传输线 PHY / NIC]</span>
+            <div class="wire-particle" id="wire-pkt" style="left:-60px;">DATA</div>
+          </div>
+
+          <!-- 队头阻塞警报横幅 -->
+          <div id="hol-banner" style="display:none; background:rgba(248,113,113,.15); border:1px solid var(--red); border-radius:8px; padding:8px 12px; font-size:11.5px; color:var(--red);">
+            <b>⚠️ 队头阻塞触发 (Head-of-Line Blocking)！</b><br>
+            包 #3 和 #4 已经平安到达网卡，但因缺失包 #2，操作系统内核强制拒绝向上层提交数据！应用程序陷入卡死等待！
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Column 3: Wireshark 级实时抓包报文现场 -->
+      <div class="col c3">
+        <div class="col-head">
+          <div class="nick">报文抓包监控台</div>
+          <div class="real">Wireshark Live Sniffer</div>
+          <div class="duty">逐包核验 SeqNum, AckNum, Window 与控制标志</div>
+        </div>
+
+        <div class="pcap-box">
+          <div class="pcap-panel">
+            <div class="pcap-title">
+              <span>🦈 实时捕获报文流</span>
+              <span id="pcap-count" style="color:var(--cyan);">0 帧</span>
+            </div>
+            <div class="pcap-table-wrap">
+              <table class="pcap-table">
+                <thead>
+                  <tr><th>#</th><th>协议</th><th>标志/信息</th><th>Seq/Ack</th></tr>
+                </thead>
+                <tbody id="pcap-tbody">
+                  <tr><td colspan="4" style="color:var(--muted); text-align:center;">暂无捕获数据</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 统计仪表盘 -->
+          <div class="stats-bar">
+            <div class="stat-item">
+              <div class="stat-val" id="st-sent">0</div>
+              <div class="stat-lbl">已发报文</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-val" id="st-blocked">0</div>
+              <div class="stat-lbl">阻塞次数</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-val" id="st-retrans">0</div>
+              <div class="stat-lbl">重传次数</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 控制台 -->
+  <div class="console">
+    <div class="console-head">
+      <span>控制台 · 物理网络事件驱动器</span>
+      <div class="btns">
+        <button id="btn-rearm" class="clear-btn" onclick="handleClearClick()">⟲ 清除全部进度</button>
+      </div>
+    </div>
+    <div class="console-head" style="background:rgba(0,0,0,.2); border-bottom:1px solid var(--line);">
+      <span style="font-size:12px; color:var(--muted);">当前关卡专属动作：</span>
+      <div class="btns" id="action-btns"></div>
+    </div>
+    <div class="logbox" id="logbox"></div>
+  </div>
+
+  <!-- 底部三格原理剖析 -->
+  <div class="why">
+    <div class="why-card w1">
+      <h3>① 为什么 UDP 报头只有 8 字节而 TCP 要 20 字节？</h3>
+      <p><b>UDP 极简</b>：只需源端口、目的端口、报文长度和校验和，总共 8 字节。发完即忘。<br>
+      <b>TCP 复杂</b>：为了保“可靠”，必须带上 32 位序列号 (SeqNum)、32 位确认号 (AckNum)、4 位数据偏移、6 个标志位 (SYN/ACK/FIN/RST/PSH/URG) 以及 16 位窗口大小 (Window Size)，至少需要 20 字节！</p>
+    </div>
+    <div class="why-card w2">
+      <h3>② 为什么现代网络协议（QUIC / DDS）拼命消灭队头阻塞？</h3>
+      <p><b>TCP 缺陷</b>：只要丢了一个字节，整条单 TCP 连接里的所有流全部暂停交货。<br>
+      <b>工程解法</b>：HTTP/3 改用跑在 UDP 之上的 <b>QUIC</b>；机器人 ROS 2 改用跑在 UDP 之上的 <b>DDS (RTPS)</b>。它们都在应用层自己分流管序号，彻底打碎内核级全局队头阻塞！</p>
+    </div>
+    <div class="why-card w3">
+      <h3>③ 为什么挥手后主动方必须在 TIME_WAIT 傻等 2MSL？</h3>
+      <p><b>防止迷路的老包作祟</b>：等待 2 个最大报文生存时间（约 1~2 分钟），确保第四次挥手的 ACK 确实到达了对面；并等网线上所有老旧残留报文自然消亡，防止新建连接被旧包污染。<br>
+      <b>代价</b>：高并发短连接服务最怕 TIME_WAIT 占满本地可用端口。</p>
+    </div>
+  </div>
+
+  <footer>
+    TCP vs UDP Mental Model · 个人自适应学习系统专用交付物 · 遵循「机制直述 + 课程化 + 可重玩机制」标准
+  </footer>
+
+</div>
+
+<script>
+/* ==================== 状态机与持久化 ==================== */
+const STORAGE_KEY = 'tcp_udp_mental_model_v1';
+
+let currentStage = 0;
+let clearClickCount = 0;
+let clearTimer = null;
+
+let world = {
+  proto: 'UDP', // 'UDP' | 'TCP'
+  tcpState: 'CLOSED',
+  sendBuffer: [null, null, null, null],
+  recvBuffer: [null, null, null, null],
+  pcapPackets: [],
+  sentCount: 0,
+  blockedCount: 0,
+  retransCount: 0,
+  holActive: false,
+  flowing: false
+};
+
+const STAGES = [
+  {
+    title: "起点：裸数据与内核空白期",
+    tag: "00 起点",
+    desc: "应用程序有一段 500 字节的内存数据，准备向网络对端发送。此时尚未开辟 Socket 套接字。",
+    obs: "看中间主机，两个环形水池尚未激活，没有连接状态。",
+    pass: "确立起点状态，准备亲眼目睹 UDP 极简发信机的工作过程。",
+    initBtn: { text: "创建 UDP Socket 并直接甩包", fn: "doUDPSend" }
+  },
+  {
+    title: "极简发信机 —— UDP 的物理发包",
+    tag: "01 UDP 发信",
+    desc: "UDP 没有任何握手，不建立水池。贴上 8 字节极简头部，网卡一脚踢飞，发完内存当场释放。",
+    obs: "看 Wireshark 抓包，只有 1 帧 UDP 报文，内核状态依然无连接，丢了也不心疼。",
+    pass: "牢固建立 UDP 无状态、无连接、8 字节极简发信机的实体画面。",
+    initBtn: { text: "切换为 TCP 并在内核开辟双水池", fn: "doCreateTCPSocket" }
+  },
+  {
+    title: "开辟带锁水池 —— TCP Socket 内存初显",
+    tag: "02 TCP 水池",
+    desc: "创建 TCP 套接字。内核正式在内存中划拨 Send Buffer 与 Recv Buffer 两块环形缓冲区。",
+    obs: "中间主机亮起 Send Buffer 与 Recv Buffer。但此时管道未通 (CLOSED)，禁止倾倒数据。",
+    pass: "建立 TCP 有连接 = 内核划拨水池的物理本质。",
+    initBtn: { text: "执行三次握手对表 (SYN/ACK)", fn: "doThreeWayHandshake" }
+  },
+  {
+    title: "对表与量水池 —— 三次握手的真相",
+    tag: "03 三次握手",
+    desc: "三次握手不是客套：SYN 交换初始序号 (Seq=1000/Seq=5000)，ACK 确认双方接收窗口大小 (Win=4KB)。",
+    obs: "抓包台捕获 SYN -> SYN+ACK -> ACK。状态机跃迁为 ESTABLISHED！水管正式接通！",
+    pass: "打破八股文记忆，理解握手的真正物理目标：对齐指针与窗口。",
+    initBtn: { text: "发送数据流 (正常滑动窗口)", fn: "doTCPSendNormal" }
+  },
+  {
+    title: "顺序流水线 —— TCP 正常滑动窗口传输",
+    tag: "04 顺畅传输",
+    desc: "发送包 #1 与 #2。带上递增 SeqNum，服务端 Recv Buffer 依次接收，上层应用秒级读出。",
+    obs: "发送池中标记为 ACK-WAIT，收到服务端 ACK 后释放；接收池顺序填满，变为绿色 READ-OK。",
+    pass: "理解 TCP 保证字节有序不丢的正常流程。",
+    initBtn: { text: "模拟丢包并亲历队头阻塞", fn: "doSimulateHOLBlocking" }
+  },
+  {
+    title: "水龙头卡死 —— 亲历队头阻塞 (HoL Blocking)",
+    tag: "05 队头阻塞",
+    desc: "包 #2 在网线上丢失！包 #3 和 #4 顺利抵达网卡。但操作系统内核因为 #2 缺失，强制锁死接收池！",
+    obs: "看 Recv Buffer 亮起刺眼红灯！包 #3 #4 变成红色的 BLOCKED！上层应用什么都读不出来！",
+    pass: "彻底钉住队头阻塞的物理痛点：为什么高频传感器和机器人控制绝不敢用 TCP。",
+    initBtn: { text: "重传丢失的包 #2 解开阻塞", fn: "doResolveHOLBlocking" }
+  },
+  {
+    title: "优雅断开 —— 四次挥手独立关断双向水管",
+    tag: "06 四次挥手",
+    desc: "全双工两条水管各关各的：Client 发 FIN 关出水口，Server 回 ACK；Server 传完后发 FIN，Client 回 ACK。",
+    obs: "抓包表捕获 4 帧 FIN/ACK 交互。状态机由 ESTABLISHED 优雅回退到 TIME_WAIT 与 CLOSED。",
+    pass: "理解 2×2=4 次挥手的物理独立性与优雅回收。",
+    initBtn: { text: "进入毕业小测", fn: "doEnterQuiz" }
+  },
+  {
+    title: "毕业小测：3 道经典网络传输底层机制决策题",
+    tag: "07 毕业小测",
+    desc: "检测你对 TCP/UDP 内核机器模型的理解深度，完成 3 道场景决策。",
+    obs: "根据物理机制，做出正确的传输层选型决策。",
+    pass: "3 题全对即标志第 1 层地基彻底夯实！",
+    initBtn: null
+  },
+  {
+    title: "终点：TCP/UDP 自由沙盒模式 (Free Play)",
+    tag: "08 自由模式",
+    desc: "自由注入丢包、触发重传、在 TCP 与 UDP 之间任意切换观测内核行为！",
+    obs: "可随时重刷小测或倒带回任一关卡。",
+    pass: "自由探索网络协议内核物理机制。",
+    initBtn: null
+  }
+];
+
+/* ==================== 视图与控制台渲染 ==================== */
+function addLog(cmd, type, expl) {
+  const box = document.getElementById('logbox');
+  const div = document.createElement('div');
+  div.className = `logline ${type}`;
+  div.innerHTML = `<span class="cmd">&gt; ${cmd}</span><div class="expl">${expl}</div>`;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+function renderRail() {
+  const rail = document.getElementById('rail');
+  rail.innerHTML = '';
+  STAGES.forEach((st, idx) => {
+    const pill = document.createElement('div');
+    pill.className = `pill ${idx < currentStage ? 'done' : ''} ${idx === currentStage ? 'current' : ''}`;
+    pill.innerText = st.tag;
+    pill.onclick = () => { buildToStage(idx); };
+    rail.appendChild(pill);
+    if(idx < STAGES.length - 1){
+      const sep = document.createElement('div');
+      sep.className = 'sep';
+      rail.appendChild(sep);
+    }
+  });
+}
+
+function renderQuest() {
+  const q = document.getElementById('quest');
+  const st = STAGES[currentStage];
+
+  if(currentStage === 7) {
+    renderQuizQuest(q);
+    return;
+  }
+
+  if(currentStage === 8) {
+    q.className = 'quest free';
+    q.innerHTML = `
+      <div class="quest-head">
+        <span class="quest-stage" style="color:var(--green);">STAGE 08 · 自由模式</span>
+        <span class="quest-title">${st.title}</span>
+        <button class="replay-btn" onclick="buildToStage(currentStage)">↺ 重置沙盒</button>
+      </div>
+      <div class="q-row"><span class="k">🎯 当前状态</span><span class="v">第 1 层地基（TCP/UDP 物理机制）已全部解锁并彻底通关！</span></div>
+      <div class="q-row"><span class="k">👀 自由试验</span><span class="v">使用下方控制台自由发包、注入队头阻塞或对比 UDP 极简发信。</span></div>
+      <div class="go">
+        <button onclick="doUDPSend()" style="border-color:var(--purple); color:var(--purple);">测试 UDP 发信</button>
+        <button onclick="doSimulateHOLBlocking()" style="border-color:var(--red); color:var(--red); margin-left:8px;">触发队头阻塞</button>
+        <button onclick="doResolveHOLBlocking()" style="border-color:var(--green); color:var(--green); margin-left:8px;">重传解开阻塞</button>
+      </div>
+    `;
+    renderActionBtns();
+    return;
+  }
+
+  q.className = 'quest';
+  q.innerHTML = `
+    <div class="quest-head">
+      <span class="quest-stage">STAGE 0${currentStage} / 08</span>
+      <span class="quest-title">${st.title}</span>
+      <button class="replay-btn" onclick="buildToStage(currentStage)">↺ 重玩本关</button>
+      <button class="skip" onclick="skipStage()">跳至下一关 &gt;</button>
+    </div>
+    <div class="q-row"><span class="k">📍 任务背景</span><span class="v">${st.desc}</span></div>
+    <div class="q-row"><span class="k">👀 核心观察</span><span class="v">${st.obs}</span></div>
+    <div class="q-row"><span class="k">✅ 通关机制</span><span class="v">${st.pass}</span></div>
+    ${st.initBtn ? `
+      <div class="go">
+        <button onclick="${st.initBtn.fn}()">${st.initBtn.text}</button>
+      </div>
+    ` : ''}
+  `;
+  renderActionBtns();
+}
+
+function renderActionBtns() {
+  const container = document.getElementById('action-btns');
+  container.innerHTML = '';
+  const st = STAGES[currentStage];
+  if(st && st.initBtn) {
+    const b = document.createElement('button');
+    b.className = 'action-btn';
+    b.innerText = st.initBtn.text;
+    b.onclick = () => { window[st.initBtn.fn](); };
+    container.appendChild(b);
+  }
+}
+
+/* ==================== 小测 (Stage 7) ==================== */
+const QUIZ_DATA = [
+  {
+    q: "1. 为什么无人驾驶汽车上的激光雷达点云（100Hz 高频流），宁死也不肯用 TCP 发送？",
+    opts: [
+      { t: "A. 因为 TCP 只能传文字，不能传二进制数据", c: false, expl: "错误！TCP 是纯字节流，什么数据都能传。" },
+      { t: "B. 队头阻塞会把后续所有新鲜数据卡死在内核，导致算法拿到几百毫秒前的过期货发生车祸", c: true, expl: "完全正确！高频传感器的生命线是“最新鲜度”。旧包丢了就丢了，绝不能因为等一个丢弃的旧包把整个水管冻结！" },
+      { t: "C. 因为 TCP 报文头太大，交换机会直接拒收", c: false, expl: "错误！20 字节报头在局域网根本微不足道，真正致命的是排队卡死。" }
+    ]
+  },
+  {
+    q: "2. 三次握手真正交换的“最核心的物理数据”到底是什么？",
+    opts: [
+      { t: "A. 双方的用户名和密码", c: false, expl: "错误！传输层握手不涉及应用层身份认证。" },
+      { t: "B. 双方的数据起始序号 (ISN) 与彼此的接收缓冲区空闲窗口大小 (Window Size)", c: true, expl: "完全正确！握手不是客套，是双方对齐字节计数表、并确认对方内存水池到底有多大，防止发爆对方缓冲区！" },
+      { t: "C. 路由器的 MAC 地址", c: false, expl: "错误！MAC 地址是由 ARP 协议解析的，不在 TCP 握手中交换。" }
+    ]
+  },
+  {
+    q: "3. 为什么断开连接是“四次挥手”而不是“三次”？",
+    opts: [
+      { t: "A. 因为 TCP 是全双工的，A 告诉 B 自己发完了关断发送管，B 可能还有没发完的数据要继续传给 A", c: true, expl: "完全正确！两条水管独立关断，每个方向都要经历一次 FIN + ACK 确认，2×2=4 次！" },
+      { t: "B. 因为网络丢包率高，必须多挥一次作为备份", c: false, expl: "错误！挥手次数是状态机规范，与网络丢包率无关。" },
+      { t: "C. 协议设计者的笔误，实际上三次就够了", c: false, expl: "错误！如果强制合并不管 B 是否有存货，会导致对端未发完的数据被暴力掐断！" }
+    ]
+  }
+];
+
+let quizAnswers = {};
+
+function renderQuizQuest(container) {
+  container.className = 'quest';
+  let html = `
+    <div class="quest-head">
+      <span class="quest-stage" style="color:var(--amber);">STAGE 07 · 毕业小测</span>
+      <span class="quest-title">TCP/UDP 物理本质考核 (3 题全对毕业)</span>
+      <button class="replay-btn" onclick="buildToStage(7)">↺ 重置做题</button>
+    </div>
+    <div class="quiz">
+  `;
+
+  QUIZ_DATA.forEach((qitem, qidx) => {
+    html += `
+      <div class="qitem">
+        <div class="qtext">${qitem.q}</div>
+        <div class="opts">
+    `;
+    qitem.opts.forEach((opt, oidx) => {
+      const selected = quizAnswers[qidx] === oidx;
+      let cls = 'opt';
+      if(quizAnswers[qidx] !== undefined) {
+        if(opt.c) cls += ' correct';
+        else if(selected) cls += ' wrong';
+        else cls += ' dim';
+      }
+      html += `<button class="${cls}" onclick="answerQuiz(${qidx}, ${oidx})">${opt.t}</button>`;
+    });
+    if(quizAnswers[qidx] !== undefined) {
+      const chosen = qitem.opts[quizAnswers[qidx]];
+      html += `<div class="qexpl">${chosen.expl}</div>`;
+    }
+    html += `</div></div>`;
+  });
+
+  html += `</div>`;
+  container.innerHTML = html;
+}
+
+function answerQuiz(qidx, oidx) {
+  quizAnswers[qidx] = oidx;
+  renderQuest();
+
+  const allCorrect = QUIZ_DATA.every((q, idx) => quizAnswers[idx] !== undefined && q.opts[quizAnswers[idx]].c);
+  if(allCorrect) {
+    addLog('毕业小测全对通过！', 'ok', '太漂亮了！你已经彻底打牢了 TCP 与 UDP 的物理底层机制！第 1 层地基彻底焊死在脑子里了！即将进入自由沙盒。');
+    setTimeout(() => {
+      currentStage = 8;
+      saveState();
+      render();
+    }, 1200);
+  }
+}
+
+/* ==================== 舞台与三列渲染 ==================== */
+function render() {
+  renderRail();
+  renderQuest();
+  renderCodebox();
+  renderKernelStage();
+  renderSniffer();
+  saveState();
+}
+
+function renderCodebox() {
+  const box = document.getElementById('codebox');
+  const fnElem = document.getElementById('codebox-filename');
+  const hdrBadge = document.getElementById('proto-type-badge');
+  const hdrSeg = document.getElementById('hdr-seg');
+  const hdrFields = document.getElementById('hdr-fields');
+  let code = '';
+
+  if(world.proto === 'UDP') {
+    if(fnElem) fnElem.innerText = 'udp_sender.c';
+    hdrBadge.innerText = 'UDP: 8 字节';
+    hdrBadge.style.color = 'var(--purple)';
+    hdrSeg.style.background = '#7c3aed';
+    hdrSeg.innerText = '8B Header';
+    hdrFields.innerHTML = `<b>UDP 极简头 (8B)</b>: SrcPort(2B) | DstPort(2B) | Length(2B) | Checksum(2B)<br><span style="color:var(--muted);">发完即删存根，不留任何重传队列</span>`;
+
+    code = `
+<span class="cm">// ===== UDP Socket: 极简投掷飞镖 =====</span>
+<span class="type">int</span> fd = <span class="fn">socket</span>(AF_INET, SOCK_DGRAM, <span class="val">0</span>);
+
+<span class="type">char</span> data[] = <span class="str">"Hello, World!"</span>;
+<span class="kw">struct</span> sockaddr_in dst;
+dst.sin_family = AF_INET;
+dst.sin_port = <span class="fn">htons</span>(<span class="val">8000</span>);
+<span class="fn">inet_pton</span>(AF_INET, <span class="str">"192.168.1.20"</span>, &amp;dst.sin_addr);
+
+<span class="cm">// 零握手！直接贴 8 字节小标签踹给网卡:</span>
+<span class="fn">sendto</span>(fd, data, <span class="kw">sizeof</span>(data), <span class="val">0</span>,
+       (<span class="kw">struct</span> sockaddr*)&amp;dst, <span class="kw">sizeof</span>(dst));`;
+  } else {
+    if(fnElem) fnElem.innerText = 'tcp_client.c';
+    hdrBadge.innerText = 'TCP: 20 字节 (至少)';
+    hdrBadge.style.color = 'var(--blue)';
+    hdrSeg.style.background = '#2563eb';
+    hdrSeg.innerText = '20B Header';
+    hdrFields.innerHTML = `<b>TCP 复杂头 (20B)</b>: SeqNum(4B) | AckNum(4B) | Flags(SYN/ACK/FIN...) | WinSize(2B) | Checksum(2B)<br><span style="color:var(--muted);">必须随时跟踪每一个字节的生命周期</span>`;
+
+    if(currentStage <= 3) {
+      code = `
+<span class="cm">// ===== TCP Socket: 握手建立双向管道 =====</span>
+<span class="type">int</span> fd = <span class="fn">socket</span>(AF_INET, SOCK_STREAM, <span class="val">0</span>);
+
+<span class="kw">struct</span> sockaddr_in srv;
+srv.sin_family = AF_INET;
+srv.sin_port = <span class="fn">htons</span>(<span class="val">80</span>);
+<span class="fn">inet_pton</span>(AF_INET, <span class="str">"192.168.1.20"</span>, &amp;srv.sin_addr);
+
+<span class="cm">// 触发内核三次握手: 对齐起始序号与分配水池</span>
+<span class="fn">connect</span>(fd, (<span class="kw">struct</span> sockaddr*)&amp;srv, <span class="kw">sizeof</span>(srv));`;
+    } else if(currentStage <= 5) {
+      code = `
+<span class="cm">// ===== TCP Socket: 顺序字节流读写 =====</span>
+<span class="cm">// 写入发送缓冲区 (由内核驱动负责保证有序到达):</span>
+<span class="fn">send</span>(fd, <span class="str">"Packet #1"</span>, <span class="val">9</span>, <span class="val">0</span>);
+<span class="fn">send</span>(fd, <span class="str">"Packet #2"</span>, <span class="val">9</span>, <span class="val">0</span>);
+
+<span class="cm">// 接收端读取 (若缺失前序包，系统调用强行阻塞卡死):</span>
+<span class="type">char</span> buf[<span class="val">1024</span>];
+<span class="type">int</span> n = <span class="fn">recv</span>(fd, buf, <span class="kw">sizeof</span>(buf), <span class="val">0</span>);`;
+    } else {
+      code = `
+<span class="cm">// ===== TCP Socket: 四次挥手独立关断 =====</span>
+<span class="cm">// 关闭本地出水龙头 (发送 FIN 包给对端):</span>
+<span class="fn">close</span>(fd);
+
+<span class="cm">// 内核状态跃迁: ESTABLISHED -&gt; FIN_WAIT_1 -&gt; TIME_WAIT</span>`;
+    }
+  }
+
+  box.innerHTML = code.trim();
+}
+
+function renderKernelStage() {
+  const tcpBadge = document.getElementById('tcp-state');
+  const sendBufStat = document.getElementById('send-buf-stat');
+  const recvBufStat = document.getElementById('recv-buf-stat');
+  const sendSlots = document.querySelectorAll('#send-slots .slot');
+  const recvSlots = document.querySelectorAll('#recv-slots .slot');
+  const holBanner = document.getElementById('hol-banner');
+
+  tcpBadge.innerText = world.tcpState;
+  if(world.tcpState === 'ESTABLISHED') {
+    tcpBadge.className = 'state-badge est';
+  } else if(world.tcpState === 'CLOSED') {
+    tcpBadge.className = 'state-badge';
+  } else {
+    tcpBadge.className = 'state-badge wait';
+  }
+
+  // 渲染发送与接收槽位
+  sendSlots.forEach((s, idx) => {
+    s.className = 'slot';
+    const val = world.sendBuffer[idx];
+    if(val === 'ack-wait') { s.className = 'slot ack-wait'; s.innerText = `#${idx+1} 等ACK`; }
+    else if(val === 'in-use') { s.className = 'slot in-use'; s.innerText = `#${idx+1} 在池`; }
+    else { s.innerText = `[空闲]`; }
+  });
+
+  recvSlots.forEach((s, idx) => {
+    s.className = 'slot';
+    const val = world.recvBuffer[idx];
+    if(val === 'blocked') { s.className = 'slot blocked'; s.innerText = `#${idx+1} 阻塞!`; }
+    else if(val === 'read-ok') { s.className = 'slot read-ok'; s.innerText = `#${idx+1} 已读`; }
+    else if(val === 'waiting') { s.className = 'slot ack-wait'; s.innerText = `#${idx+1} 丢失`; }
+    else { s.innerText = `[空闲]`; }
+  });
+
+  const sendUsed = world.sendBuffer.filter(x => x !== null).length;
+  const recvUsed = world.recvBuffer.filter(x => x !== null).length;
+  sendBufStat.innerText = `${sendUsed}/4 KB`;
+  recvBufStat.innerText = `${recvUsed}/4 KB`;
+
+  if(world.holActive) {
+    holBanner.style.display = 'block';
+  } else {
+    holBanner.style.display = 'none';
+  }
+}
+
+function renderSniffer() {
+  const count = document.getElementById('pcap-count');
+  const tbody = document.getElementById('pcap-tbody');
+  const stSent = document.getElementById('st-sent');
+  const stBlocked = document.getElementById('st-blocked');
+  const stRetrans = document.getElementById('st-retrans');
+
+  stSent.innerText = world.sentCount;
+  stBlocked.innerText = world.blockedCount;
+  stRetrans.innerText = world.retransCount;
+
+  if(world.pcapPackets.length > 0) {
+    count.innerText = `${world.pcapPackets.length} 帧`;
+    let rows = '';
+    world.pcapPackets.slice(-15).reverse().forEach(p => {
+      let tagCls = 'tag-data';
+      if(p.flags.includes('SYN')) tagCls = 'tag-syn';
+      else if(p.flags.includes('FIN')) tagCls = 'tag-fin';
+      else if(p.flags === 'ACK') tagCls = 'tag-ack';
+
+      rows += `<tr>
+        <td style="color:var(--muted);">${p.id}</td>
+        <td style="color:var(--cyan); font-weight:700;">${p.proto}</td>
+        <td class="${tagCls}">${p.flags}</td>
+        <td>${p.seqAck}</td>
+      </tr>`;
+    });
+    tbody.innerHTML = rows;
+  } else {
+    count.innerText = '0 帧';
+    tbody.innerHTML = `<tr><td colspan="4" style="color:var(--muted); text-align:center;">暂无捕获数据</td></tr>`;
+  }
+}
+
+/* ==================== 关卡物理动作 ==================== */
+function doUDPSend() {
+  if(world.flowing) return;
+  world.flowing = true;
+  world.proto = 'UDP';
+  world.tcpState = 'CLOSED';
+
+  const p = document.getElementById('wire-pkt');
+  p.className = 'wire-particle';
+  p.style.background = '#7c3aed';
+  p.style.color = '#fff';
+  p.innerText = 'UDP 8B';
+  p.style.left = '20px';
+
+  addLog('sendto(fd, data, ...)', 'info', '【UDP 飞镖出膛】内核贴上 8 字节极简报头，网卡直接将报文射出。内存存根当场擦除！');
+
+  setTimeout(() => {
+    p.style.left = '85%';
+    setTimeout(() => {
+      p.style.left = '-60px';
+      world.sentCount += 1;
+      world.pcapPackets.push({
+        id: world.pcapPackets.length + 1,
+        proto: 'UDP',
+        flags: 'DATA',
+        seqAck: 'Len=508B (无Seq)'
+      });
+      addLog('网卡送达', 'ok', '【零连接零阻塞】对端网卡收到即刻交出，内核不留任何包序号，零等待！');
+      world.flowing = false;
+      currentStage = 1;
+      render();
+    }, 800);
+  }, 100);
+}
+
+function doCreateTCPSocket() {
+  if(world.flowing) return;
+  world.proto = 'TCP';
+  world.tcpState = 'CLOSED';
+  world.sendBuffer = ['in-use', 'in-use', null, null];
+  world.recvBuffer = [null, null, null, null];
+  addLog('socket(AF_INET, SOCK_STREAM, 0)', 'ok', '【分配双水池】内核在物理内存中正式开辟 Send Buffer (发送环形池) 与 Recv Buffer (接收环形池)！');
+  currentStage = 2;
+  render();
+}
+
+function doThreeWayHandshake() {
+  if(world.flowing) return;
+  world.flowing = true;
+
+  const p = document.getElementById('wire-pkt');
+  addLog('connect() 发起握手', 'info', '【三次握手开始】客户端发出第 1 次握手：SYN (对表：我的起始序号是 Seq=1000)。');
+
+  // Step 1: SYN (Client -> Server)
+  p.className = 'wire-particle syn';
+  p.innerText = 'SYN';
+  p.style.left = '20px';
+  world.tcpState = 'SYN_SENT';
+  render();
+
+  setTimeout(() => {
+    p.style.left = '85%';
+    world.pcapPackets.push({ id: world.pcapPackets.length + 1, proto: 'TCP', flags: 'SYN', seqAck: 'Seq=1000 Win=4KB' });
+    renderSniffer();
+
+    setTimeout(() => {
+      // Step 2: SYN + ACK (Server -> Client)
+      addLog('服务端回执 SYN+ACK', 'info', '【第 2 次握手】服务端回信：“收到你的 1000，我的起始序号是 Seq=5000，ACK=1001”。');
+      p.className = 'wire-particle ack';
+      p.innerText = 'SYN+ACK';
+      p.style.left = '85%';
+
+      setTimeout(() => {
+        p.style.left = '20px';
+        world.pcapPackets.push({ id: world.pcapPackets.length + 1, proto: 'TCP', flags: 'SYN, ACK', seqAck: 'Seq=5000 Ack=1001' });
+        renderSniffer();
+
+        setTimeout(() => {
+          // Step 3: ACK (Client -> Server)
+          addLog('客户端确认 ACK', 'ok', '【第 3 次握手】客户端回复确认：“收到你的 5000，ACK=5001”。指针归位，水池连通！');
+          p.className = 'wire-particle ack';
+          p.innerText = 'ACK';
+          p.style.left = '20px';
+
+          setTimeout(() => {
+            p.style.left = '85%';
+            setTimeout(() => {
+              p.style.left = '-60px';
+              world.tcpState = 'ESTABLISHED';
+              world.pcapPackets.push({ id: world.pcapPackets.length + 1, proto: 'TCP', flags: 'ACK', seqAck: 'Ack=5001 Win=4KB' });
+              addLog('握手圆满完成！', 'ok', '【ESTABLISHED】双向带锁水管正式接通！双端序号指针全部对齐！');
+              world.flowing = false;
+              currentStage = 3;
+              render();
+            }, 800);
+          }, 100);
+        }, 600);
+      }, 100);
+    }, 600);
+  }, 100);
+}
+
+function doTCPSendNormal() {
+  if(world.flowing) return;
+  world.flowing = true;
+
+  world.sendBuffer = ['ack-wait', 'ack-wait', null, null];
+  world.sentCount += 2;
+
+  const p = document.getElementById('wire-pkt');
+  p.className = 'wire-particle';
+  p.style.background = 'var(--blue)';
+  p.style.color = '#fff';
+  p.innerText = 'DATA #1';
+  p.style.left = '20px';
+
+  addLog('send() 数据流出水池', 'info', '包 #1 与 #2 从发送池滑出，带上单调递增 SeqNum，网线上高速传输。');
+
+  setTimeout(() => {
+    p.style.left = '85%';
+    world.pcapPackets.push({ id: world.pcapPackets.length + 1, proto: 'TCP', flags: 'DATA', seqAck: 'Seq=1001 Len=1KB' });
+    world.pcapPackets.push({ id: world.pcapPackets.length + 2, proto: 'TCP', flags: 'DATA', seqAck: 'Seq=2001 Len=1KB' });
+    world.recvBuffer = ['read-ok', 'read-ok', null, null];
+    world.sendBuffer = [null, null, null, null]; // 收到 ACK 清空
+
+    setTimeout(() => {
+      p.style.left = '-60px';
+      addLog('数据按序读入应用层', 'ok', '【顺畅传输】服务端接收池顺序填满，上层应用直接读走，不卡一毫秒！');
+      world.flowing = false;
+      currentStage = 4;
+      render();
+    }, 800);
+  }, 100);
+}
+
+function doSimulateHOLBlocking() {
+  if(world.flowing) return;
+  world.flowing = true;
+
+  world.sendBuffer = ['in-use', 'ack-wait', 'ack-wait', 'ack-wait'];
+  world.sentCount += 3;
+  world.blockedCount += 1;
+  world.holActive = true;
+
+  const p = document.getElementById('wire-pkt');
+  p.className = 'wire-particle lost';
+  p.innerText = '包 #2 (丢)';
+  p.style.left = '20px';
+
+  addLog('网络抖动：包 #2 遭遇物理丢包！', 'err', '包 #2 掉在半路！而后续的包 #3 和 #4 已经飞抵接收端网卡！');
+
+  setTimeout(() => {
+    p.style.left = '50%';
+    setTimeout(() => {
+      p.style.display = 'none';
+
+      // 服务端接收池：缺了 #2，#3 和 #4 虽到但卡死
+      world.recvBuffer = ['read-ok', 'waiting', 'blocked', 'blocked'];
+      world.pcapPackets.push({ id: world.pcapPackets.length + 1, proto: 'TCP', flags: 'DATA #3', seqAck: 'Seq=3001 (乱序到达)' });
+      world.pcapPackets.push({ id: world.pcapPackets.length + 2, proto: 'TCP', flags: 'DATA #4', seqAck: 'Seq=4001 (乱序到达)' });
+      world.pcapPackets.push({ id: world.pcapPackets.length + 3, proto: 'TCP', flags: 'Dup-ACK', seqAck: 'Ack=2001 (催促补包#2)' });
+
+      addLog('💥 队头阻塞触发！内核拒绝交出数据！', 'err', '【致命卡死】内核接收池发现空洞（缺#2）。包 #3 和 #4 哪怕在内存里，内核也硬生生扣死！应用程序卡住等待！');
+      p.style.display = 'flex';
+      p.style.left = '-60px';
+      world.flowing = false;
+      currentStage = 5;
+      render();
+    }, 600);
+  }, 100);
+}
+
+function doResolveHOLBlocking() {
+  if(world.flowing) return;
+  world.flowing = true;
+
+  world.retransCount += 1;
+  const p = document.getElementById('wire-pkt');
+  p.className = 'wire-particle';
+  p.style.background = 'var(--green)';
+  p.style.color = '#fff';
+  p.innerText = '重传 #2';
+  p.style.left = '20px';
+
+  addLog('超时重传包 #2 到达', 'info', '发送端重发了丢失的包 #2。');
+
+  setTimeout(() => {
+    p.style.left = '85%';
+    setTimeout(() => {
+      p.style.left = '-60px';
+      world.holActive = false;
+      world.recvBuffer = ['read-ok', 'read-ok', 'read-ok', 'read-ok'];
+      world.sendBuffer = [null, null, null, null];
+      world.pcapPackets.push({ id: world.pcapPackets.length + 1, proto: 'TCP', flags: 'RETRANS #2', seqAck: 'Seq=2001' });
+      world.pcapPackets.push({ id: world.pcapPackets.length + 2, proto: 'TCP', flags: 'ACK', seqAck: 'Ack=5001' });
+
+      addLog('空洞补齐，队头阻塞瞬间化解！', 'ok', '【终于解冻】包 #2 补齐后，内核立刻将积压的 #2、#3、#4 一口气倒给应用程序！但代价是宝贵的 200ms 延迟！');
+      world.flowing = false;
+      currentStage = 6;
+      render();
+    }, 800);
+  }, 100);
+}
+
+function doEnterQuiz() {
+  if(world.flowing) return;
+  world.tcpState = 'TIME_WAIT';
+  world.pcapPackets.push({ id: world.pcapPackets.length + 1, proto: 'TCP', flags: 'FIN', seqAck: 'Client 关水管' });
+  world.pcapPackets.push({ id: world.pcapPackets.length + 2, proto: 'TCP', flags: 'ACK', seqAck: 'Server 收到' });
+  world.pcapPackets.push({ id: world.pcapPackets.length + 3, proto: 'TCP', flags: 'FIN', seqAck: 'Server 关水管' });
+  world.pcapPackets.push({ id: world.pcapPackets.length + 4, proto: 'TCP', flags: 'ACK', seqAck: 'Client 收到 (TIME_WAIT)' });
+  addLog('四次挥手优雅断开', 'ok', '全双工两条水管各关各的，双端资源有序回收。');
+  currentStage = 7;
+  render();
+}
+
+function skipStage() {
+  if(currentStage < 7) {
+    currentStage += 1;
+    render();
+  }
+}
+
+/* ==================== 可重玩实现 ==================== */
+function saveState() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ currentStage, quizAnswers }));
+  } catch(e) {}
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw) {
+      const data = JSON.parse(raw);
+      if(data && typeof data.currentStage === 'number') {
+        buildToStage(data.currentStage);
+        if(data.quizAnswers) quizAnswers = data.quizAnswers;
+        return true;
+      }
+    }
+  } catch(e) {}
+  return false;
+}
+
+function buildToStage(target) {
+  currentStage = target;
+
+  world.proto = 'TCP';
+  world.tcpState = 'CLOSED';
+  world.sendBuffer = [null, null, null, null];
+  world.recvBuffer = [null, null, null, null];
+  world.pcapPackets = [];
+  world.sentCount = 0;
+  world.blockedCount = 0;
+  world.retransCount = 0;
+  world.holActive = false;
+  world.flowing = false;
+
+  const p = document.getElementById('wire-pkt');
+  if(p) { p.style.left = '-60px'; p.style.display = 'flex'; }
+
+  if(target === 0) {
+    world.proto = 'UDP';
+  } else if(target === 1) {
+    world.proto = 'UDP';
+    world.sentCount = 1;
+    world.pcapPackets = [{ id: 1, proto: 'UDP', flags: 'DATA', seqAck: 'Len=508B' }];
+  } else if(target === 2) {
+    world.proto = 'TCP';
+    world.sendBuffer = ['in-use', 'in-use', null, null];
+  } else if(target === 3) {
+    world.proto = 'TCP';
+    world.tcpState = 'SYN_SENT';
+    world.pcapPackets = [
+      { id: 1, proto: 'TCP', flags: 'SYN', seqAck: 'Seq=1000' },
+      { id: 2, proto: 'TCP', flags: 'SYN, ACK', seqAck: 'Seq=5000 Ack=1001' }
+    ];
+  } else if(target === 4) {
+    world.proto = 'TCP';
+    world.tcpState = 'ESTABLISHED';
+    world.sentCount = 2;
+    world.recvBuffer = ['read-ok', 'read-ok', null, null];
+  } else if(target === 5) {
+    world.proto = 'TCP';
+    world.tcpState = 'ESTABLISHED';
+    world.holActive = true;
+    world.sentCount = 3;
+    world.blockedCount = 1;
+    world.recvBuffer = ['read-ok', 'waiting', 'blocked', 'blocked'];
+  } else if(target >= 6) {
+    world.proto = 'TCP';
+    world.tcpState = 'ESTABLISHED';
+    world.sentCount = 4;
+    world.retransCount = 1;
+    world.recvBuffer = ['read-ok', 'read-ok', 'read-ok', 'read-ok'];
+  }
+
+  addLog(`↺ 进度跳转`, 'info', `系统状态已重放并精确同步至第 0${target} 关「${STAGES[target].title}」。`);
+  render();
+}
+
+function handleClearClick() {
+  clearClickCount++;
+  const btn = document.getElementById('btn-rearm');
+  if(clearClickCount === 1) {
+    btn.className = 'clear-btn armed';
+    btn.innerText = '⚠️ 再点一次确认清空全部进度';
+    clearTimer = setTimeout(() => {
+      clearClickCount = 0;
+      btn.className = 'clear-btn';
+      btn.innerText = '⟲ 清除全部进度';
+    }, 3000);
+  } else if(clearClickCount >= 2) {
+    clearTimeout(clearTimer);
+    clearClickCount = 0;
+    btn.className = 'clear-btn';
+    btn.innerText = '⟲ 清除全部进度';
+    try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+    quizAnswers = {};
+    document.getElementById('logbox').innerHTML = '';
+    buildToStage(0);
+    addLog('已清除全部学习记录与进度', 'ok', '已回到起点。');
+  }
+}
+
+// 绑定全局接口
+window.world = world;
+window.STAGES = STAGES;
+window.getCurrentStage = () => currentStage;
+window.buildToStage = buildToStage;
+window.doUDPSend = doUDPSend;
+window.doCreateTCPSocket = doCreateTCPSocket;
+window.doThreeWayHandshake = doThreeWayHandshake;
+window.doTCPSendNormal = doTCPSendNormal;
+window.doSimulateHOLBlocking = doSimulateHOLBlocking;
+window.doResolveHOLBlocking = doResolveHOLBlocking;
+window.doEnterQuiz = doEnterQuiz;
+window.handleClearClick = handleClearClick;
+
+window.addEventListener('DOMContentLoaded', () => {
+  if(!loadState()) {
+    buildToStage(0);
+    addLog('欢迎来到 TCP vs UDP 操作系统内核机器透视系统', 'info', '已就绪。点击下方操作按钮，逐关撬开内核齿轮！');
+  }
+});
+</script>
+</body>
+</html>

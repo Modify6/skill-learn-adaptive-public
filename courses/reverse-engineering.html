@@ -1,0 +1,1528 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>逆向工程 —— 编译是有损降维 · 锚点定位法</title>
+<style>
+  :root{
+    --bg:#0a0e1a; --panel:#141b2e; --panel2:#0e1424;
+    --line:#263450; --text:#dbe5f5; --muted:#9db1d3;
+    --blue:#3b82f6; --green:#22c55e; --purple:#a855f7;
+    --amber:#f5b544; --cyan:#38bdf8; --red:#f87171;
+    --mono:"Cascadia Code",Consolas,"JetBrains Mono",monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:radial-gradient(1200px 600px at 50% -100px,#141d36 0%,var(--bg) 60%);
+    color:var(--text);
+    font-family:system-ui,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+    padding:30px 18px 70px; line-height:1.65;
+  }
+  .wrap{max-width:1240px; margin:0 auto;}
+
+  /* ---------- header ---------- */
+  h1{font-size:26px; letter-spacing:.5px;}
+  h1 .dot-word{color:var(--amber);}
+  .sub{color:var(--muted); margin-top:6px; font-size:14.5px;}
+  .ladder{
+    margin-top:12px; padding:8px 14px; border:1px dashed var(--line); border-radius:10px;
+    font-size:12.5px; color:var(--muted); background:rgba(255,255,255,.02);
+    font-family:var(--mono);
+  }
+  .ladder b{color:var(--cyan); font-weight:600;}
+
+  /* ---------- 机制落地表 ---------- */
+  .ltable{margin-top:12px; border:1px solid var(--line); border-radius:10px; overflow:hidden; font-size:12px;}
+  .ltable table{width:100%; border-collapse:collapse;}
+  .ltable th{
+    background:rgba(255,255,255,.03); color:var(--muted); font-size:11px; font-weight:600;
+    padding:6px 10px; text-align:left; border-bottom:1px solid var(--line); letter-spacing:1px;
+  }
+  .ltable td{padding:6px 10px; border-bottom:1px solid rgba(38,52,80,.5); vertical-align:top;}
+  .ltable tr:last-child td{border-bottom:none;}
+  .ltable .real{color:var(--cyan); font-family:var(--mono); white-space:nowrap;}
+  .ltable .phys{color:var(--text);}
+  .ltable .nick{color:var(--amber); font-weight:700; font-family:var(--mono); white-space:nowrap;}
+  .ltable .law{color:var(--muted);}
+
+  /* ---------- journey rail ---------- */
+  .journey{margin-top:22px;}
+  .rail{display:flex; align-items:center; gap:5px; overflow-x:auto; padding:4px 2px 10px;}
+  .pill{
+    flex:none; font-size:11px; padding:4px 9px; border-radius:999px;
+    border:1px solid var(--line); color:var(--muted); white-space:nowrap; background:var(--panel2);
+    cursor:pointer;
+  }
+  .pill.done{color:var(--green); border-color:rgba(34,197,94,.55);}
+  .pill.current{color:var(--amber); border-color:var(--amber); box-shadow:0 0 10px rgba(245,181,68,.25); font-weight:700;}
+  .sep{flex:none; width:10px; height:2px; background:var(--line);}
+
+  /* ---------- quest card ---------- */
+  .quest{
+    border:1px solid rgba(245,181,68,.45); border-left:4px solid var(--amber);
+    background:linear-gradient(90deg, rgba(245,181,68,.07), var(--panel2) 45%);
+    border-radius:12px; padding:14px 18px;
+  }
+  .quest.free{border-color:rgba(34,197,94,.45); border-left-color:var(--green);
+    background:linear-gradient(90deg, rgba(34,197,94,.07), var(--panel2) 45%);}
+  .quest-head{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .quest-stage{font-family:var(--mono); font-size:11px; color:var(--amber); letter-spacing:1px;}
+  .quest-title{font-size:16px; font-weight:700;}
+  .skip{font-size:12px; color:var(--muted); cursor:pointer; border:none; background:none; text-decoration:underline dotted; padding:0;}
+  .skip:hover{color:var(--text);}
+  .q-row{display:flex; gap:12px; margin-top:9px; font-size:13.5px;}
+  .q-row .k{flex:none; width:88px; color:var(--muted); font-weight:600;}
+  .q-row .v{color:var(--text);}
+  .q-row .v b{color:var(--amber);}
+  .quest .go{margin-top:12px;}
+  .quest .go button{
+    font-size:13px; padding:7px 18px; border-color:var(--amber); color:var(--amber);
+    font-family:system-ui,"Microsoft YaHei",sans-serif; font-weight:700;
+  }
+
+  /* quiz */
+  .quiz{margin-top:6px;}
+  .qitem{margin-top:12px; padding-top:10px; border-top:1px dashed var(--line);}
+  .qitem .qtext{font-size:13.5px; font-weight:600;}
+  .opts{display:flex; flex-direction:column; gap:6px; margin-top:8px;}
+  .opt{
+    text-align:left; font-size:12.5px; font-family:var(--mono),system-ui,sans-serif;
+    background:#16203a; color:var(--text); border:1px solid var(--line); border-radius:6px;
+    padding:8px 12px; cursor:pointer;
+  }
+  .opt.correct{border-color:var(--green); color:var(--green); background:rgba(34,197,94,.1);}
+  .opt.wrong{border-color:var(--red); color:var(--red); background:rgba(248,113,113,.08);}
+  .opt.dim{opacity:.4;}
+  .qexpl{font-size:12px; color:var(--muted); margin-top:6px;}
+
+  /* ---------- stage (3 columns) ---------- */
+  .stage-scroll{overflow-x:auto; margin-top:20px; padding-bottom:6px;}
+  .stage{
+    min-width:1120px;
+    display:grid;
+    grid-template-columns:1.1fr 1.25fr 1fr;
+    gap:0 12px; align-items:stretch;
+  }
+  .col-head{margin-bottom:10px; text-align:center;}
+  .col-head .nick{font-size:17px; font-weight:700;}
+  .col-head .real{font-family:var(--mono); font-size:11.5px; color:var(--cyan); letter-spacing:1px; text-transform:uppercase;}
+  .col-head .duty{font-size:12px; color:var(--muted); margin-top:2px;}
+  .col{
+    background:var(--panel2); border:1px solid var(--line); border-radius:14px;
+    padding:14px; display:flex; flex-direction:column; gap:12px; min-height:540px;
+  }
+  .c1 .nick{color:var(--cyan);} .c2 .nick{color:var(--amber);} .c3 .nick{color:var(--green);}
+
+  /* Col1 工具输出 */
+  .codebox{
+    background:#070b15; border:1px solid var(--line); border-radius:10px;
+    padding:12px; font-family:var(--mono); font-size:12px; line-height:1.7;
+    flex:1; overflow-y:auto;
+  }
+  .codeline{padding:1px 6px; border-radius:4px; transition:background .2s; white-space:pre-wrap; word-break:break-all;}
+  .codeline.active{background:rgba(245,181,68,.18); color:var(--amber); border-left:3px solid var(--amber);}
+  .codeline .kw{color:#ff7b72;}
+  .codeline .cm{color:#7f92ad; font-style:italic;}
+  .codeline .solder{color:var(--red);}
+  .codeline.hl-g{color:var(--green);}
+  .codeline.hl-c{color:var(--cyan);}
+  .codeline.hl-a{color:var(--amber);}
+  .codeline.hl-r{color:var(--red);}
+
+  /* Col2 解剖台组件 */
+  .anat-box{display:flex; flex-direction:column; gap:10px; flex:1;}
+  .anat-note{font-size:11.5px; color:var(--muted); text-align:center; line-height:1.7;}
+  .anat-note b{color:var(--amber);}
+  .pe-block{
+    background:#0d1526; border:1px solid var(--line); border-radius:8px;
+    padding:7px 11px; font-size:11.5px; display:flex; justify-content:space-between; gap:8px; align-items:center;
+    opacity:.45; transition:all .3s;
+  }
+  .pe-block.lit{opacity:1;}
+  .pe-block.hot{border-color:var(--amber); box-shadow:0 0 9px rgba(245,181,68,.3);}
+  .pe-block .pb-n{font-family:var(--mono); color:var(--cyan); font-size:11px;}
+  .pe-block .pb-d{color:var(--muted); font-size:10.5px; text-align:right;}
+  .pe-block .pb-d b{color:var(--amber);}
+  .iat-dll{
+    background:#0d1526; border:1px solid var(--line); border-radius:8px; padding:7px 10px;
+    font-size:11px;
+  }
+  .iat-dll .id-name{font-family:var(--mono); color:var(--purple); font-size:11px; font-weight:700;}
+  .iat-fn{
+    display:flex; justify-content:space-between; font-family:var(--mono); font-size:10.5px;
+    color:var(--muted); padding:2px 6px; border-radius:4px; margin-top:2px;
+  }
+  .iat-fn.hot{background:rgba(245,181,68,.14); color:var(--amber); border:1px solid rgba(245,181,68,.5);}
+  .iat-fn .fn-va{color:var(--cyan);}
+  .str-card{
+    background:#0d1526; border:1px solid var(--line); border-radius:8px; padding:6px 10px;
+    font-family:var(--mono); font-size:11px; display:flex; justify-content:space-between; gap:8px;
+    transition:all .3s;
+  }
+  .str-card.hot{border-color:var(--green); background:rgba(34,197,94,.08); box-shadow:0 0 8px rgba(34,197,94,.25);}
+  .str-card .s-va{color:var(--cyan);}
+  .str-card .s-tx{color:var(--text);}
+  .str-card .s-tag{color:var(--green); font-size:10px;}
+  .xref-node{
+    background:#0d1526; border:1px solid var(--line); border-radius:8px; padding:6px 10px;
+    font-family:var(--mono); font-size:11px; text-align:center;
+  }
+  .xref-node.hot{border-color:var(--amber); box-shadow:0 0 9px rgba(245,181,68,.3);}
+  .xref-node .xn-va{color:var(--cyan);}
+  .xref-node .xn-tx{color:var(--amber);}
+  .xref-arrow{color:var(--muted); font-size:11px; text-align:center; line-height:1.5;}
+  .xref-arrow b{color:var(--amber);}
+  .insn-row{
+    display:grid; grid-template-columns:110px 1fr; gap:8px; align-items:center;
+    background:#0d1526; border:1px solid var(--line); border-radius:7px; padding:5px 9px;
+    font-family:var(--mono); font-size:10.5px;
+  }
+  .insn-row.hot{border-color:var(--amber); box-shadow:0 0 9px rgba(245,181,68,.28);}
+  .insn-row .ir-by{color:#7dd3fc; word-break:break-all;}
+  .insn-row .ir-mn{color:var(--text);}
+  .insn-row .ir-mn b{color:var(--amber);}
+  .insn-row .ir-mn .cm{color:#7f92ad; font-style:italic;}
+  .cfg-wrap{display:flex; flex-direction:column; align-items:center; gap:4px;}
+  .cfg-node{
+    background:#0d1526; border:1px solid var(--line); border-radius:8px; padding:7px 12px;
+    font-family:var(--mono); font-size:10.5px; text-align:center; line-height:1.6;
+    transition:all .3s; max-width:100%;
+  }
+  .cfg-node .cn-va{color:var(--cyan);}
+  .cfg-node .cn-tx{color:var(--text);}
+  .cfg-node.hot{border-color:var(--amber); box-shadow:0 0 10px rgba(245,181,68,.35);}
+  .cfg-node.ok{border-color:rgba(34,197,94,.6);}
+  .cfg-node.bad{border-color:rgba(248,113,113,.6);}
+  .cfg-split{display:flex; gap:10px; width:100%; align-items:stretch;}
+  .cfg-branch{flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;}
+  .cfg-cond{font-family:var(--mono); font-size:10px; padding:2px 8px; border-radius:999px; border:1px dashed var(--line); color:var(--muted);}
+  .cfg-cond.good{color:var(--green); border-color:rgba(34,197,94,.5);}
+  .cfg-cond.bad{color:var(--red); border-color:rgba(248,113,113,.5);}
+  .dbg-grid{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .dbg-panel{
+    background:#070b15; border:1px solid var(--line); border-radius:8px; padding:7px 9px;
+    font-family:var(--mono); font-size:10.5px;
+  }
+  .dbg-panel .dp-t{color:var(--muted); font-size:10px; letter-spacing:1px; margin-bottom:4px;}
+  .reg-row{display:flex; justify-content:space-between; padding:1px 2px;}
+  .reg-row .rg-n{color:var(--cyan);}
+  .reg-row .rg-v{color:var(--amber);}
+  .reg-row.bad .rg-v{color:var(--red);}
+  .reg-row.good .rg-v{color:var(--green);}
+  .mem-line{color:var(--muted); line-height:1.7;}
+  .mem-line .mv{color:var(--amber);}
+  .mem-line.hit .mv{color:var(--green); text-shadow:0 0 6px rgba(34,197,94,.6);}
+  .patch-card{
+    background:#0d1526; border:1px solid var(--line); border-radius:8px; padding:8px 11px;
+    font-family:var(--mono); font-size:11px; transition:all .3s;
+  }
+  .patch-card .pc-va{color:var(--cyan);}
+  .patch-card .pc-old{color:var(--red);}
+  .patch-card .pc-new{color:var(--green);}
+  .patch-card.hot{border-color:var(--green); box-shadow:0 0 9px rgba(34,197,94,.3);}
+  .patch-tag{
+    display:inline-block; margin-left:6px; font-size:9.5px; padding:1px 7px; border-radius:999px;
+    border:1px solid var(--line); color:var(--muted);
+  }
+  .patch-tag.on{color:var(--green); border-color:rgba(34,197,94,.55);}
+  .sym-row{
+    background:#0d1526; border:1px solid var(--line); border-radius:7px; padding:6px 10px;
+    font-family:var(--mono); font-size:10.5px; display:grid;
+    grid-template-columns:86px 1fr 1fr; gap:6px; align-items:center; transition:all .3s;
+  }
+  .sym-row .sy-va{color:var(--cyan);}
+  .sym-row .sy-id{color:var(--muted);}
+  .sym-row .sy-my{color:var(--muted);}
+  .sym-row.hot{border-color:var(--green);}
+  .sym-row.hot .sy-my{color:var(--green); font-weight:700;}
+
+  /* Col3 行为现场 */
+  .run-box{display:flex; flex-direction:column; gap:12px; flex:1;}
+  .run-panel{
+    background:#0c1322; border:1px solid var(--line); border-radius:10px;
+    padding:10px 12px; font-size:12px; font-family:var(--mono);
+  }
+  .run-title{
+    color:var(--cyan); font-weight:700; font-size:11.5px; margin-bottom:6px;
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .io-line{font-size:11px; margin-top:5px; line-height:1.6; word-break:break-all;}
+  .io-line .io-k{color:var(--muted);}
+  .io-line .io-v{color:var(--amber);}
+  .app-log{display:flex; flex-direction:column; gap:4px; margin-top:6px;}
+  .app-line{
+    background:#101a30; border:1px solid var(--line); border-radius:6px;
+    padding:4px 8px; font-size:10.5px; line-height:1.55; color:var(--muted);
+  }
+  .app-line b{color:var(--amber); font-family:var(--mono); font-size:10px;}
+  .app-line.pop{border-color:rgba(245,181,68,.45);}
+  .app-line.pop b{color:var(--amber);}
+  .app-line.win{border-color:rgba(34,197,94,.5);}
+  .app-line.win b{color:var(--green);}
+  .note-list{display:flex; flex-direction:column; gap:5px;}
+  .note-item{
+    background:#101a30; padding:5px 9px; border-radius:6px; border:1px solid var(--line);
+    font-size:10.8px; line-height:1.55; color:var(--muted);
+  }
+  .note-item b{color:var(--amber); font-family:var(--mono); font-size:10.5px;}
+  .note-item.good{border-color:rgba(34,197,94,.4);}
+  .note-item.good b{color:var(--green);}
+
+  /* Stats */
+  .stats-bar{
+    display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;
+    margin-top:auto; padding-top:10px; border-top:1px dashed var(--line);
+  }
+  .stat-item{background:#0d1626; padding:6px 8px; border-radius:6px; border:1px solid var(--line); text-align:center;}
+  .stat-val{font-size:11.5px; font-weight:700; color:var(--red); font-family:var(--mono);}
+  .stat-val.good{color:var(--green);}
+  .stat-lbl{font-size:10px; color:var(--muted);}
+
+  /* ---------- console ---------- */
+  .console{margin-top:26px; background:var(--panel2); border:1px solid var(--line); border-radius:14px; overflow:hidden;}
+  .console-head{
+    display:flex; align-items:center; gap:10px; padding:10px 16px;
+    border-bottom:1px solid var(--line); background:rgba(255,255,255,.02);
+    font-size:13px; color:var(--muted); flex-wrap:wrap;
+  }
+  .btns{display:flex; gap:8px; flex-wrap:wrap; margin-left:auto;}
+  button{
+    font-family:var(--mono); font-size:12px; color:var(--text);
+    background:#1c2947; border:1px solid var(--line); border-radius:8px;
+    padding:6px 12px; cursor:pointer; transition:all .15s;
+  }
+  button:hover:not(:disabled){border-color:var(--amber); color:var(--amber); transform:translateY(-1px);}
+  button:disabled{opacity:.3; cursor:not-allowed;}
+  button.primary{border-color:var(--amber); color:var(--amber);}
+  button.action-btn{border-color:var(--cyan); color:var(--cyan);}
+  button.fix-btn{border-color:var(--green); color:var(--green);}
+  button.danger-btn{border-color:var(--red); color:var(--red);}
+
+  .logbox{padding:12px 16px; max-height:240px; overflow-y:auto; font-family:var(--mono); font-size:12.5px;}
+  .logline{margin-bottom:8px;}
+  .logline .cmd{color:var(--amber);}
+  .logline .expl{color:var(--muted); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:12px; margin-top:1px;}
+  .logline .expl b{color:var(--amber); font-weight:600;}
+  .logline.info{color:var(--cyan); font-family:system-ui,"Microsoft YaHei",sans-serif;}
+  .logline.ok{color:var(--green); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:12.5px;}
+  .logline.err{color:var(--red); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:12.5px;}
+
+  /* ---------- why cards ---------- */
+  .why{margin-top:22px; display:grid; grid-template-columns:repeat(3,1fr); gap:12px;}
+  .why-card{background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:14px 16px; font-size:13px;}
+  .why-card h3{font-size:13.5px; margin-bottom:6px;}
+  .why-card p{color:var(--muted); font-size:12.5px;}
+  .why-card b{color:var(--text);}
+  .w1 h3{color:var(--cyan);} .w2 h3{color:var(--amber);} .w3 h3{color:var(--green);}
+
+  footer{margin-top:26px; text-align:center; color:var(--muted); font-size:12px;}
+  @media (max-width:900px){ .why{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>逆向工程：<span class="dot-word">编译是有损降维</span> · <span class="dot-word">锚点定位法</span></h1>
+  <p class="sub">治「拿到一个黑盒 exe 只会瞎猜」：从一个 16KB 的 license_check.exe 出发（自制教学黑盒，拆自己的锁），走完整取证链——PE 结构 → 导入表 → 字符串 → 反汇编 → CFG → 断点取证 → 字节补丁 → 反编译重建。</p>
+
+  <div class="ladder">
+    核心定性：<b>逆向不还原原稿——编译器把源码降维成机器码（名字/注释/结构全被抹掉），逆向从字节残骸重建「功能等价模型」</b>。
+    &nbsp;‖&nbsp; 黄金法则：<b>三层证据链：字节层 → 指令层 → 行为层</b>；<b>锚点定位（导入表 / 字符串 / xref），永远不从第一行通读</b>；<b>静态画地图，动态走实地</b>。
+  </div>
+
+  <!-- 机制落地表 -->
+  <div class="ltable">
+    <table>
+      <tr><th>真名（工具/概念）</th><th>物理上是什么</th><th>角色</th><th>法则</th></tr>
+      <tr><td class="real">PE 文件（MZ→PE头→节表）</td><td class="phys">带目录的档案袋：DOS 头签名 MZ、PE 头、节表，下面按节分货架</td><td class="nick">黑盒的地图</td><td class="law">永远从解析结构开始，不从猜开始</td></tr>
+      <tr><td class="real">节 .text / .rdata / .data</td><td class="phys">三个货架：代码 / 只读常量（字符串住这）/ 可写数据</td><td class="life">分区仓库</td><td class="law">字符串常量在 .rdata 明文可搜</td></tr>
+      <tr><td class="real">导入表 IAT</td><td class="phys">程序向 Windows 借函数的登记名单（MessageBoxA、lstrcmpA…）</td><td class="nick">外交名单 · 锚点①</td><td class="law">借了什么 ≈ 会干什么：借「比较字符串」的多半在做验证</td></tr>
+      <tr><td class="real">strings 扫描</td><td class="phys">把字节流里连续可打印的序列捞出来，附地址</td><td class="nick">磁铁 · 锚点②</td><td class="law">报错消息 = 兴趣点的路标，倒着找</td></tr>
+      <tr><td class="real">xref 交叉引用</td><td class="phys">反查表：谁（哪条指令）引用了这个地址</td><td class="nick">倒查索引 · 锚点③</td><td class="law">从数据地址找到引用它的代码</td></tr>
+      <tr><td class="real">反汇编器</td><td class="phys">字节 → 助记符的翻译：55→push ebp，8B EC→mov ebp,esp</td><td class="life">翻译官</td><td class="law">函数边界靠序言认（push ebp 开头）</td></tr>
+      <tr><td class="real">cmp/test + jne</td><td class="phys">源码里 if 的真身：比较 + 条件跳转</td><td class="nick">分岔路口</td><td class="law">判断点 = 全图最值钱的一行</td></tr>
+      <tr><td class="real">断点 / 单步</td><td class="phys">让程序在指定地址暂停接受讯问，寄存器内存随便查</td><td class="life">传票 + X 光</td><td class="law">静态猜想必须动态证实</td></tr>
+      <tr><td class="real">补丁（patch）</td><td class="phys">直接改二进制字节：jne 的 75 → nop 的 90</td><td class="life">字节级手术</td><td class="law">2 个字节反转行为；小心 CRC 完整性自检</td></tr>
+      <tr><td class="real">反编译器（Hex-Rays 类）</td><td class="phys">汇编 → 伪 C 的升维重建器</td><td class="life">升维机</td><td class="law">产出功能等价模型；命名是你给的语义</td></tr>
+    </table>
+  </div>
+
+  <!-- journey rail -->
+  <div class="journey">
+    <div class="rail" id="rail"></div>
+    <div class="quest" id="quest"></div>
+  </div>
+
+  <!-- visual stage (3 cols) -->
+  <div class="stage-scroll">
+    <div class="stage">
+
+      <!-- Col 1: 工具输出 -->
+      <div class="col c1">
+        <div class="col-head">
+          <div class="nick">🧰 工具输出</div>
+          <div class="real">tool output · hex / strings / disasm / decomp</div>
+          <div class="duty">你的观察产物——每关换一件工具，注意地址反复出现</div>
+        </div>
+        <div class="codebox" id="codebox"></div>
+      </div>
+
+      <!-- Col 2: 二进制解剖台 -->
+      <div class="col c2">
+        <div class="col-head">
+          <div class="nick">📦 二进制解剖台（主舞台）</div>
+          <div class="real">binary anatomy · file &amp; memory</div>
+          <div class="duty">文件与内存的结构真相——PE 档案袋 / CFG / 调试器 / 手术台</div>
+        </div>
+        <div class="anat-box" id="anat-box"></div>
+      </div>
+
+      <!-- Col 3: 行为现场 -->
+      <div class="col c3">
+        <div class="col-head">
+          <div class="nick">🖥 行为现场与锚点笔记</div>
+          <div class="real">behavior &amp; anchor notes</div>
+          <div class="duty">程序在干什么（运行层）＋ 我们确定了什么（推理层）</div>
+        </div>
+        <div class="run-box">
+
+          <div class="run-panel">
+            <div class="run-title">
+              <span>🖥 license_check.exe</span>
+              <span id="run-state" style="color:var(--amber);">未运行</span>
+            </div>
+            <div class="io-line"><span class="io-k">输入 → </span><span class="io-v" id="io-in">—</span></div>
+            <div class="io-line"><span class="io-k">弹窗 ← </span><span class="io-v" id="io-out">—</span></div>
+            <div class="app-log" id="app-log"></div>
+          </div>
+
+          <div class="run-panel" style="flex:1;">
+            <div class="run-title">
+              <span>🧭 锚点笔记（结论累积）</span>
+            </div>
+            <div class="note-list" id="note-list">
+              <div style="color:var(--muted);font-size:11px;">空。每个锚点→一条结论，逐关点亮。</div>
+            </div>
+          </div>
+
+          <!-- 三盲仪表盘 -->
+          <div class="stats-bar">
+            <div class="stat-item">
+              <div class="stat-val" id="stat-what">未知</div>
+              <div class="stat-lbl">盲① 拿什么比</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-val" id="stat-where">未知</div>
+              <div class="stat-lbl">盲② 在哪比</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-val" id="stat-how">未知</div>
+              <div class="stat-lbl">盲③ 怎么比</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Console Controls & Logs -->
+  <div class="console">
+    <div class="console-head">
+      <span>控制台 &amp; 工具面板</span>
+      <div class="btns" id="btns"></div>
+    </div>
+    <div class="logbox" id="logbox"></div>
+  </div>
+
+  <!-- Why cards -->
+  <div class="why">
+    <div class="why-card w1">
+      <h3>🔍 为什么逆向 ≠ 还原源码？</h3>
+      <p>编译是<b>有损降维</b>：变量名、注释、类型名只在编译器心里，exe 里只剩地址和字节，信息不守恒。逆向的终点是<b>行为等价模型</b>——逻辑等价、名字重起。专家脑子里也是骨架常驻、细节按需重建。</p>
+    </div>
+    <div class="why-card w2">
+      <h3>🎯 静态 vs 动态怎么选？</h3>
+      <p>静态 = <b>画地图</b>：全景、快、可离线、不触发危险行为；动态 = <b>走实地</b>：真相、可取证，但会真的执行。套路永远是：静态锚点缩小包围圈 → 动态在关键点取证。只会一样，等于只有半把工具。</p>
+    </div>
+    <div class="why-card w3">
+      <h3>🏷 名字为什么值钱？</h3>
+      <p>sub_401030 → verify_key 的一瞬间，整张图变得可读。<b>逆向一半的工作量在命名</b>——把降维时丢掉的语义还给地址。和读陌生代码库先画「骨架地图、按功能切块挂元数据」是同一件事。</p>
+    </div>
+  </div>
+
+  <footer>
+    逆向工程核心心智模型：编译是有损降维 · 三层证据链 字节→指令→行为 · 锚点定位不通读 · 静态画地图 动态走实地 ｜ 黑盒 license_check.exe 为自制教学程序
+  </footer>
+
+</div>
+
+<script>
+const KEY = 'reverse-engineering-journey-v1';
+
+/* ============ 关卡定义 ============ */
+const STAGES = [
+  { nm:'起点', stageTag:'STAGE 0 / 11', title:'先认地形：编译是有损降维 · 锚点定位',
+    start:'欢迎！这门课只有一个黑盒：<b>license_check.exe</b>——双击要 License，没有源码。先立大定性：编译器把源码降维成机器码时，抹掉了变量名、注释和结构，只留地址和字节。逆向不还原原稿，只重建「功能等价模型」。',
+    task:'前置自查：① 知道 C/C++ 会被编译成 exe；② 在虚函数课见过汇编跳表（见过就行，第 5 关 30 秒补课）。确认后点「开始拆解」。',
+    watch:'带着三个问题往下走：它<b>拿什么比</b>？<b>在哪比</b>？<b>怎么比</b>？——每个黑盒都有这三盲，本课逐个照亮。',
+    pass:()=>flags.started },
+
+  { nm:'①黑盒之痛', stageTag:'STAGE 1 / 11', title:'三盲开局：只能运行和瞎猜',
+    start:'眼前是 license_check.exe，16KB。你唯一的观察手段：运行它，输入点什么，看它说什么。',
+    task:'点击 <b>▶ 双击运行</b>（自动输 ABCD）➔ 点击 <b>🎲 再猜一次</b>（输 XYZ-999）。',
+    watch:'两次都 Invalid license!。三盲齐了：拿什么比？在哪比？怎么比？——瞎猜没有出路，换武器：先看文件本身。',
+    pass:()=>flags.ranBlackbox && flags.guessedAgain },
+
+  { nm:'②字节层PE', stageTag:'STAGE 2 / 11', title:'exe 不是一坨字节：PE 档案袋',
+    start:'exe 是带目录的档案袋：DOS 头（MZ 签名）→ PE 头 → 节表 → 各节数据。节 = 货架：.text 放代码、.rdata 放只读常量（字符串住这）、.data 放可写数据。',
+    task:'点击 <b>🔬 打开十六进制视图</b> ➔ 点击 <b>📐 解析 PE 头与节表</b>。',
+    watch:'十六进制里 4D 5A = "MZ"（DOS 签名）、50 45 = "PE"。解析后中列档案袋分层点亮——记住 <b>.rdata</b>，待会儿的字符串锚点就藏在这。',
+    pass:()=>flags.hexOpened && flags.peParsed },
+
+  { nm:'③导入表锚点', stageTag:'STAGE 3 / 11', title:'锚点① 导入表：它向 Windows 借了什么',
+    start:'程序自己不会弹窗、不会比字符串——它得向 Windows 借函数，借了什么白纸黑字记在<b>导入表（IAT）</b>。导入表 = 程序的外交名单。',
+    task:'点击 <b>📡 列出导入表</b>。',
+    watch:'USER32 借了 MessageBoxA（弹窗）；KERNEL32 借了 <b>lstrcmpA</b>——比较字符串的函数！谁借「比较字符串」谁就在做验证。锚点①入库：验证逻辑存在。',
+    pass:()=>flags.importsListed },
+
+  { nm:'④字符串锚点', stageTag:'STAGE 4 / 11', title:'锚点②③ 字符串 + 交叉引用：倒着找代码',
+    start:'第二个锚点：所有消息文本都硬编码在 .rdata 里，明文可搜。strings 工具把可打印字符串连地址一起捞出来。',
+    task:'点击 <b>🔤 strings 扫描</b> ➔ 点击 <b>🎯 交叉引用 xref 追踪</b>。',
+    watch:'捞出 "Invalid license!" 和 <b>"GIFT-2026"</b>——钥匙疑似明文躺在 0x404060！xref 显示它被 0x401033 引用 → 代码在 sub_401030 里。盲①②当场照亮：拿什么比、在哪比。',
+    pass:()=>flags.stringsScanned && flags.xrefFound },
+
+  { nm:'⑤反汇编', stageTag:'STAGE 5 / 11', title:'机器码 → 助记符：翻译官开门',
+    start:'机器码是字节，人读不了——反汇编器翻译回助记符。你在虚函数课见过 call [eax+4] 的跳表，读法一样。入门只要五条：mov 搬运、cmp/test 比较、jne 不等就跳、call 调函数、ret 返回。',
+    task:'点击 <b>⚙ 反汇编 .text 节</b>。',
+    watch:'0x401030 处：push 0x404060（正是锚点②的字符串地址！）→ push [ebp+8]（你的输入）→ call lstrcmpA。两个参数压栈 = 拿「你的输入」和「GIFT-2026」去比。IDA 里它叫 sub_401030——名字是逆向师后来起的。',
+    pass:()=>flags.disasmOpened },
+
+  { nm:'⑥CFG判断', stageTag:'STAGE 6 / 11', title:'跳转切图：if 的真身是 test + jne',
+    start:'跳转把直线代码切成<b>基本块 + 箭头 = 控制流图（CFG）</b>。源码里的 if 在汇编里从不露脸，真身是比较 + 条件跳转。',
+    task:'点击 <b>🗺 生成控制流图</b>。',
+    watch:'test eax,eax 检查 lstrcmpA 返回值（0 = 相等）；<b>jne（机器码 75 0E）</b>：不等就跳去失败块，相等落入成功块。这就是 if (strcmp(input, key) == 0) 的真身。只剩最后一盲：眼见为实？',
+    pass:()=>flags.cfgBuilt },
+
+  { nm:'⑦动态取证', stageTag:'STAGE 7 / 11', title:'断点讯问：静态画地图，动态走实地',
+    start:'猜想（输入和 GIFT-2026 精确比较）需要证据——调试器下断点，让程序在关键处暂停接受讯问，寄存器内存随便查。',
+    task:'依次点击 <b>🐛 下断点</b> ➔ <b>▶ 运行到断点</b> ➔ <b>⏭ 单步穿过 jne</b>。',
+    watch:'命中时内存双窗：你的 "ABCD" 和程序的 "GIFT-2026" 并排躺着——眼见为实。单步：EAX=1（不等）→ ZF=0 → jne 生效，EIP 跳进失败块——证实：精确匹配，不等即败。三盲全灭。',
+    pass:()=>flags.bpSet && flags.bpHit && flags.stepped },
+
+  { nm:'⑧字节手术', stageTag:'STAGE 8 / 11', title:'补丁：2 个字节反转行为',
+    start:'看懂了就能改。补丁 = 直接改二进制字节：把 0x401042 的 jne（75 0E）改成两个 nop（90 90）——「不等就跳」被抹掉，比较结果作废。',
+    task:'点击 <b>🔧 打补丁 75→90</b> ➔ 点击 <b>▶ 运行补丁版</b>。',
+    watch:'补丁版输入随便什么（XYZ-999）都弹 License OK!——行为被 2 个字节反转。真实软件的反制：<b>CRC 自检</b>会对 .text 算校验和，字节一动就报警——补丁前先查自检。',
+    pass:()=>flags.patched && flags.patchRan },
+
+  { nm:'⑨反编译重建', stageTag:'STAGE 9 / 11', title:'升维重建：汇编 → 伪 C → 命名',
+    start:'收官升维：反编译器（Hex-Rays 类）把汇编重建成伪 C——push/call/test 变成人话 if (lstrcmpA(...) != 0)。但名字仍是空的：sub_401030、byte_404060。重建最后一步是你亲自命名。',
+    task:'点击 <b>🪄 反编译 sub_401030</b> ➔ 点击 <b>✏ 命名恢复</b>。',
+    watch:'sub_401030 → <b>verify_key</b>，byte_404060 → <b>g_expected_key</b>（内容 GIFT-2026）。这就是逆向的终点形态：功能等价模型——逻辑等价，名字是你的，不是原作者的。',
+    pass:()=>flags.decompDone && flags.renamed },
+
+  { nm:'⑩毕业测', stageTag:'STAGE 10 / 11', title:'毕业测：3 道换场景决策题',
+    start:'从黑盒之痛到功能等价模型：字节层（PE 档案袋）→ 指令层（反汇编 + CFG）→ 行为层（断点取证）→ 重建（反编译 + 命名），整条取证链亲手走完。',
+    task:'答对下面 3 道单选题即可毕业（答错可重选）。',
+    watch:'全是新场景：快速侦察新 exe、识别算法特征、补丁失灵诊断。',
+    pass:()=>quiz.length===3 && quiz.every(v=>v && v.ok) },
+
+  { nm:'⑪自由', stageTag:'STAGE 11 / 11', title:'自由沙盒：重走整条取证链',
+    start:'你已拥有逆向的心智模型：编译有损降维；三层证据链 字节→指令→行为；锚点定位永远不通读；静态画地图、动态走实地。',
+    task:'所有按钮已解锁。想重玩某一关：点上方导航跳到该关，再点任务卡右上角的「↺ 重玩本关」；想从零开始：控制台「⟲ 清除全部进度」（双击确认）。',
+    watch:'连贯重走一遍：hex → 导入表 → strings → xref → 反汇编 → CFG → 断点 → 补丁 → 反编译，注意每个工具都在为下一件工具铺路。',
+    pass:()=>true }
+];
+
+const QUIZ = [
+  { q:'1 / 3 · 拿到一个全新的 exe，想最快判断「它会不会偷偷联网」。第一个动作是什么？',
+    opts:[
+      '从第一条指令开始逐行通读反汇编，看完全部代码再下结论',
+      '查导入表：看有没有 ws2_32.dll 的 connect / send，或 wininet.dll 的 InternetOpenA',
+      '立刻双击运行，同时开抓包工具看流量',
+      '看文件大小：超过 1MB 的才会联网'
+    ],
+    ans:1,
+    expl:'第③关亲测：导入表 = 程序向系统借函数的名单，借什么≈干什么。联网必须借 socket 函数，名单上一眼见底——静态锚点 30 秒出结论。通读反汇编违背锚点定位法（真实程序几十万条指令）；直接运行可能触发恶意行为，且它是取证手段不是侦察首选。' },
+
+  { q:'2 / 3 · 反汇编里有个函数：循环体内全是 XOR、移位（shl/shr）和查表取值。它最可能是什么？',
+    opts:[
+      '窗口 UI 绘制函数',
+      '字符串比较函数',
+      '加密 / 解密 / 校验算法——XOR 循环是经典特征',
+      '内存分配器'
+    ],
+    ans:2,
+    expl:'指令特征识别是逆向基本功：加密/校验算法的标志就是「循环 + XOR/移位/查表」三件套（异或打乱、移位扩散、S 盒查表）。UI 函数全是 call 系统绘图 API；比较函数核心是 cmp/test + 分支。认出特征就能直接标函数名，不用逐行读懂。' },
+
+  { q:'3 / 3 · 你把判断点的 jne 补丁成 nop 后运行，程序行为完全没变。最可能的原因是什么？',
+    opts:[
+      'nop 指令不存在，补丁无效',
+      '程序有完整性自检（CRC / 哈希校验 .text）或加壳，改动被检测还原了',
+      '补丁理论失败，必须重写整个程序',
+      '需要同时改 100 个字节才有效'
+    ],
+    ans:1,
+    expl:'第⑧关的警告成真：真实软件常对代码节算校验和，字节一动就报警/还原。加壳程序运行时才解密代码，改的是壳展开前的死字节。正确动作是回字节层找证据：找 CRC 例程（特征：循环读字节+累加异或）先把它摆平，或壳未脱先脱壳——永远从证据出发，不硬刚。' },
+];
+
+/* ============ 核心状态 ============ */
+let stage = 0;
+let flags = {};
+let quiz = [null, null, null];
+
+let world = {
+  view:'none',          // none|hex|imports|strings|xref|disasm|cfg|dbg|patch|decomp
+  blinds:{ what:false, where:false, how:false },
+  notes:[],
+  appLog:[],
+  lastInput:'—',
+  lastOutput:'—',
+  runState:'未运行',
+  dbg:{ bp:false, hit:false, stepIdx:-1, eip:'—', eax:'—', zf:'—' },
+  flowing:false, flowFocus:-1,
+  disasmFocus:null,
+};
+
+const HEX_HEAD = [
+  { t:'00000000  4D 5A 90 00 03 00 00 00 04 00 00 00 FF FF 00 00  MZ..............', mark:'mz' },
+  { t:'00000010  B8 00 00 00 00 00 00 00 40 00 00 00 00 00 00 00  .........@......', mark:null },
+  { t:'00000020  ...（省略：DOS stub 与对齐零填充）...              ', mark:null },
+  { t:'000000F8  50 45 00 00 4C 01 03 00 0E 00 0F 00 0B 00 0E 00  PE..L...........', mark:'pe' },
+  { t:'00000310  2E 74 65 78 74 00 00 00 00 10 00 00 00 04 00 00  .text...........', mark:'sec' },
+  { t:'00000340  2E 72 64 61 74 61 00 00 00 30 00 00 00 14 00 00  .rdata..........', mark:'sec' },
+  { t:'000003C8  2E 64 61 74 61 00 00 00 00 10 00 00 00 44 00 00  .data...........', mark:'sec' },
+  { t:'00000400  55 8B EC E8 28 00 00 00 50 E8 92 02 00 00 6A 00  U..(...P......j.', mark:'text' },
+];
+const IMPORTS = [
+  { dll:'KERNEL32.dll', fns:[
+    { va:'4020A0', n:'ExitProcess' },
+    { va:'4020A4', n:'lstrcmpA', hot:true },
+    { va:'4020A8', n:'GetModuleHandleA' },
+  ]},
+  { dll:'USER32.dll', fns:[
+    { va:'4020B0', n:'MessageBoxA', hot2:true },
+  ]},
+  { dll:'ADVAPI32.dll', fns:[
+    { va:'4020C0', n:'RegOpenKeyExA' },
+  ]},
+];
+const STRINGS = [
+  { va:'404010', t:'Please enter your license key:', tag:null },
+  { va:'404030', t:'license_check 1.0 (c) 2026', tag:null },
+  { va:'404050', t:'Invalid license!', tag:'bad' },
+  { va:'404060', t:'GIFT-2026', tag:'gold' },
+  { va:'404070', t:'License OK! Welcome, honored user.', tag:'ok' },
+];
+const DISASM = [
+  { id:'m0',  t:'0x401000  main:                        ; xref: entry point' },
+  { id:'m1',  t:'0x401000    push ebp' },
+  { id:'m2',  t:'0x401001    mov  ebp, esp' },
+  { id:'m3',  t:'0x401003    call sub_401030             ; ← 验证函数' },
+  { id:'m4',  t:'0x401008    push eax' },
+  { id:'m5',  t:'0x401009    call ExitProcess' },
+  { id:'m6',  t:'' },
+  { id:'m7',  t:'0x401030  sub_401030:                   ; xref: main+3 · 0x404060' },
+  { id:'m8',  t:'0x401030    push ebp                    ; 函数序言 (55)' },
+  { id:'m9',  t:'0x401031    mov  ebp, esp               ; (8B EC)' },
+  { id:'m10', t:'0x401033    push 0x404060               ; "GIFT-2026" ←锚点②', gold:true },
+  { id:'m11', t:'0x401038    push dword [ebp+8]          ; 参数：你的输入' },
+  { id:'m12', t:'0x40103B    call dword [0x4020A4]       ; ←IAT lstrcmpA 锚点①', gold:true },
+  { id:'m13', t:'0x401040    test eax, eax               ; 0 = 相等' },
+  { id:'m14', t:'0x401042    jne  short 0x401052         ; 75 0E ★判断点', hot:true },
+  { id:'m15', t:'0x401044    push 0x404070               ; "License OK!..."' },
+  { id:'m16', t:'0x401049    call MessageBoxA' },
+  { id:'m17', t:'0x40104E    xor  eax, eax               ; 返回 0' },
+  { id:'m18', t:'0x401050    leave' },
+  { id:'m19', t:'0x401051    ret' },
+  { id:'m20', t:'0x401052    push 0x404050               ; "Invalid license!"' },
+  { id:'m21', t:'0x401057    call MessageBoxA' },
+  { id:'m22', t:'0x40105C    or   eax, 1                 ; 返回 1' },
+  { id:'m23', t:'0x40105F    leave' },
+  { id:'m24', t:'0x401060    ret' },
+];
+const DECOMP_RAW = [
+  { t:'// ── Hex-Rays 伪 C · 反编译器自动版 ──', cls:'cm' },
+  { t:'int __cdecl sub_401030(char *arg_8)', cls:'kw', id:'dc-fn' },
+  { t:'{', cls:'' },
+  { t:'  if ( lstrcmpA(arg_8, byte_404060) != 0 )  // byte_404060 = "GIFT-2026"', cls:'', id:'dc-if' },
+  { t:'  {', cls:'' },
+  { t:'    MessageBoxA(0, aInvalidLicense, 0, 0);  // "Invalid license!"', cls:'' },
+  { t:'    return 1;', cls:'' },
+  { t:'  }', cls:'' },
+  { t:'  MessageBoxA(0, aLicenseOkWelcome, 0, 0);  // "License OK!..."', cls:'' },
+  { t:'  return 0;', cls:'' },
+  { t:'}', cls:'' },
+];
+const DECOMP_NAMED = [
+  { t:'// ── 重建完成：功能等价模型 ──', cls:'cm' },
+  { t:'// 逻辑等价于原稿；名字是你给的语义，不是原作者的', cls:'cm' },
+  { t:'int __cdecl verify_key(char *user_input)      // 0x401030', cls:'kw', id:'dc-fn' },
+  { t:'{', cls:'' },
+  { t:'  const char *g_expected_key = "GIFT-2026";   // 0x404060', cls:'hl-g', id:'dc-if' },
+  { t:'  if ( lstrcmpA(user_input, g_expected_key) != 0 )', cls:'' },
+  { t:'  {', cls:'' },
+  { t:'    show_invalid();       // 0x401052 · "Invalid license!"', cls:'' },
+  { t:'    return 1;', cls:'' },
+  { t:'  }', cls:'' },
+  { t:'  show_ok();              // 0x401044 · "License OK!..."', cls:'' },
+  { t:'  return 0;', cls:'' },
+  { t:'}', cls:'' },
+];
+
+let codeLines = [
+  { text: '// license_check.exe · 16KB 黑盒', cls: 'cm', id:'init-line' },
+  { text: '// 目前唯一的观察手段：运行 + 瞎猜', cls: 'cm' },
+  { text: '// （第 2 关起解锁真正的武器）', cls: 'cm' }
+];
+let activeLineId = 'init-line';
+
+const logLines = [];
+let logMute = false;
+function addLog(cmd, type, expl){
+  if(logMute) return;
+  logLines.unshift({cmd, type, expl});
+  if(logLines.length > 32) logLines.pop();
+}
+
+/* ============ 通用序列器（单步动画） ============ */
+function runSeq(steps, finish, gap){
+  if(world.flowing) return;
+  world.flowing = true;
+  let i = 0;
+  function tick(){
+    if(i >= steps.length){
+      world.flowing = false;
+      if(finish) finish();
+      render();
+      return;
+    }
+    steps[i]();
+    i++;
+    render();
+    setTimeout(tick, gap || 420);
+  }
+  tick();
+}
+
+/* ============ 右列小助手 ============ */
+function addNote(tag, text, good){
+  if(!world.notes.find(n => n.tag === tag)) world.notes.push({ tag, text, good });
+}
+function addApp(text, kind){
+  if(!world.appLog.find(l => l.text === text && l.kind === kind)) world.appLog.push({ text, kind });
+  if(world.appLog.length > 6) world.appLog.shift();
+}
+
+/* ============ 业务动作 ============ */
+
+// 1. 黑盒运行
+function doRunBlackbox(){
+  if(world.flowing) return;
+  if(flags.ranBlackbox){ doneNotice('▶ 双击运行'); return; }
+  world.view = 'none';
+  world.lastInput = 'ABCD';
+  world.lastOutput = '[Invalid license!]';
+  world.runState = '运行中 · 被拒';
+  addApp('<b>输入</b> ABCD → 弹窗 [Invalid license!]', 'pop');
+  addLog('license_check.exe → 输入 ABCD', 'err', '【黑盒之痛】Invalid license!。除了「它拒绝了」你什么都不知道：拿什么比？在哪比？怎么比？');
+  flags.ranBlackbox = true;
+  render();
+}
+function doGuessAgain(){
+  if(world.flowing || !flags.ranBlackbox){
+    if(!flags.ranBlackbox) addLog('再猜一次', 'err', '先点「▶ 双击运行」。');
+    render(); return;
+  }
+  if(flags.guessedAgain){ doneNotice('🎲 再猜一次'); return; }
+  world.lastInput = 'XYZ-999（瞎猜）';
+  world.lastOutput = '[Invalid license!]';
+  addApp('<b>输入</b> XYZ-999 → 弹窗 [Invalid license!]', 'pop');
+  addLog('输入 XYZ-999 → Invalid', 'err', '【瞎猜没有出路】16KB 的 exe 里有 2^131072 种字节组合的可能逻辑。停止消费运气，开始取证：先看文件本身。');
+  flags.guessedAgain = true;
+  render();
+}
+
+// 2. hex + PE
+function doOpenHex(){
+  if(world.flowing) return;
+  if(flags.hexOpened){ doneNotice('🔬 打开十六进制视图'); return; }
+  world.view = 'hex';
+  addLog('hex 编辑器打开 license_check.exe', 'info', '【字节层】前两字节 4D 5A = "MZ"——DOS 头签名；0xF8 处 50 45 = "PE"。exe 是带目录的档案袋，不是一坨乱字节。');
+  flags.hexOpened = true;
+  render();
+}
+function doParsePE(){
+  if(world.flowing || !flags.hexOpened){
+    if(!flags.hexOpened) addLog('解析 PE', 'err', '先点「🔬 打开十六进制视图」。');
+    render(); return;
+  }
+  if(flags.peParsed){ doneNotice('📐 解析 PE 头与节表'); return; }
+  world.view = 'hex';
+  addLog('解析 PE 头 → 节表', 'ok', '【档案袋分层】.text（0x401000 代码）· .rdata（0x404000 只读常量，字符串住这）· .data（0x405000 可写）。节表就是货架目录——后面所有锚点都在这些货架上。');
+  flags.peParsed = true;
+  render();
+}
+
+// 3. 导入表
+function doListImports(){
+  if(world.flowing) return;
+  if(flags.importsListed){ doneNotice('📡 列出导入表'); return; }
+  world.view = 'imports';
+  world.blinds.where = world.blinds.where; // where 仍待 xref 精确定位
+  addNote('锚点①', '导入表有 lstrcmpA（字符串比较）→ 程序在做「比较式验证」', true);
+  addLog('dumpbin /imports license_check.exe', 'ok', '【锚点①·外交名单】KERNEL32 借了 lstrcmpA——比较字符串的函数；USER32 借了 MessageBoxA——弹窗。谁借「比较字符串」，谁就在做验证。观察产物已就位，下一步倒着找它比较的对方。');
+  flags.importsListed = true;
+  render();
+}
+
+// 4. strings + xref
+function doStrings(){
+  if(world.flowing) return;
+  if(flags.stringsScanned){ doneNotice('🔤 strings 扫描'); return; }
+  world.view = 'strings';
+  addLog('strings license_check.exe', 'ok', '【锚点②·磁铁】.rdata 捞出 "Invalid license!"、<b>"GIFT-2026"</b>（0x404060）、"License OK!..."。报错消息是兴趣点的路标——钥匙疑似明文！盲①（拿什么比）有了头号嫌疑犯。');
+  world.blinds.what = true;
+  addNote('锚点②', '0x404060 = "GIFT-2026" → 疑似内嵌期望钥匙', true);
+  flags.stringsScanned = true;
+  render();
+}
+function doXref(){
+  if(world.flowing || !flags.stringsScanned){
+    if(!flags.stringsScanned) addLog('xref 追踪', 'err', '先点「🔤 strings 扫描」。');
+    render(); return;
+  }
+  if(flags.xrefFound){ doneNotice('🎯 交叉引用 xref 追踪'); return; }
+  world.view = 'xref';
+  addLog('xref 0x404060 → 被 0x401033 引用', 'ok', '【锚点③·倒查索引】谁引用了 "GIFT-2026"？→ 0x401033 这条指令，属于函数 <b>sub_401030</b>。盲②（在哪比）照亮：验证函数坐标 0x401030。');
+  world.blinds.where = true;
+  addNote('锚点③', '0x404060 被 0x401033 引用 → 验证函数 = sub_401030（0x401030）', true);
+  flags.xrefFound = true;
+  render();
+}
+
+// 5. 反汇编
+function doDisasm(){
+  if(world.flowing) return;
+  if(flags.disasmOpened){ doneNotice('⚙ 反汇编 .text 节'); return; }
+  world.view = 'disasm';
+  world.disasmFocus = 'm10';
+  addLog('objdump -d --section=.text', 'ok', '【翻译官】字节→助记符。0x401033 push 0x404060 正是锚点②的字符串地址，0x40103B call 进 IAT 的 lstrcmpA——三关锚点在同一张图里会师。函数名 sub_401030 是 IDA 的自动命名：sub_+地址，原名早已被编译抹掉。');
+  flags.disasmOpened = true;
+  render();
+}
+
+// 6. CFG
+function doCFG(){
+  if(world.flowing || !flags.disasmOpened){
+    if(!flags.disasmOpened) addLog('生成 CFG', 'err', '先点「⚙ 反汇编 .text 节」。');
+    render(); return;
+  }
+  if(flags.cfgBuilt){ doneNotice('🗺 生成控制流图'); return; }
+  world.view = 'cfg';
+  world.disasmFocus = 'm14';
+  addLog('生成 CFG · 3 基本块 2 条边', 'ok', '【分岔路口】test eax,eax + jne(75 0E) 把函数切成三块：比较块→成功块/失败块。源码里的 if 从不露脸——真身就是比较+条件跳转。0x401042 成为全图最值钱的一行：判断点。');
+  flags.cfgBuilt = true;
+  render();
+}
+
+// 7. 调试器
+function doBreakpoint(){
+  if(world.flowing) return;
+  if(flags.bpSet){ doneNotice('🐛 下断点'); return; }
+  if(!flags.cfgBuilt){
+    addLog('下断点', 'err', '先过第⑥关拿到判断点坐标 0x401042（断点下在其前一行 0x40103B）。');
+    render(); return;
+  }
+  world.view = 'dbg';
+  world.dbg = { bp:true, hit:false, stepIdx:0, eip:'运行中', eax:'—', zf:'—' };
+  addLog('bp 0x40103B   ; 断在 call lstrcmpA 前', 'info', '【传票已下】0x40103B = push 参数之后、call 比较之前——最佳观察位：两个待比较的字符串都在场。');
+  addApp('<b>调试器附加</b> · 程序暂停待命', 'info');
+  flags.bpSet = true;
+  render();
+}
+function doRunToBP(){
+  if(world.flowing || !flags.bpSet){
+    if(!flags.bpSet) addLog('运行到断点', 'err', '先点「🐛 下断点」。');
+    render(); return;
+  }
+  if(flags.bpHit){ doneNotice('▶ 运行到断点'); return; }
+  world.dbg.hit = true;
+  world.dbg.eip = '0x40103B';
+  world.runState = '断点命中 · 已暂停';
+  addApp('<b>输入</b> ABCD → 程序停在 0x40103B', 'info');
+  addLog('g  →  Breakpoint hit, EIP 0x40103B', 'ok', '【X 光开机】内存双窗：你的 "ABCD"（栈上 0x0019FF30）与程序的 "GIFT-2026"（.rdata 0x404060）并排躺着。猜想里两个比较对象全部眼见为实。');
+  flags.bpHit = true;
+  render();
+}
+function doStepOver(fast){
+  if(world.flowing || !flags.bpHit){
+    if(!flags.bpHit) addLog('单步穿过 jne', 'err', '先点「▶ 运行到断点」。');
+    render(); return;
+  }
+  if(flags.stepped && !fast){ doneNotice('⏭ 单步穿过 jne'); return; }
+  const steps = [
+    ()=>{ world.dbg.stepIdx = 1; world.runState = '单步 · call lstrcmpA';
+          addLog('p  →  call 返回 EAX=1', 'info', 'lstrcmpA("ABCD","GIFT-2026") 返回非 0：不相等。'); },
+    ()=>{ world.dbg.stepIdx = 2; world.dbg.eax = '0x00000001';
+          addLog('EAX=1 · test eax,eax → ZF=0', 'info', 'test 只影响标志位：非 0 → ZF=0（「相等」不成立）。'); },
+    ()=>{ world.dbg.stepIdx = 3; world.dbg.zf = '0';
+          addLog('EIP 0x401042 · jne 成立', 'info', 'ZF=0 → 「不等就跳」的跳转条件满足。'); },
+    ()=>{ world.dbg.stepIdx = 4; world.dbg.eip = '0x401052'; world.runState = '单步 · 进入失败块';
+          world.blinds.how = true;
+          addNote('证据④', '断点单步眼见为实 → lstrcmpA 精确匹配，不等即败', true);
+          addApp('<b>单步</b> jne 跳转 → 失败块 → 弹窗 [Invalid license!]', 'pop');
+          addLog('EIP → 0x401052（失败块）', 'ok', '【证实】眼睁睁看 EIP 跳进失败块——怎么比已证实：lstrcmpA 精确匹配，不等即败。三盲全灭，静态地图与动态实地完全对上。'); },
+  ];
+  if(fast){
+    steps.forEach(s=>s());
+    world.dbg.stepIdx = 4;
+    flags.stepped = true;
+    return;
+  }
+  runSeq(steps, ()=>{ flags.stepped = true; });
+}
+
+// 8. 补丁
+function doPatch(){
+  if(world.flowing) return;
+  if(flags.patched){ doneNotice('🔧 打补丁 75→90'); return; }
+  if(!flags.stepped){
+    addLog('打补丁', 'err', '先过第⑦关：没实锤判断点就动刀是盲改。');
+    render(); return;
+  }
+  world.view = 'patch';
+  addLog('0x401042: 75 0E → 90 90', 'ok', '【字节手术】jne short（75 0E）→ 两个 nop（90 90）。「不等就跳」被抹平：无论比较结果如何都顺序落入成功块。改动量：2 字节。真实软件先查 CRC 自检再动刀。');
+  flags.patched = true;
+  render();
+}
+function doRunPatched(){
+  if(world.flowing || !flags.patched){
+    if(!flags.patched) addLog('运行补丁版', 'err', '先点「🔧 打补丁 75→90」。');
+    render(); return;
+  }
+  if(flags.patchRan){ doneNotice('▶ 运行补丁版'); return; }
+  world.runState = '补丁版运行中';
+  world.lastInput = 'XYZ-999（随便输）';
+  world.lastOutput = '[License OK! Welcome, honored user.]';
+  addApp('<b>补丁版</b> 输入 XYZ-999 → 弹窗 [License OK! Welcome, honored user.]', 'win');
+  addNote('事实⑤', '0x401042 判断点实锤可写 · 改 2 字节反转行为', true);
+  addLog('license_patched.exe → License OK!', 'ok', '【行为反转】不用钥匙也过——判断点实锤（0x401042 可写、且确实决定分支）。补丁是理解的最强证明：改 2 字节精确改变行为，多一分少一分都不行。');
+  flags.patchRan = true;
+  render();
+}
+
+// 9. 反编译 + 命名
+function doDecompile(){
+  if(world.flowing) return;
+  if(flags.decompDone){ doneNotice('🪄 反编译 sub_401030'); return; }
+  world.view = 'decomp';
+  addLog('F5（Hex-Rays）反编译 sub_401030', 'ok', '【升维机】汇编重建回伪 C：push/call/test 变成 if (lstrcmpA(...) != 0)。注意名字仍是编译器残留的匿名形态：sub_401030、byte_404060、arg_8——机器不知道语义。');
+  flags.decompDone = true;
+  render();
+}
+function doRename(){
+  if(world.flowing || !flags.decompDone){
+    if(!flags.decompDone) addLog('命名恢复', 'err', '先点「🪄 反编译 sub_401030」。');
+    render(); return;
+  }
+  if(flags.renamed){ doneNotice('✏ 命名恢复'); return; }
+  addNote('模型⑥', '功能等价模型完成：verify_key(user_input) ↔ "GIFT-2026"', true);
+  addLog('sub_401030 → verify_key · byte_404060 → g_expected_key', 'ok', '【重建收官】命名把丢掉的语义还给地址，整张图瞬间可读。逆向终点 = 功能等价模型：逻辑与原稿等价，名字是你的。三盲全灭、模型在手——这门手艺你已经走通一遍。');
+  flags.renamed = true;
+  render();
+}
+
+/* ============ 渲染与关卡系统 ============ */
+
+function renderRail(){
+  const rail = document.getElementById('rail');
+  rail.innerHTML = STAGES.map((s, idx)=>{
+    const cls = idx === stage ? 'pill current' : (idx < stage ? 'pill done' : 'pill');
+    return `<div class="${cls}" onclick="jumpStage(${idx})">${s.nm}</div>${idx < STAGES.length - 1 ? '<div class="sep"></div>' : ''}`;
+  }).join('');
+}
+
+function renderQuest(){
+  const s = STAGES[stage];
+  const q = document.getElementById('quest');
+  const isFree = stage === STAGES.length - 1;
+  q.className = isFree ? 'quest free' : 'quest';
+
+  let bodyHtml = `
+    <div class="quest-head">
+      <span class="quest-stage">${s.stageTag}</span>
+      <span class="quest-title">${s.title}</span>
+      <span style="margin-left:auto; display:flex; gap:12px; align-items:center; flex:none;">
+        ${stage >= 1 ? `<button class="skip" onclick="replayStage()">↺ 重玩本关</button>` : ''}
+        ${stage < STAGES.length - 1 ? `<button class="skip" onclick="jumpStage(${stage + 1})">跳过本关 →</button>` : ''}
+      </span>
+    </div>
+    <div class="q-row"><div class="k">📍 起点状态</div><div class="v">${s.start}</div></div>
+    <div class="q-row"><div class="k">🎯 任务</div><div class="v">${s.task}</div></div>
+    <div class="q-row"><div class="k">👀 观察点</div><div class="v">${s.watch}</div></div>
+  `;
+
+  if(stage === 10){
+    bodyHtml += `
+      <div class="quiz">
+        ${QUIZ.map((qz, qidx)=>{
+          const res = quiz[qidx];
+          return `
+            <div class="qitem">
+              <div class="qtext">${qz.q}</div>
+              <div class="opts">
+                ${qz.opts.map((opt, oidx)=>{
+                  let cls = 'opt';
+                  if(res !== null){
+                    if(oidx === qz.ans) cls += ' correct';
+                    else if(oidx === res.pick) cls += ' wrong';
+                    else cls += ' dim';
+                  }
+                  return `<button class="${cls}" onclick="answerQuiz(${qidx}, ${oidx})">${opt}</button>`;
+                }).join('')}
+              </div>
+              ${res !== null ? `<div class="qexpl">${res.ok ? '✅ 答对了！' : '❌ 答错了。'} ${qz.expl}</div>` : ''}
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  if(stage === 0){
+    bodyHtml += `<div class="go"><button onclick="startJourney()">开始拆解（进入第 1 关）→</button></div>`;
+  } else if(s.pass() && stage < STAGES.length - 1 && stage !== 10){
+    bodyHtml += `<div class="go"><button class="primary" onclick="jumpStage(${stage + 1})">✅ 本关目标达成！进入下一关 →</button></div>`;
+  } else if(stage === 10 && s.pass()){
+    bodyHtml += `<div class="go"><button class="primary" onclick="jumpStage(11)">🎉 测验全对！毕业并解锁自由模式 →</button></div>`;
+  }
+
+  q.innerHTML = bodyHtml;
+}
+
+function renderCode(){
+  const box = document.getElementById('codebox');
+  box.innerHTML = codeLines.map(l => {
+    let cls = l.cls || '';
+    if(l.id && l.id === activeLineId) cls += ' active';
+    if(l.gold) cls += ' hl-a';
+    return `<div class="codeline ${cls}">${escapeHtml(l.text)}</div>`;
+  }).join('');
+  box.scrollTop = box.scrollHeight;
+}
+
+/* ---- 左列工具视图分发 ---- */
+function toolLinesFor(view){
+  if(view === 'none'){
+    return codeLines;
+  }
+  if(view === 'hex'){
+    const lines = [
+      { text:'$ xxd license_check.exe | head', cls:'cm', id:'hex-h' },
+    ];
+    HEX_HEAD.forEach(h=>{
+      let cls = '';
+      if(flags.peParsed){
+        if(h.mark === 'mz') cls = 'hl-a';
+        else if(h.mark === 'pe') cls = 'hl-c';
+        else if(h.mark === 'sec') cls = 'hl-g';
+        else if(h.mark === 'text') cls = 'hl-r';
+      } else if(h.mark === 'mz') cls = 'hl-a';
+      lines.push({ text: h.t, cls });
+    });
+    lines.push({ text:'; peParsed 后：4D 5A=MZ · 50 45=PE · .text/.rdata/.data=节表 · 55 8B EC=代码节开头', cls:'cm' });
+    return lines;
+  }
+  if(view === 'imports'){
+    const lines = [
+      { text:'$ dumpbin /imports license_check.exe', cls:'cm', id:'imp-h' },
+      { text:'', cls:'' },
+    ];
+    IMPORTS.forEach(dll=>{
+      lines.push({ text:`  ${dll.dll}`, cls:'hl-c' });
+      dll.fns.forEach(fn=>{
+        const mark = fn.hot ? '   ★ 锚点① 比较字符串 → 验证逻辑' : (fn.hot2 ? '   ★ 弹窗能力' : '');
+        lines.push({ text:`    ${fn.va}  ${fn.n}${mark}`, cls: fn.hot ? 'hl-a' : '' });
+      });
+    });
+    lines.push({ text:'', cls:'' });
+    lines.push({ text:'; 谁借「比较字符串」，谁就在做验证 —— lstrcmpA 必被验证函数调用', cls:'cm' });
+    return lines;
+  }
+  if(view === 'strings'){
+    const lines = [
+      { text:'$ strings license_check.exe   （.rdata 节）', cls:'cm', id:'str-h' },
+      { text:'', cls:'' },
+    ];
+    STRINGS.forEach(s=>{
+      const tag = s.tag === 'gold' ? '   ← ★ 锚点② 可疑！' : (s.tag === 'bad' ? '   （报错消息=路标）' : (s.tag === 'ok' ? '   （成功消息）' : ''));
+      lines.push({ text:`  ${s.va}  ${s.t}${tag}`, cls: s.tag === 'gold' ? 'hl-a' : (s.tag === 'bad' ? 'hl-r' : (s.tag === 'ok' ? 'hl-g' : '')) });
+    });
+    lines.push({ text:'', cls:'' });
+    lines.push({ text:'; 钥匙疑似明文躺在 0x404060 → 下一步：谁引用了它？（xref）', cls:'cm' });
+    return lines;
+  }
+  if(view === 'xref'){
+    return [
+      { text:'$ 查询交叉引用 0x404060', cls:'cm', id:'xref-h' },
+      { text:'', cls:'' },
+      { text:'  data 0x404060 "GIFT-2026"', cls:'hl-a' },
+      { text:'    ↑ referenced from:', cls:'' },
+      { text:'      code 0x401033  push 0x404060', cls:'hl-c' },
+      { text:'        ∈ function sub_401030 (0x401030)', cls:'hl-g' },
+      { text:'', cls:'' },
+      { text:'; 数据地址 → 引用指令 → 所属函数', cls:'cm' },
+      { text:'; 盲②照亮：验证逻辑就在 sub_401030', cls:'cm' },
+    ];
+  }
+  if(view === 'disasm' || view === 'cfg'){
+    return DISASM.map(l => ({
+      text: l.t,
+      id: l.id,
+      cls: (l.gold ? 'hl-a' : '') + (l.hot ? ' hl-r' : ''),
+    }));
+  }
+  if(view === 'dbg'){
+    const lines = [
+      { text:'$ 调试器会话（x64dbg 风格）', cls:'cm', id:'dbg-h' },
+      { text:'', cls:'' },
+    ];
+    if(flags.bpSet) lines.push({ text:'  > bp 0x40103B        ; 断点已下', cls:'hl-c' });
+    if(flags.bpHit) lines.push({ text:'  > g                  ; Breakpoint hit @ 0x40103B', cls:'hl-a' });
+    if(world.dbg.stepIdx >= 1) lines.push({ text:'  > p                  ; call lstrcmpA 返回 EAX=1', cls:'' });
+    if(world.dbg.stepIdx >= 2) lines.push({ text:'  > p                  ; test eax,eax → ZF=0', cls:'' });
+    if(world.dbg.stepIdx >= 3) lines.push({ text:'  > p                  ; jne 成立 → 跳转', cls:'hl-r' });
+    if(world.dbg.stepIdx >= 4) lines.push({ text:'  ; EIP = 0x401052（失败块）—— 眼见为实', cls:'hl-g' });
+    lines.push({ text:'', cls:'' });
+    lines.push({ text:'; 静态地图（第⑥关）与动态实地逐行对上', cls:'cm' });
+    return lines;
+  }
+  if(view === 'patch'){
+    const lines = [
+      { text:'$ 字节手术 · 0x401042', cls:'cm', id:'patch-h' },
+      { text:'', cls:'' },
+      { text:'  原字节  0x401042:  75 0E    jne short 0x401052', cls:'hl-r' },
+    ];
+    if(flags.patched) lines.push({ text:'  新字节  0x401042:  90 90    nop; nop        ✅ 已写入', cls:'hl-g' });
+    else lines.push({ text:'  新字节  （等待执行补丁）', cls:'cm' });
+    lines.push({ text:'', cls:'' });
+    lines.push({ text:'; 75→90：「不等就跳」→「什么都不做」', cls:'cm' });
+    lines.push({ text:'; 真实软件先查 CRC 自检：循环读字节+累加异或 = 校验特征', cls:'cm' });
+    return lines;
+  }
+  if(view === 'decomp'){
+    return flags.renamed ? DECOMP_NAMED : DECOMP_RAW;
+  }
+  return codeLines;
+}
+
+/* ---- 中列解剖台分发 ---- */
+function renderAnat(){
+  const box = document.getElementById('anat-box');
+  const v = world.view;
+
+  if(v === 'none'){
+    box.innerHTML = `
+      <div class="anat-note">黑盒静置。<b>三盲</b>：拿什么比 · 在哪比 · 怎么比。<br>第 2 关起，解剖台逐层点亮。</div>
+      <div class="pe-block hot"><span class="pb-n">license_check.exe</span><span class="pb-d">16 KB · 无源码 · <b>?</b></span></div>
+      <div class="pe-block"><span class="pb-n">MZ → PE 头</span><span class="pb-d">待解析</span></div>
+      <div class="pe-block"><span class="pb-n">.text / .rdata / .data</span><span class="pb-d">待解析</span></div>
+      <div class="anat-note">解剖原则：<b>先解析结构，再开始猜</b>。</div>
+    `;
+    return;
+  }
+
+  if(v === 'hex'){
+    box.innerHTML = `
+      <div class="anat-note"><b>PE 档案袋</b> · ${flags.peParsed ? '节表已解析，货架点亮 ↓' : '灰块 = 还没解析，先解析再下眼'}</div>
+      <div class="pe-block ${flags.peParsed?'lit hot':''}"><span class="pb-n">DOS Header</span><span class="pb-d">签名 <b>"4D 5A" MZ</b> · 指向 PE 头</span></div>
+      <div class="pe-block ${flags.peParsed?'lit hot':''}"><span class="pb-n">PE Header + 可选头</span><span class="pb-d">签名 <b>"50 45" PE</b> · 入口/基址 0x400000</span></div>
+      <div class="pe-block ${flags.peParsed?'lit':''}"><span class="pb-n">节表（目录）</span><span class="pb-d">3 个货架的偏移与大小</span></div>
+      <div class="pe-block ${flags.peParsed?'lit hot':''}"><span class="pb-n">.text · VA 0x401000</span><span class="pb-d">代码 · 只读执行</span></div>
+      <div class="pe-block ${flags.peParsed?'lit hot':''}"><span class="pb-n">.rdata · VA 0x404000</span><span class="pb-d">只读常量 · <b>字符串住这</b></span></div>
+      <div class="pe-block ${flags.peParsed?'lit':''}"><span class="pb-n">.data · VA 0x405000</span><span class="pb-d">可写数据</span></div>
+      <div class="anat-note">地址从此不再变：<b>0x401000 代码区 · 0x404000 常量区</b>，全程通用。</div>
+    `;
+    return;
+  }
+
+  if(v === 'imports'){
+    box.innerHTML = `
+      <div class="anat-note"><b>导入表 IAT</b> · 程序向 Windows 借函数的登记名单（锚点①）</div>
+      ${IMPORTS.map(d=>`
+        <div class="iat-dll">
+          <div class="id-name">🔗 ${d.dll}</div>
+          ${d.fns.map(fn=>`
+            <div class="iat-fn ${fn.hot?'hot':''}">
+              <span>[${fn.va}]</span><span>${fn.n}${fn.hot?' ← 谁借「比较」谁在验证':''}</span>
+            </div>`).join('')}
+        </div>`).join('')}
+      <div class="anat-note">IAT 地址 <b>0x4020A4 = lstrcmpA</b>——反汇编里 call [0x4020A4] 就是在这里跳进系统函数。</div>
+    `;
+    return;
+  }
+
+  if(v === 'strings'){
+    box.innerHTML = `
+      <div class="anat-note"><b>.rdata 节货架</b> · 明文常量连排（锚点②）</div>
+      ${STRINGS.map(s=>`
+        <div class="str-card ${s.tag==='gold'?'hot':''}">
+          <span class="s-va">${s.va}</span>
+          <span class="s-tx">"${s.t}"</span>
+          <span class="s-tag">${s.tag==='gold'?'★ 疑似钥匙':(s.tag==='bad'?'报错':(s.tag==='ok'?'成功':''))}</span>
+        </div>`).join('')}
+      <div class="anat-note">字符串不会自己运行——<b>一定有代码引用它</b>。下一步：xref 倒查。</div>
+    `;
+    return;
+  }
+
+  if(v === 'xref'){
+    box.innerHTML = `
+      <div class="anat-note"><b>交叉引用追踪</b> · 从数据倒查代码（锚点③）</div>
+      <div class="xref-node hot"><span class="xn-va">.rdata 0x404060</span><br><span class="xn-tx">"GIFT-2026"</span></div>
+      <div class="xref-arrow">↑ <b>谁引用了它？</b>（xref 反查）</div>
+      <div class="xref-node"><span class="xn-va">code 0x401033</span><br>push 0x404060</div>
+      <div class="xref-arrow">↑ <b>属于哪个函数？</b></div>
+      <div class="xref-node hot"><span class="xn-va">sub_401030</span><br>0x401030 起始 · 验证函数坐标</div>
+      <div class="anat-note">锚点②+③会师：拿什么比（GIFT-2026）+ 在哪比（sub_401030）。</div>
+    `;
+    return;
+  }
+
+  if(v === 'disasm' || v === 'cfg'){
+    if(v === 'disasm'){
+      const rows = [
+        { by:'55',           mn:'push ebp',            note:'函数序言——认函数从这开始' },
+        { by:'8B EC',        mn:'mov ebp, esp',        note:'栈帧' },
+        { by:'68 60 40 40 00', mn:'push 0x404060',     note:'压入 .rdata 字符串 "GIFT-2026"' },
+        { by:'FF 35 30 FF 19 00', mn:'push [ebp+8]',   note:'压入你的输入（函数参数）' },
+        { by:'FF 15 A4 20 40 00', mn:'call [0x4020A4]', note:'进 IAT → lstrcmpA 比较' },
+        { by:'75 0E',        mn:'jne short 0x401052',  note:'★判断点：不等就跳（75=jne）' },
+      ];
+      box.innerHTML = `
+        <div class="anat-note"><b>机器码 ↔ 助记符对照</b> · 翻译官的工作台</div>
+        ${rows.map((r,i)=>`
+          <div class="insn-row ${i>=2&&i<=5?'hot':''}">
+            <span class="ir-by">${r.by}</span>
+            <span class="ir-mn"><b>${r.mn}</b> <span class="cm">; ${r.note}</span></span>
+          </div>`).join('')}
+        <div class="anat-note">左列是完整反汇编。你见过虚函数课的 <b>call [eax+4]</b>——同一读法：跟着跳，认准比较。</div>
+      `;
+      return;
+    }
+    // cfg
+    box.innerHTML = `
+      <div class="anat-note"><b>控制流图 CFG</b> · 跳转把直线代码切成块 + 箭头</div>
+      <div class="cfg-wrap">
+        <div class="cfg-node hot">
+          <div class="cn-va">B1 · 0x401033–0x401042</div>
+          <div class="cn-tx">push×2 → call lstrcmpA<br>test eax, eax · jne 75 0E</div>
+        </div>
+        <div class="cfg-split">
+          <div class="cfg-branch">
+            <div class="cfg-cond good">相等 · ZF=1（不跳）</div>
+            <div class="cfg-node ok">
+              <div class="cn-va">B2 · 0x401044</div>
+              <div class="cn-tx">成功块<br>"License OK!"</div>
+            </div>
+          </div>
+          <div class="cfg-branch">
+            <div class="cfg-cond bad">不等 · ZF=0 · jne 跳</div>
+            <div class="cfg-node bad">
+              <div class="cn-va">B3 · 0x401052</div>
+              <div class="cn-tx">失败块<br>"Invalid license!"</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="anat-note">if 的真身 = <b>test + jne</b>。最值钱的一行：0x401042。想眼见为实？→ 下一关断点讯问。</div>
+    `;
+    return;
+  }
+
+  if(v === 'dbg'){
+    const d = world.dbg;
+    const stepNames = ['已下断', '断点命中', 'call 返回 EAX=1', 'test → ZF=0', 'jne → 失败块'];
+    box.innerHTML = `
+      <div class="anat-note"><b>调试器现场</b> · 断点 0x40103B · 单步 ${Math.max(0,d.stepIdx)}/4</div>
+      <div class="dbg-grid">
+        <div class="dbg-panel">
+          <div class="dp-t">REGS</div>
+          <div class="reg-row"><span class="rg-n">EIP</span><span class="rg-v">${d.eip}</span></div>
+          <div class="reg-row ${d.stepIdx>=4?'bad':(d.stepIdx>=1?'bad':'')}"><span class="rg-n">EAX</span><span class="rg-v">${d.eax}</span></div>
+          <div class="reg-row ${d.stepIdx>=2?'bad':''}"><span class="rg-n">ZF</span><span class="rg-v">${d.zf}</span></div>
+        </div>
+        <div class="dbg-panel">
+          <div class="dp-t">STACK · 你的输入</div>
+          <div class="mem-line ${d.hit?'hit':''}">0x0019FF30 → <span class="mv">"ABCD"</span></div>
+          <div class="mem-line">0x0019FF2C → 0x404060 (ptr)</div>
+        </div>
+        <div class="dbg-panel" style="grid-column:1/3;">
+          <div class="dp-t">.rdata · 程序里的期望钥匙</div>
+          <div class="mem-line ${d.hit?'hit':''}">0x404060 → <span class="mv">"GIFT-2026"</span> ←和你的输入并排躺着</div>
+        </div>
+      </div>
+      <div class="anat-note">${stepNames.map((n,i)=> i===d.stepIdx?`<b>[${n}]</b>`:n).join(' → ')}</div>
+      <div class="anat-note">静态地图与动态实地逐行对上——<b>猜想变实锤</b>。</div>
+    `;
+    return;
+  }
+
+  if(v === 'patch'){
+    box.innerHTML = `
+      <div class="anat-note"><b>字节手术台</b> · 改字节即改行为</div>
+      <div class="patch-card ${flags.patched?'hot':''}">
+        <span class="pc-va">0x401042</span><br>
+        <span class="pc-old">75 0E</span> <span class="patch-tag">jne short · 不等就跳</span><br>
+        <span class="pc-new">${flags.patched ? '90 90' : '?? ??'}</span> <span class="patch-tag ${flags.patched?'on':''}">${flags.patched?'nop · 什么都不做 ✅':'待写入'}</span>
+      </div>
+      <div class="pe-block ${flags.patched?'lit hot':''}"><span class="pb-n">.text 校验和</span><span class="pb-d">真实软件：<b>CRC 自检</b>会报警</span></div>
+      <div class="anat-note">判断点 = 全图最值钱的一行：<b>懂它才能改它</b>。补丁是理解的最强证明——多改一分少改一分都不行。</div>
+    `;
+    return;
+  }
+
+  if(v === 'decomp'){
+    box.innerHTML = `
+      <div class="anat-note"><b>符号重建表</b> · 把语义还给地址（逆向一半工作量在命名）</div>
+      <div class="sym-row ${flags.renamed?'hot':''}">
+        <span class="sy-va">0x401030</span><span class="sy-id">sub_401030</span><span class="sy-my">${flags.renamed?'✅ verify_key':'待命名'}</span>
+      </div>
+      <div class="sym-row ${flags.renamed?'hot':''}">
+        <span class="sy-va">0x404060</span><span class="sy-id">byte_404060</span><span class="sy-my">${flags.renamed?'✅ g_expected_key':'待命名'}</span>
+      </div>
+      <div class="sym-row ${flags.renamed?'hot':''}">
+        <span class="sy-va">[ebp+8]</span><span class="sy-id">arg_8</span><span class="sy-my">${flags.renamed?'✅ user_input':'待命名'}</span>
+      </div>
+      <div class="anat-note">命名依据全是行为证据：比较+分支 → verify_key；内容 GIFT-2026 → g_expected_key。<b>功能等价模型 = 逻辑等价 + 你的命名</b>。</div>
+    `;
+    return;
+  }
+
+  box.innerHTML = `<div class="anat-note">（解剖台待命）</div>`;
+}
+
+function renderRun(){
+  document.getElementById('run-state').innerText = world.runState;
+  document.getElementById('io-in').innerText = world.lastInput;
+  document.getElementById('io-out').innerText = world.lastOutput;
+
+  const wEl = document.getElementById('stat-what');
+  const rEl = document.getElementById('stat-where');
+  const hEl = document.getElementById('stat-how');
+  wEl.innerText = world.blinds.what ? '"GIFT-2026"' : '未知';
+  wEl.className = 'stat-val' + (world.blinds.what ? ' good' : '');
+  rEl.innerText = world.blinds.where ? 'sub_401030' : '未知';
+  rEl.className = 'stat-val' + (world.blinds.where ? ' good' : '');
+  hEl.innerText = world.blinds.how ? '精确匹配' : '未知';
+  hEl.className = 'stat-val' + (world.blinds.how ? ' good' : '');
+
+  const list = document.getElementById('note-list');
+  if(world.notes.length === 0){
+    list.innerHTML = `<div style="color:var(--muted);font-size:11px;">空。每个锚点→一条结论，逐关点亮。</div>`;
+  } else {
+    list.innerHTML = world.notes.map(n =>
+      `<div class="note-item ${n.good?'good':''}"><b>${n.tag}</b> · ${n.text}</div>`).join('');
+  }
+
+  const appEl = document.getElementById('app-log');
+  appEl.innerHTML = world.appLog.length === 0
+    ? `<div style="color:var(--muted);font-size:10.5px;">程序未运行。</div>`
+    : world.appLog.map(l => `<div class="app-line ${l.kind}">${l.text}</div>`).join('');
+}
+
+function renderConsoleButtons(){
+  const btns = document.getElementById('btns');
+  const isFree = stage === STAGES.length - 1;
+  let btnHtml = '';
+  if(world.flowing){ btnHtml = `<span style="color:var(--amber);font-size:11px;">单步运行中…</span>`; }
+
+  const push = (cond, cls, label, fn) => { if(cond && !world.flowing) btnHtml += `<button class="${cls}" onclick="${fn}">${label}</button>`; };
+
+  push(stage === 1 || isFree, 'danger-btn', '▶ 双击运行', 'doRunBlackbox()');
+  push(stage === 1 || isFree, 'action-btn', '🎲 再猜一次', 'doGuessAgain()');
+  push(stage === 2 || isFree, 'action-btn', '🔬 打开十六进制视图', 'doOpenHex()');
+  push(stage === 2 || isFree, 'primary', '📐 解析 PE 头与节表', 'doParsePE()');
+  push(stage === 3 || isFree, 'primary', '📡 列出导入表', 'doListImports()');
+  push(stage === 4 || isFree, 'action-btn', '🔤 strings 扫描', 'doStrings()');
+  push(stage === 4 || isFree, 'fix-btn', '🎯 交叉引用 xref 追踪', 'doXref()');
+  push(stage === 5 || isFree, 'primary', '⚙ 反汇编 .text 节', 'doDisasm()');
+  push(stage === 6 || isFree, 'primary', '🗺 生成控制流图', 'doCFG()');
+  push(stage === 7 || isFree, 'action-btn', '🐛 下断点 0x40103B', 'doBreakpoint()');
+  push(stage === 7 || isFree, 'primary', '▶ 运行到断点', 'doRunToBP()');
+  push(stage === 7 || isFree, 'fix-btn', '⏭ 单步穿过 jne', 'doStepOver()');
+  push(stage === 8 || isFree, 'danger-btn', '🔧 打补丁 75→90', 'doPatch()');
+  push(stage === 8 || isFree, 'fix-btn', '▶ 运行补丁版', 'doRunPatched()');
+  push(stage === 9 || isFree, 'primary', '🪄 反编译 sub_401030', 'doDecompile()');
+  push(stage === 9 || isFree, 'fix-btn', '✏ 命名恢复', 'doRename()');
+
+  if(!world.flowing){
+    btnHtml += `<button class="danger-btn" onclick="wipeAllProgress()">${wipeArmed ? '⚠ 再点一次：确认清除全部进度' : '⟲ 清除全部进度'}</button>`;
+    btnHtml += `<button onclick="resetWorldState()">↺ 重置环境</button>`;
+  }
+  btns.innerHTML = btnHtml;
+}
+
+function renderLogs(){
+  const box = document.getElementById('logbox');
+  if(logLines.length === 0){
+    box.innerHTML = `<div style="color:var(--muted);font-size:12px;">日志就绪，点击上方控制台按钮执行操作...</div>`;
+    return;
+  }
+  box.innerHTML = logLines.map(l => {
+    return `
+      <div class="logline ${l.type}">
+        <span class="cmd">${escapeHtml(l.cmd)}</span>
+        <div class="expl">${l.expl}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function render(){
+  renderRail();
+  renderQuest();
+  codeLines = toolLinesFor(world.view);
+  renderCode();
+  renderAnat();
+  renderRun();
+  renderConsoleButtons();
+  renderLogs();
+  saveState();
+}
+
+function startJourney(){
+  flags.started = true;
+  jumpStage(1);
+}
+
+function jumpStage(idx){
+  stage = idx;
+  render();
+}
+
+function answerQuiz(qidx, oidx){
+  const qz = QUIZ[qidx];
+  const ok = oidx === qz.ans;
+  quiz[qidx] = { pick: oidx, ok };
+  if(ok){
+    addLog(`测验第 ${qidx+1} 题`, 'ok', `回答正确！${qz.expl}`);
+  } else {
+    addLog(`测验第 ${qidx+1} 题`, 'err', `回答错误，再想想看！`);
+  }
+  render();
+}
+
+function freshWorld(){
+  return {
+    view:'none',
+    blinds:{ what:false, where:false, how:false },
+    notes:[], appLog:[],
+    lastInput:'—', lastOutput:'—', runState:'未运行',
+    dbg:{ bp:false, hit:false, stepIdx:-1, eip:'—', eax:'—', zf:'—' },
+    flowing:false, flowFocus:-1, disasmFocus:null,
+  };
+}
+
+function initialCodeLines(){
+  return [
+    { text: '// license_check.exe · 16KB 黑盒', cls: 'cm', id:'init-line' },
+    { text: '// 目前唯一的观察手段：运行 + 瞎猜', cls: 'cm' },
+    { text: '// （第 2 关起解锁真正的武器）', cls: 'cm' }
+  ];
+}
+
+function resetWorldState(){
+  world = freshWorld();
+  world.view = 'none';
+  addLog('环境已重置', 'info', '舞台与工具视图已清空（关卡进度保留）。');
+  render();
+}
+
+/* ============ 重玩机制：回退到第 n 关刚到达时的状态 ============ */
+function doneNotice(label){
+  addLog(label, 'info', '本动作已生效过，没有重复执行。想重新玩：点任务卡右上角的「↺ 重玩本关」；想从零开始：控制台「⟲ 清除全部进度」。');
+  render();
+}
+
+function buildToStage(n){
+  logMute = true;
+  flags = {};
+  quiz = [null, null, null];
+  world = freshWorld();
+  world.view = 'none';
+  if(n > 1){ doRunBlackbox(); doGuessAgain(); }
+  if(n > 2){ doOpenHex(); doParsePE(); }
+  if(n > 3){ doListImports(); }
+  if(n > 4){ doStrings(); doXref(); }
+  if(n > 5){ doDisasm(); }
+  if(n > 6){ doCFG(); }
+  if(n > 7){ doBreakpoint(); doRunToBP(); doStepOver(true); }
+  if(n > 8){ doPatch(); doRunPatched(); }
+  if(n > 9){ doDecompile(); doRename(); }
+  logMute = false;
+  addLog('↺ 状态已重建', 'info', '本关之前的取证产物已按终态重放，本关按钮可以重新点一遍。');
+}
+
+function replayStage(){
+  if(world.flowing) return;
+  buildToStage(stage);
+  addLog('↺ 重玩本关', 'info', `状态已回退到「${STAGES[stage].nm}」刚到达时的样子，本关按钮可以重新点一遍。`);
+  jumpStage(stage);
+}
+
+let wipeArmed = null;
+function wipeAllProgress(){
+  if(world.flowing) return;
+  if(!wipeArmed){
+    wipeArmed = setTimeout(()=>{ wipeArmed = null; render(); }, 3000);
+    addLog('⟲ 清除全部进度', 'err', '再点一次确认（3 秒内）：将清空存档并回到第 0 关起点。');
+    render();
+    return;
+  }
+  clearTimeout(wipeArmed);
+  try{ localStorage.removeItem(KEY); }catch(e){}
+  location.reload();
+}
+
+function escapeHtml(str){
+  if(!str) return '';
+  return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+/* ============ 持久化 ============ */
+function saveState(){
+  try{
+    localStorage.setItem(KEY, JSON.stringify({ stage, flags, quiz }));
+  }catch(e){}
+}
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(KEY);
+    if(raw){
+      const data = JSON.parse(raw);
+      if(typeof data.stage === 'number') stage = data.stage;
+      if(data.flags) flags = data.flags;
+      if(Array.isArray(data.quiz)) quiz = data.quiz;
+    }
+  }catch(e){}
+}
+
+window.onload = function(){
+  loadState();
+  // 断点续走：恢复存档后把世界重建到当前关刚到达时的终态
+  if(stage > 0){
+    logMute = true;
+    buildToStage(Math.min(stage, 11));
+    logMute = false;
+  }
+  render();
+};
+</script>
+</body>
+</html>

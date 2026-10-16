@@ -1,0 +1,1176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>集中式 Broker vs 去中心化 P2P —— 单点崩溃之痛与分布式自愈</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#151f36; --panel2:#0f1729;
+    --line:#26334d; --text:#dde6f5; --muted:#a6b9d9;
+    --blue:#3b82f6; --green:#22c55e; --purple:#a855f7;
+    --amber:#f5b544; --cyan:#38bdf8; --red:#f87171;
+    --mono:"Cascadia Code",Consolas,"JetBrains Mono",monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:radial-gradient(1200px 600px at 50% -100px,#16223d 0%,var(--bg) 60%);
+    color:var(--text);
+    font-family:system-ui,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+    padding:30px 18px 70px; line-height:1.65;
+  }
+  .wrap{max-width:1240px; margin:0 auto;}
+
+  /* ---------- header ---------- */
+  h1{font-size:26px; letter-spacing:.5px;}
+  h1 .dot-word{color:var(--amber);}
+  .sub{color:var(--muted); margin-top:6px; font-size:14.5px;}
+
+  /* ---------- hierarchy badge ---------- */
+  .ladder-badge{
+    display:inline-flex; align-items:center; gap:8px; margin-top:10px; padding:4px 10px;
+    background:#162442; border:1px solid #2e446d; border-radius:6px; font-size:12px;
+    color:var(--cyan); font-family:var(--mono); font-weight:600;
+  }
+
+  /* ---------- landing table ---------- */
+  .ltable{margin-top:14px; border:1px solid var(--line); border-radius:10px; overflow:hidden; font-size:12px;}
+  .ltable table{width:100%; border-collapse:collapse;}
+  .ltable th{
+    background:rgba(255,255,255,.03); color:var(--muted); font-size:11px; font-weight:600;
+    padding:6px 10px; text-align:left; border-bottom:1px solid var(--line); letter-spacing:1px;
+  }
+  .ltable td{padding:6px 10px; border-bottom:1px solid rgba(38,51,77,.5); vertical-align:top;}
+  .ltable tr:last-child td{border-bottom:none;}
+  .ltable .nick{color:var(--amber); font-weight:700; font-family:var(--mono); white-space:nowrap;}
+  .ltable .real{color:var(--cyan); font-family:var(--mono);}
+  .ltable .phys{color:var(--text);}
+  .ltable .life{color:var(--muted);}
+
+  /* ---------- journey rail ---------- */
+  .journey{margin-top:20px;}
+  .rail{display:flex; align-items:center; gap:5px; overflow-x:auto; padding:4px 2px 10px;}
+  .pill{
+    flex:none; font-size:11px; padding:4px 9px; border-radius:999px;
+    border:1px solid var(--line); color:var(--muted); white-space:nowrap; background:var(--panel2);
+    cursor:pointer;
+  }
+  .pill.done{color:var(--green); border-color:rgba(34,197,94,.55);}
+  .pill.current{color:var(--amber); border-color:var(--amber); box-shadow:0 0 10px rgba(245,181,68,.25); font-weight:700;}
+  .sep{flex:none; width:10px; height:2px; background:var(--line);}
+
+  /* ---------- quest card ---------- */
+  .quest{
+    border:1px solid rgba(245,181,68,.45); border-left:4px solid var(--amber);
+    background:linear-gradient(90deg, rgba(245,181,68,.07), var(--panel2) 45%);
+    border-radius:12px; padding:14px 18px;
+  }
+  .quest.free{border-color:rgba(34,197,94,.45); border-left-color:var(--green);
+    background:linear-gradient(90deg, rgba(34,197,94,.07), var(--panel2) 45%);}
+  .quest-head{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .quest-stage{font-family:var(--mono); font-size:11px; color:var(--amber); letter-spacing:1px;}
+  .quest-title{font-size:16px; font-weight:700;}
+  .skip{font-size:12px; color:var(--muted); cursor:pointer; border:none; background:none; text-decoration:underline dotted; padding:0;}
+  .skip:hover{color:var(--text);}
+  .replay-btn{
+    font-size:11px; padding:3px 8px; border-radius:6px; background:#182338;
+    color:var(--cyan); border:1px solid var(--line); cursor:pointer; margin-left:auto;
+  }
+  .replay-btn:hover{border-color:var(--cyan); background:#1e2d48;}
+  .q-row{display:flex; gap:12px; margin-top:9px; font-size:13.5px;}
+  .q-row .k{flex:none; width:88px; color:var(--muted); font-weight:600;}
+  .q-row .v{color:var(--text);}
+  .q-row .v b{color:var(--amber);}
+  .quest .go{margin-top:12px;}
+  .quest .go button{
+    font-size:13px; padding:7px 18px; border-color:var(--amber); color:var(--amber);
+    font-family:system-ui,"Microsoft YaHei",sans-serif; font-weight:700;
+  }
+
+  /* quiz */
+  .quiz{margin-top:6px;}
+  .qitem{margin-top:12px; padding-top:10px; border-top:1px dashed var(--line);}
+  .qitem .qtext{font-size:13.5px; font-weight:600;}
+  .opts{display:flex; flex-direction:column; gap:6px; margin-top:8px;}
+  .opt{
+    text-align:left; font-size:12.5px; font-family:var(--mono),system-ui,sans-serif;
+    background:#182338; color:var(--text); border:1px solid var(--line); border-radius:6px;
+    padding:8px 12px; cursor:pointer;
+  }
+  .opt.correct{border-color:var(--green); color:var(--green); background:rgba(34,197,94,.1);}
+  .opt.wrong{border-color:var(--red); color:var(--red); background:rgba(248,113,113,.08);}
+  .opt.dim{opacity:.4;}
+  .qexpl{font-size:12px; color:var(--muted); margin-top:6px;}
+
+  /* ---------- stage (3 columns) ---------- */
+  .stage-scroll{overflow-x:auto; margin-top:20px; padding-bottom:6px;}
+  .stage{
+    min-width:1120px;
+    display:grid;
+    grid-template-columns:1fr 1.45fr 1fr;
+    gap:0 12px; align-items:stretch;
+  }
+  .col-head{margin-bottom:10px; text-align:center;}
+  .col-head .nick{font-size:17px; font-weight:700;}
+  .col-head .real{font-family:var(--mono); font-size:11.5px; color:var(--cyan); letter-spacing:1px; text-transform:uppercase;}
+  .col-head .duty{font-size:12px; color:var(--muted); margin-top:2px;}
+  .col{
+    background:var(--panel2); border:1px solid var(--line); border-radius:14px;
+    padding:14px; display:flex; flex-direction:column; gap:12px; min-height:510px;
+  }
+  .c1 .nick{color:var(--cyan);} .c2 .nick{color:var(--amber);} .c3 .nick{color:var(--green);}
+
+  /* Column 1: Code Box */
+  .codebox-wrap{
+    background:#080d18; border:1px solid var(--line); border-radius:10px;
+    overflow:hidden; display:flex; flex-direction:column; flex:1; min-height:240px;
+  }
+  .codebox-topbar{
+    background:#0f172a; padding:6px 12px; border-bottom:1px solid var(--line);
+    display:flex; align-items:center; justify-content:space-between;
+    font-size:11px; font-family:var(--mono); color:var(--muted);
+  }
+  .codebox-dots{display:flex; gap:5px;}
+  .codebox-dot{width:8px; height:8px; border-radius:50%;}
+  .dot-r{background:#f87171;} .dot-y{background:#f5b544;} .dot-g{background:#22c55e;}
+  .codebox{
+    padding:12px; font-family:var(--mono); font-size:11.5px;
+    white-space:pre; overflow:auto; tab-size:4;
+    line-height:1.7; flex:1; color:#dde6f5;
+  }
+  .codebox .cm{color:#78909c; font-style:italic;}
+  .codebox .kw{color:#c792ea; font-weight:700;}
+  .codebox .fn{color:#82aaff; font-weight:700;}
+  .codebox .str{color:#c3e88d;}
+  .codebox .type{color:#ffcb6b;}
+  .codebox .val{color:#f78c6c;}
+
+  .hop-card{
+    background:#0d1527; border:1px solid var(--line); border-radius:10px; padding:10px;
+    font-size:11px; font-family:var(--mono);
+  }
+  .hop-title{color:var(--cyan); font-weight:700; margin-bottom:6px; display:flex; justify-content:space-between;}
+
+  /* Column 2: Topology Arena */
+  .arena-box{display:flex; flex-direction:column; gap:10px; flex:1;}
+  .arch-banner{
+    background:#101a2f; border:1px dashed var(--line); border-radius:8px;
+    padding:6px 10px; font-size:11.5px; font-family:var(--mono); color:var(--muted);
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .arch-badge{padding:2px 8px; border-radius:4px; font-size:10.5px; font-weight:700; background:#1b2947; color:var(--cyan);}
+  .arch-badge.broker{background:rgba(245,181,68,.15); color:var(--amber); border:1px solid rgba(245,181,68,.4);}
+  .arch-badge.p2p{background:rgba(34,197,94,.15); color:var(--green); border:1px solid rgba(34,197,94,.4);}
+
+  /* Central Stage */
+  .topo-canvas{
+    background:#090f1d; border:1px solid var(--line); border-radius:10px; padding:14px;
+    min-height:260px; display:flex; flex-direction:column; justify-content:space-between; position:relative;
+  }
+  .center-broker-zone{
+    display:flex; justify-content:center; align-items:center; margin:10px 0;
+  }
+  .broker-card{
+    width:220px; background:#16233d; border:2px solid var(--amber); border-radius:10px;
+    padding:10px; text-align:center; box-shadow:0 0 15px rgba(245,181,68,.2); transition:all .3s;
+  }
+  .broker-card.dead{
+    border-color:var(--red); background:#28151f; box-shadow:0 0 18px rgba(248,113,113,.4);
+  }
+  .broker-card.bypass{opacity:.2; border-style:dashed;}
+  .broker-title{font-family:var(--mono); font-size:12px; font-weight:700; color:var(--amber);}
+  .broker-card.dead .broker-title{color:var(--red);}
+
+  .nodes-layer{display:flex; justify-content:space-between; gap:10px;}
+  .agent-node{
+    flex:1; background:#111c33; border:1px solid var(--line); border-radius:8px;
+    padding:8px 10px; font-size:11px; font-family:var(--mono); position:relative;
+  }
+  .agent-node.healthy{border-color:var(--green);}
+  .agent-node.paralyzed{border-color:var(--red); opacity:.5;}
+  .agent-node.dead{opacity:.3; border-style:dashed;}
+  .node-name{font-weight:700; color:var(--text); margin-bottom:2px;}
+  .node-state{font-size:10px; color:var(--muted);}
+
+  /* Animated Wire Link */
+  .wire-channel-box{
+    height:36px; background:#080e1b; border:1px solid var(--line); border-radius:8px;
+    position:relative; overflow:hidden; display:flex; align-items:center; padding:0 10px;
+  }
+  .flow-dot{
+    position:absolute; width:48px; height:20px; border-radius:4px; font-family:var(--mono);
+    font-size:9.5px; font-weight:700; display:flex; align-items:center; justify-content:center;
+    background:var(--amber); color:#000; box-shadow:0 0 10px var(--amber);
+    transition:left 0.8s ease-in-out;
+  }
+  .flow-dot.p2p{background:var(--green); color:#000; box-shadow:0 0 10px var(--green);}
+  .flow-dot.lost{background:var(--red); color:#fff; box-shadow:0 0 10px var(--red);}
+
+  /* Column 3: Resilience & SPOF Metrics */
+  .spof-box{display:flex; flex-direction:column; gap:10px; flex:1;}
+  .spof-panel{
+    background:#0d1527; border:1px solid var(--line); border-radius:10px;
+    padding:10px; font-size:11px; font-family:var(--mono); flex:1; display:flex; flex-direction:column;
+  }
+  .spof-title{color:var(--cyan); font-weight:700; margin-bottom:6px; display:flex; justify-content:space-between;}
+
+  .risk-card{
+    background:#111b31; border:1px solid var(--line); border-radius:8px; padding:10px;
+    display:flex; flex-direction:column; gap:6px; margin-top:4px;
+  }
+  .risk-row{display:flex; justify-content:space-between; align-items:center;}
+  .risk-row .lbl{color:var(--muted);}
+  .risk-row .val{font-weight:700;}
+  .risk-row .val.bad{color:var(--red);}
+  .risk-row .val.good{color:var(--green);}
+  .risk-row .val.warn{color:var(--amber);}
+
+  /* Stats Bar */
+  .stats-bar{
+    display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;
+    margin-top:auto; padding-top:10px; border-top:1px dashed var(--line);
+  }
+  .stat-item{background:#0e172a; padding:6px 6px; border-radius:6px; border:1px solid var(--line); text-align:center;}
+  .stat-val{font-size:13px; font-weight:700; color:var(--text); font-family:var(--mono);}
+  .stat-val.good{color:var(--green);}
+  .stat-val.warn{color:var(--amber);}
+  .stat-val.bad{color:var(--red);}
+  .stat-lbl{font-size:10px; color:var(--muted);}
+
+  /* ---------- console ---------- */
+  .console{margin-top:24px; background:var(--panel2); border:1px solid var(--line); border-radius:14px; overflow:hidden;}
+  .console-head{
+    display:flex; align-items:center; gap:10px; padding:10px 16px;
+    border-bottom:1px solid var(--line); background:rgba(255,255,255,.02);
+    font-size:13px; color:var(--muted); flex-wrap:wrap;
+  }
+  .btns{display:flex; gap:8px; flex-wrap:wrap; margin-left:auto;}
+  button{
+    font-family:var(--mono); font-size:12px; color:var(--text);
+    background:#1d2a47; border:1px solid var(--line); border-radius:8px;
+    padding:6px 12px; cursor:pointer; transition:all .15s;
+  }
+  button:hover:not(:disabled){border-color:var(--amber); color:var(--amber); transform:translateY(-1px);}
+  button:disabled{opacity:.3; cursor:not-allowed;}
+  button.primary{border-color:var(--amber); color:var(--amber);}
+  button.action-btn{border-color:var(--cyan); color:var(--cyan);}
+  .clear-btn{font-size:11px; padding:4px 8px; color:var(--muted); background:#151f34; border:1px solid var(--line);}
+  .clear-btn.armed{border-color:var(--red); color:var(--red); background:#28151f;}
+
+  .logbox{padding:12px 16px; max-height:220px; overflow-y:auto; font-family:var(--mono); font-size:12px;}
+  .logline{margin-bottom:6px;}
+  .logline .cmd{color:var(--amber); font-weight:700;}
+  .logline .expl{color:var(--muted); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:11.5px; margin-top:1px;}
+  .logline.ok{color:var(--green);}
+  .logline.err{color:var(--red);}
+  .logline.info{color:var(--cyan);}
+
+  /* ---------- details cards ---------- */
+  .why{margin-top:22px; display:grid; grid-template-columns:repeat(3,1fr); gap:12px;}
+  .why-card{background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:14px 16px; font-size:13px;}
+  .why-card h3{font-size:13.5px; margin-bottom:6px;}
+  .why-card p{color:var(--muted); font-size:12px;}
+  .why-card b{color:var(--text);}
+  .w1 h3{color:var(--cyan);} .w2 h3{color:var(--amber);} .w3 h3{color:var(--green);}
+
+  footer{margin-top:26px; text-align:center; color:var(--muted); font-size:12px;}
+  @media (max-width:900px){ .why{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>集中式 Broker vs 去中心化 P2P：<span class="dot-word">单点崩溃之痛</span> · <span class="dot-word">分布式局部自愈</span></h1>
+  <p class="sub">治「为什么 ROS 1 roscore 必须被干掉？为什么工业机器人拼死也要 P2P？」：透视中心前台（Broker）心脏骤停致使全网休克的脆弱本质，与 P2P 全网对等、断网脱机也能自组网编队的韧性生命力。</p>
+
+  <div class="ladder-badge">
+    🧱 DDS 知识体系依赖阶梯 · 第 3 层地基专属课（自底向上 · 逐层建立实体感）
+  </div>
+
+  <!-- 机制落地对照表 -->
+  <div class="ltable">
+    <table>
+      <thead>
+        <tr>
+          <th>心智模型 (绰号)</th>
+          <th>网络真名</th>
+          <th>物理架构本质</th>
+          <th>致命弱点 vs 核心优势</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="nick">前台大总管</td>
+          <td class="real">集中式 Broker (ROS 1 roscore / MQTT)</td>
+          <td class="phys">所有节点启动时必须向该单一进程注册，所有寻人字典全在它内存中</td>
+          <td class="life"><b>单点故障 (SPOF)</b>：前台一死全网休克；大吞吐量数据撑爆中间人</td>
+        </tr>
+        <tr>
+          <td class="nick">全员对等自组织</td>
+          <td class="real">去中心化 P2P (DDS / ROS 2)</td>
+          <td class="phys">没有中心服务器，各节点在自己内存里维护邻居表，数据直连互通</td>
+          <td class="life"><b>天然局部容灾</b>：任何节点宕机仅影响它自己；脱网编队依然能互通避障</td>
+        </tr>
+        <tr>
+          <td class="nick">两趟折返跑</td>
+          <td class="real">双倍跃点延迟 (Double Hop)</td>
+          <td class="phys">Node A → Broker → Node B，数据在网络上被复制转发两次</td>
+          <td class="life">加倍消耗局域网带宽，高频控制延迟成倍上升</td>
+        </tr>
+        <tr>
+          <td class="nick">山洞盲飞灾难</td>
+          <td class="real">脱机编队失效 (Network Partition)</td>
+          <td class="phys">无人机飞入山洞与地面站失联，若依赖中心前台，两架飞机彼此当场失联相撞</td>
+          <td class="life">去中心化 P2P 下，即使断开外网，局域网两机依然直连避障</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 关卡轨道 -->
+  <div class="journey">
+    <div class="rail" id="rail"></div>
+  </div>
+
+  <!-- 任务卡 -->
+  <div class="quest" id="quest"></div>
+
+  <!-- 三列舞台 -->
+  <div class="stage-scroll">
+    <div class="stage">
+
+      <!-- Column 1: 架构配置与系统代码 -->
+      <div class="col c1">
+        <div class="col-head">
+          <div class="nick">架构代码与跃点透视</div>
+          <div class="real">Architecture & Config</div>
+          <div class="duty">观察中心化配置与去中心化代码差异</div>
+        </div>
+
+        <div class="codebox-wrap">
+          <div class="codebox-topbar">
+            <div class="codebox-dots">
+              <span class="codebox-dot dot-r"></span>
+              <span class="codebox-dot dot-y"></span>
+              <span class="codebox-dot dot-g"></span>
+            </div>
+            <span id="codebox-filename">ros1_master_client.py</span>
+            <span style="font-size:10px; color:var(--muted); font-family:var(--mono);">ROS 1 / MQTT</span>
+          </div>
+          <div class="codebox" id="codebox"></div>
+        </div>
+
+        <div class="hop-card">
+          <div class="hop-title">
+            <span>🌐 网络传输跃点 (Network Hops)</span>
+            <span id="hop-badge" style="color:var(--amber);">2 Hops (经由中心)</span>
+          </div>
+          <div style="font-size:10.5px; color:var(--muted); line-height:1.6;" id="hop-desc">
+            Node A 发送数据必须先推给 <b>roscore / Broker</b>，再由中心推给 Node B。延迟翻倍，带宽浪费！
+          </div>
+        </div>
+      </div>
+
+      <!-- Column 2: 拓扑竞技场与断网模拟 -->
+      <div class="col c2">
+        <div class="col-head">
+          <div class="nick">物理拓扑与容灾模拟机</div>
+          <div class="real">Physical Topology Arena</div>
+          <div class="duty">亲身体会单点暴毙与分布式自愈</div>
+        </div>
+
+        <div class="arena-box">
+          <!-- 架构指示条 -->
+          <div class="arch-banner">
+            <span>🏛️ 当前通信拓扑模型:</span>
+            <span class="arch-badge broker" id="arch-badge">集中式 Broker 架构</span>
+          </div>
+
+          <!-- 拓扑舞台 -->
+          <div class="topo-canvas">
+            <!-- 上层：中心前台 -->
+            <div class="center-broker-zone">
+              <div class="broker-card" id="broker-box">
+                <div class="broker-title" id="broker-title">🏛️ roscore / 中心 Broker</div>
+                <div style="font-size:10px; color:var(--muted); margin-top:2px;" id="broker-desc">IP: 192.168.1.1 (全网前台接待员)</div>
+                <div style="font-size:9.5px; color:var(--green); font-weight:700; margin-top:3px;" id="broker-health">● 运行正常 (全网咽喉)</div>
+              </div>
+            </div>
+
+            <!-- 数据传输通道动画 -->
+            <div class="wire-channel-box">
+              <span style="font-size:10px; color:var(--muted); font-family:var(--mono);">[局域网信道通道]</span>
+              <div class="flow-dot" id="flow-dot" style="left:-60px;">MSG</div>
+            </div>
+
+            <!-- 下层：工作节点 (Node A 底盘 / Node B 雷达导航 / Node C 监视器) -->
+            <div class="nodes-layer">
+              <div class="agent-node healthy" id="node-a">
+                <div class="node-name">🤖 Node A (底盘)</div>
+                <div class="node-state" id="node-a-state">正常通信</div>
+              </div>
+              <div class="agent-node healthy" id="node-b">
+                <div class="node-name">🧠 Node B (导航)</div>
+                <div class="node-state" id="node-b-state">正常通信</div>
+              </div>
+              <div class="agent-node healthy" id="node-c">
+                <div class="node-name">🛸 Node C (无人机2)</div>
+                <div class="node-state" id="node-c-state">正常通信</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Column 3: 韧性账本与单点故障分析 -->
+      <div class="col c3">
+        <div class="col-head">
+          <div class="nick">系统韧性与风险账本</div>
+          <div class="real">Resilience Ledger</div>
+          <div class="duty">核验单点故障率、脱机生存能力</div>
+        </div>
+
+        <div class="spof-box">
+          <div class="spof-panel">
+            <div class="spof-title">
+              <span>🛡️ 分布式系统韧性诊断</span>
+              <span id="spof-badge" style="color:var(--red);">SPOF 危险</span>
+            </div>
+            <div class="risk-card">
+              <div class="risk-row">
+                <span class="lbl">单点故障 (SPOF):</span>
+                <span class="val bad" id="metric-spof">100% (中心暴毙全网死)</span>
+              </div>
+              <div class="risk-row">
+                <span class="lbl">脱机编队自愈能力:</span>
+                <span class="val bad" id="metric-offline">0% (失去前台两眼一抹黑)</span>
+              </div>
+              <div class="risk-row">
+                <span class="lbl">网络吞吐受限瓶颈:</span>
+                <span class="val bad" id="metric-bottleneck">极高 (受前台带宽压制)</span>
+              </div>
+              <div class="risk-row">
+                <span class="lbl">端到端传输跳数:</span>
+                <span class="val warn" id="metric-hops">2 跳 (需前台折返)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 统计仪表盘 -->
+          <div class="stats-bar">
+            <div class="stat-item">
+              <div class="stat-val" id="st-sent">0</div>
+              <div class="stat-lbl">传输报文</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-val bad" id="st-crashes">0</div>
+              <div class="stat-lbl">全网瘫痪次数</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-val good" id="st-p2p-alive">0</div>
+              <div class="stat-lbl">P2P自愈成功</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 控制台 -->
+  <div class="console">
+    <div class="console-head">
+      <span>控制台 · 分布式拓扑演练驱动器</span>
+      <div class="btns">
+        <button id="btn-rearm" class="clear-btn" onclick="handleClearClick()">⟲ 清除全部进度</button>
+      </div>
+    </div>
+    <div class="console-head" style="background:rgba(0,0,0,.2); border-bottom:1px solid var(--line);">
+      <span style="font-size:12px; color:var(--muted);">当前关卡专属动作：</span>
+      <div class="btns" id="action-btns"></div>
+    </div>
+    <div class="logbox" id="logbox"></div>
+  </div>
+
+  <!-- 底部三格原理剖析 -->
+  <div class="why">
+    <div class="why-card w1">
+      <h3>① 为什么 ROS 1 的 roscore 曾经让无数工程师夜不能寐？</h3>
+      <p><b>全网休克死穴</b>：在 ROS 1 中，只要 <code>roscore</code> 进程因为内存泄漏、OOM 杀掉或 Wi-Fi 抖动断连，所有节点虽然还在跑，但它们再也无法感知任何新话题，整个机器人沦为废铁！<br>
+      <b>解法</b>：DDS 没有 roscore，节点启动即自带发现能力。</p>
+    </div>
+    <div class="why-card w2">
+      <h3>② 为什么脱网无人机编队必须去中心化？</h3>
+      <p><b>山洞盲飞场景</b>：3 架无人机飞入无信号隧道。如果必须连回基地的主控服务器，它们立刻失去彼此坐标在空中相撞！<br>
+      <b>P2P 韧性</b>：在 DDS 下，只要这 3 架飞机在一个随身携带的局域网 Wi-Fi 内，它们直接互相多播建表，即使与外界断联一万年，空中避障通信依然完好无损！</p>
+    </div>
+    <div class="why-card w3">
+      <h3>③ 为什么去中心化还能省下近一半的局域网带宽？</h3>
+      <p><b>消灭中转站</b>：在传统 MQTT/Broker 架构下，A 传 100MB 点云给 B，先占用 A→Broker 的 100MB 带宽，再占用 Broker→B 的 100MB 带宽（总计 200MB）。<br>
+      <b>直连效益</b>：P2P 模式下 A 知道 B 的单播 IP，直接网卡对网卡一次传完（100MB），路由器和 CPU 负荷直接腰斩！</p>
+    </div>
+  </div>
+
+  <footer>
+    Broker vs P2P Mental Model · 个人自适应学习系统专用交付物 · 遵循「机制直述 + 课程化 + 可重玩机制」标准
+  </footer>
+
+</div>
+
+<script>
+/* ==================== 状态机与持久化 ==================== */
+const STORAGE_KEY = 'broker_p2p_mental_model_v1';
+
+let currentStage = 0;
+let clearClickCount = 0;
+let clearTimer = null;
+
+let world = {
+  arch: 'BROKER', // 'BROKER' | 'P2P'
+  brokerDead: false,
+  nodeADead: false,
+  nodeBDead: false,
+  nodeCDead: false,
+  tunnelPartition: false,
+  sentCount: 0,
+  crashCount: 0,
+  p2pAliveCount: 0,
+  flowing: false
+};
+
+const STAGES = [
+  {
+    title: "起点：中心前台看起来很美",
+    tag: "00 起点",
+    desc: "在集中式 Broker 架构下（如 ROS 1 / MQTT），所有节点依赖一个中央 roscore / Broker 统一调度。",
+    obs: "看中间上方巨大的前台接待员：所有通信信令必须先向它汇报，表面上秩序井然。",
+    pass: "建立中心化架构全貌，准备迎接单点崩溃惨剧。",
+    initBtn: { text: "发起一次中心化中转通信", fn: "doBrokerComm" }
+  },
+  {
+    title: "单点崩溃之痛 —— 前台心脏骤停",
+    tag: "01 单点暴毙",
+    desc: "中央 roscore 进程遭遇异常 OOM 挂掉！或者与主机的连接断开！",
+    obs: "亲眼看中心前台瞬间爆红倒地！下方所有节点瞬间变红瘫痪！全网通信彻底死锁休克！",
+    pass: "彻底钉住单点故障 (SPOF) 的毁灭性打击：中心一死，全网殉葬。",
+    initBtn: { text: "引爆中心前台 (模拟 roscore 崩溃)", fn: "doKillBroker" }
+  },
+  {
+    title: "吞吐量之痛 —— 双倍跃点撑爆中心",
+    tag: "02 吞吐瓶颈",
+    desc: "节点间想要传输高频雷达数据，但必须在中央前台'折返跑'两趟 (A -> Broker -> B)。",
+    obs: "看左侧跃点监控：双倍延迟、双倍带宽开销，前台接待员网络成为全网最窄的交通堵塞瓶颈！",
+    pass: "理解去中心化的另一层物理动机：拯救局域网带宽与时延。",
+    initBtn: { text: "切换为去中心化 P2P 架构 (DDS)", fn: "doSwitchToP2P" }
+  },
+  {
+    title: "全员对等 —— 去中心化 P2P 诞生",
+    tag: "03 P2P诞生",
+    desc: "彻底干掉中心前台！没有谁是主宰。各节点依靠自己的内存名片表（多播发现）直连互通。",
+    obs: "看中间前台虚化退场！下方节点直接点对点拉通管道，跃点从 2 跳直接降为 1 跳直连！",
+    pass: "牢固确立去中心化全员对等自组织的物理拓扑。",
+    initBtn: { text: "发起一次 P2P 直连通信", fn: "doP2PDirectComm" }
+  },
+  {
+    title: "局部容灾 —— 某节点宕机全网毫发无伤",
+    tag: "04 局部容灾",
+    desc: "模拟无人机 Node C 电池耗尽断电宕机！观测对其他正常运行的节点有何影响。",
+    obs: "仅 Node C 自身熄灯！Node A 与 Node B 的通信依然高速通畅，全网零瘫痪！",
+    pass: "体会真正的高可用与局部容灾：某一个零件坏了，整台机器人绝不整体休克。",
+    initBtn: { text: "杀死单个节点 (模拟 Node C 宕机)", fn: "doKillSingleNode" }
+  },
+  {
+    title: "脱网生存 —— 山洞脱机编队自组网",
+    tag: "05 脱机自愈",
+    desc: "Node A 与 Node B 飞入无外网信号的山洞，彻底失去与基地地面站的一切联系！",
+    obs: "虽然外网全断，但两节点在一个随身局域网内，依然能够直接通信避障，绝不相撞！",
+    pass: "掌握去中心化在工业/国防/多智能体编队中不可替代的生命力。",
+    initBtn: { text: "进入山洞脱网模式 (验证编队避障)", fn: "doTunnelPartition" }
+  },
+  {
+    title: "毕业小测：3 道分布式架构与去中心化决策题",
+    tag: "06 毕业小测",
+    desc: "检测你对集中式 Broker 与去中心化 P2P 架构本质的理解深度，完成 3 道场景决策。",
+    obs: "根据物理拓扑机制，做出正确的架构决策。",
+    pass: "3 题全对即标志第 3 层地基彻底夯实！",
+    initBtn: null
+  },
+  {
+    title: "终点：分布式架构演练自由沙盒 (Free Play)",
+    tag: "07 自由模式",
+    desc: "自由在 Broker 与 P2P 之间切换，随时杀死中心或杀死单个节点，观测全网韧性反应！",
+    obs: "可随时重刷小测或倒带回任一关卡。",
+    pass: "自由探索分布式架构机制。",
+    initBtn: null
+  }
+];
+
+/* ==================== 视图与控制台渲染 ==================== */
+function addLog(cmd, type, expl) {
+  const box = document.getElementById('logbox');
+  const div = document.createElement('div');
+  div.className = `logline ${type}`;
+  div.innerHTML = `<span class="cmd">&gt; ${cmd}</span><div class="expl">${expl}</div>`;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+function renderRail() {
+  const rail = document.getElementById('rail');
+  rail.innerHTML = '';
+  STAGES.forEach((st, idx) => {
+    const pill = document.createElement('div');
+    pill.className = `pill ${idx < currentStage ? 'done' : ''} ${idx === currentStage ? 'current' : ''}`;
+    pill.innerText = st.tag;
+    pill.onclick = () => { buildToStage(idx); };
+    rail.appendChild(pill);
+    if(idx < STAGES.length - 1){
+      const sep = document.createElement('div');
+      sep.className = 'sep';
+      rail.appendChild(sep);
+    }
+  });
+}
+
+function renderQuest() {
+  const q = document.getElementById('quest');
+  const st = STAGES[currentStage];
+
+  if(currentStage === 6) {
+    renderQuizQuest(q);
+    return;
+  }
+
+  if(currentStage === 7) {
+    q.className = 'quest free';
+    q.innerHTML = `
+      <div class="quest-head">
+        <span class="quest-stage" style="color:var(--green);">STAGE 07 · 自由模式</span>
+        <span class="quest-title">${st.title}</span>
+        <button class="replay-btn" onclick="buildToStage(currentStage)">↺ 重置沙盒</button>
+      </div>
+      <div class="q-row"><span class="k">🎯 当前状态</span><span class="v">第 3 层地基（Broker vs P2P 架构物理本质）已全部解锁并彻底通关！</span></div>
+      <div class="q-row"><span class="k">👀 自由试验</span><span class="v">使用下方控制台自由切换架构模式、杀死中心或注入网络断连。</span></div>
+      <div class="go">
+        <button onclick="doSwitchToP2P()" style="border-color:var(--green); color:var(--green);">切换到 P2P 模式</button>
+        <button onclick="doKillBroker()" style="border-color:var(--red); color:var(--red); margin-left:8px;">引爆中心前台</button>
+        <button onclick="doTunnelPartition()" style="border-color:var(--purple); color:var(--purple); margin-left:8px;">山洞脱机自组网</button>
+      </div>
+    `;
+    renderActionBtns();
+    return;
+  }
+
+  q.className = 'quest';
+  q.innerHTML = `
+    <div class="quest-head">
+      <span class="quest-stage">STAGE 0${currentStage} / 07</span>
+      <span class="quest-title">${st.title}</span>
+      <button class="replay-btn" onclick="buildToStage(currentStage)">↺ 重玩本关</button>
+      <button class="skip" onclick="skipStage()">跳至下一关 &gt;</button>
+    </div>
+    <div class="q-row"><span class="k">📍 任务背景</span><span class="v">${st.desc}</span></div>
+    <div class="q-row"><span class="k">👀 核心观察</span><span class="v">${st.obs}</span></div>
+    <div class="q-row"><span class="k">✅ 通关机制</span><span class="v">${st.pass}</span></div>
+    ${st.initBtn ? `
+      <div class="go">
+        <button onclick="${st.initBtn.fn}()">${st.initBtn.text}</button>
+      </div>
+    ` : ''}
+  `;
+  renderActionBtns();
+}
+
+function renderActionBtns() {
+  const container = document.getElementById('action-btns');
+  container.innerHTML = '';
+  const st = STAGES[currentStage];
+  if(st && st.initBtn) {
+    const b = document.createElement('button');
+    b.className = 'action-btn';
+    b.innerText = st.initBtn.text;
+    b.onclick = () => { window[st.initBtn.fn](); };
+    container.appendChild(b);
+  }
+}
+
+/* ==================== 小测 (Stage 6) ==================== */
+const QUIZ_DATA = [
+  {
+    q: "1. 为什么在机器人和智能车领域，工业界坚持把 ROS 1 的 roscore 彻底淘汰？",
+    opts: [
+      { t: "A. 因为 roscore 占用了太多硬盘空间", c: false, expl: "错误！roscore 只有几十兆，根本不占硬盘空间。" },
+      { t: "B. roscore 存在致命的单点故障 (SPOF)，一旦中心进程崩溃或心跳丢失，全车所有节点通信瞬间全瘫痪", c: true, expl: "完全正确！中央前台一死，所有在它内存里注册的字典全部丢失，全车变成毫无感知的废铁，这是安全关键领域绝对不能接受的！" },
+      { t: "C. 因为 roscore 只能在 Windows 上运行，不能在 Linux 上运行", c: false, expl: "错误！ROS 1 官方主力支持就是 Linux。" }
+    ]
+  },
+  {
+    q: "2. 在集中式 Broker（如 MQTT）架构下，节点 A 发送 100MB 激光点云给隔壁工位的节点 B，局域网中实际产生了多少网络流量？",
+    opts: [
+      { t: "A. 100 MB", c: false, expl: "错误！你忽略了 Broker 的中间转发。" },
+      { t: "B. 200 MB，因为数据必须先从 A 传到 Broker (100MB)，再由 Broker 传给 B (100MB)，产生双倍跃点消耗", c: true, expl: "完全正确！集中式 Broker 导致数据走双倍折返跑，不仅带宽翻倍浪费，更把端到端时延硬生生翻倍！" },
+      { t: "C. 0 MB，因为走的是内存共享", c: false, expl: "错误！分布式节点在不同物理机器上，走的是物理网络。" }
+    ]
+  },
+  {
+    q: "3. 3 架无人机飞进深山矿洞，彻底失去了与地面指挥中心的信号，在去中心化 P2P (DDS) 架构下，它们会发生什么？",
+    opts: [
+      { t: "A. 因为联系不上地面中心服务器，3 架飞机彼此视盲，发生相撞坠毁", c: false, expl: "错误！那是集中式 Broker 架构下的悲剧。" },
+      { t: "B. 3 架飞机在一个随身局域网 Wi-Fi 内，依然通过 P2P 保持点对点直接通信，避障与队形完好无损", c: true, expl: "完全正确！去中心化 P2P 具备天然的局部自组网存活能力！外网全断不影响内部两两对等互通！" },
+      { t: "C. 飞机电量会立即瞬间耗尽", c: false, expl: "错误！通信协议与电池化学放电无关。" }
+    ]
+  }
+];
+
+let quizAnswers = {};
+
+function renderQuizQuest(container) {
+  container.className = 'quest';
+  let html = `
+    <div class="quest-head">
+      <span class="quest-stage" style="color:var(--amber);">STAGE 06 · 毕业小测</span>
+      <span class="quest-title">分布式拓扑架构考核 (3 题全对毕业)</span>
+      <button class="replay-btn" onclick="buildToStage(6)">↺ 重置做题</button>
+    </div>
+    <div class="quiz">
+  `;
+
+  QUIZ_DATA.forEach((qitem, qidx) => {
+    html += `
+      <div class="qitem">
+        <div class="qtext">${qitem.q}</div>
+        <div class="opts">
+    `;
+    qitem.opts.forEach((opt, oidx) => {
+      const selected = quizAnswers[qidx] === oidx;
+      let cls = 'opt';
+      if(quizAnswers[qidx] !== undefined) {
+        if(opt.c) cls += ' correct';
+        else if(selected) cls += ' wrong';
+        else cls += ' dim';
+      }
+      html += `<button class="${cls}" onclick="answerQuiz(${qidx}, ${oidx})">${opt.t}</button>`;
+    });
+    if(quizAnswers[qidx] !== undefined) {
+      const chosen = qitem.opts[quizAnswers[qidx]];
+      html += `<div class="qexpl">${chosen.expl}</div>`;
+    }
+    html += `</div></div>`;
+  });
+
+  html += `</div>`;
+  container.innerHTML = html;
+}
+
+function answerQuiz(qidx, oidx) {
+  quizAnswers[qidx] = oidx;
+  renderQuest();
+
+  const allCorrect = QUIZ_DATA.every((q, idx) => quizAnswers[idx] !== undefined && q.opts[quizAnswers[idx]].c);
+  if(allCorrect) {
+    addLog('毕业小测全对通过！', 'ok', '太震撼了！你已经彻底打牢了 Broker vs 去中心化 P2P 的系统架构本质！第 3 层地基彻底夯实！即将解锁自由沙盒。');
+    setTimeout(() => {
+      currentStage = 7;
+      saveState();
+      render();
+    }, 1200);
+  }
+}
+
+/* ==================== 舞台与三列渲染 ==================== */
+function render() {
+  renderRail();
+  renderQuest();
+  renderCodebox();
+  renderArena();
+  renderSpofMetrics();
+  saveState();
+}
+
+function renderCodebox() {
+  const box = document.getElementById('codebox');
+  const fnElem = document.getElementById('codebox-filename');
+  const hopBadge = document.getElementById('hop-badge');
+  const hopDesc = document.getElementById('hop-desc');
+  let code = '';
+
+  if(world.arch === 'BROKER') {
+    fnElem.innerText = 'ros1_master_node.py';
+    hopBadge.innerText = '2 Hops (经由中心)';
+    hopBadge.style.color = 'var(--amber)';
+    hopDesc.innerHTML = `Node A 发送数据必须先推给 <b>roscore / Broker</b>，再由中心推给 Node B。延迟翻倍，带宽浪费！`;
+
+    code = `
+<span class="cm"># ===== 集中式 Broker (ROS 1 / MQTT) =====</span>
+<span class="kw">import</span> rospy
+<span class="kw">from</span> std_msgs.msg <span class="kw">import</span> String
+
+<span class="cm"># 致命死穴：必须预先写死中央主控 IP！</span>
+<span class="cm"># export ROS_MASTER_URI=http://192.168.1.1:11311</span>
+rospy.<span class="fn">init_node</span>(<span class="str">'chassis_node'</span>)
+
+<span class="cm"># 节点向 roscore 登记：我有 /cmd_vel</span>
+<span class="cm"># 一旦 roscore 崩溃，后续再也无法解析任何话题！</span>
+pub = rospy.<span class="fn">Publisher</span>(<span class="str">'/cmd_vel'</span>, String, queue_size=<span class="val">10</span>)
+rospy.<span class="fn">spin</span>()`;
+  } else {
+    fnElem.innerText = 'ros2_dds_p2p.cpp';
+    hopBadge.innerText = '1 Hop (P2P 网卡直连)';
+    hopBadge.style.color = 'var(--green)';
+    hopDesc.innerHTML = `无中心服务器！依靠多播互相知晓后，物理单播直连。零中间人，延迟极低，带宽减半！`;
+
+    code = `
+<span class="cm">// ===== 去中心化 P2P 数据总线 (DDS / ROS 2) =====</span>
+<span class="kw">#include</span> <span class="str">&lt;rclcpp/rclcpp.hpp&gt;</span>
+<span class="kw">#include</span> <span class="str">&lt;geometry_msgs/msg/twist.hpp&gt;</span>
+
+<span class="cm">// 零中心！无需任何 MASTER_URI 环境变量！</span>
+<span class="kw">auto</span> node = rclcpp::Node::<span class="fn">make_shared</span>(<span class="str">"chassis_node"</span>);
+
+<span class="cm">// 节点各自在内存持有邻居字典，通过局域网多播自动互换名片！</span>
+<span class="kw">auto</span> pub = node-&gt;<span class="fn">create_publisher</span>&lt;geometry_msgs::msg::Twist&gt;(
+    <span class="str">"/cmd_vel"</span>, <span class="val">10</span>);
+
+<span class="cm">// 任何外部服务器宕机，当前节点依然活蹦乱跳！</span>`;
+  }
+
+  box.innerHTML = code.trim();
+}
+
+function renderArena() {
+  const archBadge = document.getElementById('arch-badge');
+  const brokerBox = document.getElementById('broker-box');
+  const brokerTitle = document.getElementById('broker-title');
+  const brokerHealth = document.getElementById('broker-health');
+  const nodeA = document.getElementById('node-a');
+  const nodeB = document.getElementById('node-b');
+  const nodeC = document.getElementById('node-c');
+  const nodeAState = document.getElementById('node-a-state');
+  const nodeBState = document.getElementById('node-b-state');
+  const nodeCState = document.getElementById('node-c-state');
+
+  if(world.arch === 'BROKER') {
+    archBadge.className = 'arch-badge broker';
+    archBadge.innerText = '集中式 Broker 架构 (ROS 1 / MQTT)';
+    brokerBox.className = 'broker-card';
+    brokerTitle.innerText = '🏛️ roscore / 中心 Broker';
+
+    if(world.brokerDead) {
+      brokerBox.className = 'broker-card dead';
+      brokerHealth.innerText = '💥 心脏骤停 (OOM 崩溃/断网)';
+      brokerHealth.style.color = 'var(--red)';
+      nodeA.className = 'agent-node paralyzed';
+      nodeB.className = 'agent-node paralyzed';
+      nodeC.className = 'agent-node paralyzed';
+      nodeAState.innerText = '💥 瘫痪 (找不到前台)';
+      nodeBState.innerText = '💥 瘫痪 (找不到前台)';
+      nodeCState.innerText = '💥 瘫痪 (找不到前台)';
+    } else {
+      brokerHealth.innerText = '● 运行正常 (全网咽喉)';
+      brokerHealth.style.color = 'var(--green)';
+      nodeA.className = 'agent-node healthy';
+      nodeB.className = 'agent-node healthy';
+      nodeC.className = 'agent-node healthy';
+      nodeAState.innerText = '已向中心注册';
+      nodeBState.innerText = '已向中心注册';
+      nodeCState.innerText = '已向中心注册';
+    }
+  } else {
+    // P2P 模式
+    archBadge.className = 'arch-badge p2p';
+    archBadge.innerText = '去中心化 P2P 架构 (DDS / ROS 2)';
+    brokerBox.className = 'broker-card bypass';
+    brokerTitle.innerText = '🏛️ [已移除中心前台]';
+    brokerHealth.innerText = '无中心节点 (节点自组网)';
+    brokerHealth.style.color = 'var(--muted)';
+
+    nodeA.className = 'agent-node healthy';
+    nodeB.className = 'agent-node healthy';
+    nodeC.className = 'agent-node healthy';
+    nodeAState.innerText = 'P2P 对等直连';
+    nodeBState.innerText = 'P2P 对等直连';
+    nodeCState.innerText = 'P2P 对等直连';
+
+    if(world.nodeCDead) {
+      nodeC.className = 'agent-node dead';
+      nodeCState.innerText = '已断电 (其他节点正常)';
+    }
+
+    if(world.tunnelPartition) {
+      nodeCState.innerText = '山洞内编队互通';
+      nodeAState.innerText = '山洞内编队互通';
+      nodeBState.innerText = '山洞内编队互通';
+    }
+  }
+}
+
+function renderSpofMetrics() {
+  const badge = document.getElementById('spof-badge');
+  const mSpof = document.getElementById('metric-spof');
+  const mOff = document.getElementById('metric-offline');
+  const mBottleneck = document.getElementById('metric-bottleneck');
+  const mHops = document.getElementById('metric-hops');
+  const stSent = document.getElementById('st-sent');
+  const stCrashes = document.getElementById('st-crashes');
+  const stP2P = document.getElementById('st-p2p-alive');
+
+  stSent.innerText = world.sentCount;
+  stCrashes.innerText = world.crashCount;
+  stP2P.innerText = world.p2pAliveCount;
+
+  if(world.arch === 'BROKER') {
+    badge.innerText = 'SPOF 致命危险';
+    badge.style.color = 'var(--red)';
+    mSpof.className = 'val bad'; mSpof.innerText = '100% (中心暴毙全网死)';
+    mOff.className = 'val bad'; mOff.innerText = '0% (失去前台两眼一抹黑)';
+    mBottleneck.className = 'val bad'; mBottleneck.innerText = '极高 (受前台带宽压制)';
+    mHops.className = 'val warn'; mHops.innerText = '2 跳 (经前台折返)';
+  } else {
+    badge.innerText = '0% SPOF (韧性自愈)';
+    badge.style.color = 'var(--green)';
+    mSpof.className = 'val good'; mSpof.innerText = '0% (无单点故障)';
+    mOff.className = 'val good'; mOff.innerText = '100% (脱机局域网自组网)';
+    mBottleneck.className = 'val good'; mBottleneck.innerText = '零瓶颈 (网卡点对点单播)';
+    mHops.className = 'val good'; mHops.innerText = '1 跳 (直连直达)';
+  }
+}
+
+/* ==================== 物理动作执行器 ==================== */
+function doBrokerComm() {
+  if(world.flowing) return;
+  world.flowing = true;
+
+  const dot = document.getElementById('flow-dot');
+  dot.className = 'flow-dot';
+  dot.innerText = '折返报文';
+  dot.style.left = '20px';
+
+  addLog('Node A 发送数据流经中心 Broker', 'info', '数据先从 Node A 传到中央前台，前台查表再转发给 Node B。');
+
+  setTimeout(() => {
+    dot.style.left = '85%';
+    setTimeout(() => {
+      dot.style.left = '-60px';
+      world.sentCount += 1;
+      addLog('Node B 收到数据 (经历了 2 次跃点)', 'ok', '通信成功，但付出了双倍时延和中央带宽消耗。');
+      world.flowing = false;
+      currentStage = 1;
+      render();
+    }, 800);
+  }, 100);
+}
+
+function doKillBroker() {
+  if(world.flowing) return;
+  world.flowing = true;
+  world.brokerDead = true;
+  world.crashCount += 1;
+
+  const dot = document.getElementById('flow-dot');
+  dot.className = 'flow-dot lost';
+  dot.innerText = '中断!';
+  dot.style.left = '20px';
+
+  addLog('💥 致命事件：roscore / Broker 崩溃！', 'err', '中央前台接待员进程崩溃死亡！全网失联！');
+
+  setTimeout(() => {
+    dot.style.left = '50%';
+    setTimeout(() => {
+      dot.style.left = '-60px';
+      addLog('全网节点瘫痪休克！', 'err', '【SPOF 单点暴毙】所有节点再也找不到彼此，底盘失联，雷达失效，整台机器人沦为废铁！');
+      world.flowing = false;
+      currentStage = 2;
+      render();
+    }, 600);
+  }, 100);
+}
+
+function doSwitchToP2P() {
+  if(world.flowing) return;
+  world.arch = 'P2P';
+  world.brokerDead = false;
+  world.p2pAliveCount += 1;
+  addLog('架构重构：切换为去中心化 P2P (DDS / ROS 2)', 'ok', '【彻底干掉前台】移除中央前台！各节点依靠内存邻居字典直接对等通信！');
+  currentStage = 3;
+  render();
+}
+
+function doP2PDirectComm() {
+  if(world.flowing) return;
+  world.flowing = true;
+
+  const dot = document.getElementById('flow-dot');
+  dot.className = 'flow-dot p2p';
+  dot.innerText = 'P2P 直连';
+  dot.style.left = '20px';
+
+  addLog('Node A 直连发送至 Node B (1 Hop)', 'info', '无需任何前台介入，单播直接对准 Node B 网卡发出！');
+
+  setTimeout(() => {
+    dot.style.left = '85%';
+    setTimeout(() => {
+      dot.style.left = '-60px';
+      world.sentCount += 1;
+      addLog('Node B 秒级接收！', 'ok', '【零瓶颈零延迟】端到端只有 1 跳，带宽开销减少 50%，无单点风险！');
+      world.flowing = false;
+      currentStage = 4;
+      render();
+    }, 800);
+  }, 100);
+}
+
+function doKillSingleNode() {
+  if(world.flowing) return;
+  world.flowing = true;
+  world.nodeCDead = true;
+  world.p2pAliveCount += 1;
+  addLog('故障注入：Node C (无人机2) 遭遇断电死机', 'warn', '模拟局部节点物理损坏...');
+  setTimeout(() => {
+    addLog('局部容灾验证通过！', 'ok', '【全网零感染】仅 Node C 自己熄灯，Node A 与 Node B 的通信依然高速稳定运行！分布式自愈完胜！');
+    world.flowing = false;
+    currentStage = 5;
+    render();
+  }, 400);
+}
+
+function doTunnelPartition() {
+  if(world.flowing) return;
+  world.flowing = true;
+  world.tunnelPartition = true;
+  world.nodeCDead = false;
+  world.p2pAliveCount += 1;
+
+  addLog('山洞断网：两架无人机飞入隧道，切断外网地面站', 'info', '虽然外网全断，但局域网依然存在...');
+  setTimeout(() => {
+    addLog('无人机局域网 P2P 编队避障成功！', 'ok', '【脱网生存】两机在隧道内直接组网互通位置，毫秒级避开岩壁，绝不相撞！去中心化威力尽显！');
+    world.flowing = false;
+    currentStage = 6;
+    render();
+  }, 500);
+}
+
+function doEnterQuiz() {
+  if(world.flowing) return;
+  currentStage = 6;
+  render();
+}
+
+function skipStage() {
+  if(currentStage < 6) {
+    currentStage += 1;
+    render();
+  }
+}
+
+/* ==================== 可重玩实现 ==================== */
+function saveState() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ currentStage, quizAnswers }));
+  } catch(e) {}
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw) {
+      const data = JSON.parse(raw);
+      if(data && typeof data.currentStage === 'number') {
+        buildToStage(data.currentStage);
+        if(data.quizAnswers) quizAnswers = data.quizAnswers;
+        return true;
+      }
+    }
+  } catch(e) {}
+  return false;
+}
+
+function buildToStage(target) {
+  currentStage = target;
+
+  world.arch = 'BROKER';
+  world.brokerDead = false;
+  world.nodeADead = false;
+  world.nodeBDead = false;
+  world.nodeCDead = false;
+  world.tunnelPartition = false;
+  world.flowing = false;
+
+  const dot = document.getElementById('flow-dot');
+  if(dot) { dot.style.left = '-60px'; }
+
+  if(target === 1) {
+    world.arch = 'BROKER';
+    world.sentCount = 1;
+  } else if(target === 2) {
+    world.arch = 'BROKER';
+    world.brokerDead = true;
+    world.crashCount = 1;
+  } else if(target === 3) {
+    world.arch = 'P2P';
+    world.p2pAliveCount = 1;
+  } else if(target === 4) {
+    world.arch = 'P2P';
+    world.sentCount = 2;
+    world.p2pAliveCount = 2;
+  } else if(target === 5) {
+    world.arch = 'P2P';
+    world.nodeCDead = true;
+    world.p2pAliveCount = 3;
+  } else if(target >= 6) {
+    world.arch = 'P2P';
+    world.tunnelPartition = true;
+    world.p2pAliveCount = 4;
+  }
+
+  addLog(`↺ 进度跳转`, 'info', `系统状态已重放并精确同步至第 0${target} 关「${STAGES[target].title}」。`);
+  render();
+}
+
+function handleClearClick() {
+  clearClickCount++;
+  const btn = document.getElementById('btn-rearm');
+  if(clearClickCount === 1) {
+    btn.className = 'clear-btn armed';
+    btn.innerText = '⚠️ 再点一次确认清空全部进度';
+    clearTimer = setTimeout(() => {
+      clearClickCount = 0;
+      btn.className = 'clear-btn';
+      btn.innerText = '⟲ 清除全部进度';
+    }, 3000);
+  } else if(clearClickCount >= 2) {
+    clearTimeout(clearTimer);
+    clearClickCount = 0;
+    btn.className = 'clear-btn';
+    btn.innerText = '⟲ 清除全部进度';
+    try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+    quizAnswers = {};
+    document.getElementById('logbox').innerHTML = '';
+    buildToStage(0);
+    addLog('已清除全部学习记录与进度', 'ok', '已回到起点。');
+  }
+}
+
+// 绑定全局接口
+window.world = world;
+window.STAGES = STAGES;
+window.getCurrentStage = () => currentStage;
+window.buildToStage = buildToStage;
+window.doBrokerComm = doBrokerComm;
+window.doKillBroker = doKillBroker;
+window.doSwitchToP2P = doSwitchToP2P;
+window.doP2PDirectComm = doP2PDirectComm;
+window.doKillSingleNode = doKillSingleNode;
+window.doTunnelPartition = doTunnelPartition;
+window.doEnterQuiz = doEnterQuiz;
+window.handleClearClick = handleClearClick;
+
+window.addEventListener('DOMContentLoaded', () => {
+  if(!loadState()) {
+    buildToStage(0);
+    addLog('欢迎来到 Broker vs 去中心化 P2P 架构演练系统', 'info', '已就绪。点击下方操作按钮，逐关体验单点崩溃与分布式自愈！');
+  }
+});
+</script>
+</body>
+</html>
