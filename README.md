@@ -47,7 +47,7 @@ skill-learn-adaptive/
 ├── profile/                 # 学习者专属记忆档案库 (开箱即用模板)
 │   ├── PROFILE.md           # 学习者认知画像与类比库（随使用动态写回进化）
 │   └── INDEX.md             # 案例向量索引与深浅分档清单
-└── courses/                 # 14 门已交付的高保真物理交互课程网页
+└── courses/                 # 16 门已交付的高保真物理交互课程网页
     ├── dds-mental-model.html                # DDS 核心中间件与 RTPS 协议
     ├── broker-vs-p2p-mental-model.html      # 集中式 Broker vs 去中心化 P2P 架构
     ├── unicast-multicast-mental-model.html  # 单播 vs 广播 vs 多播局域网物理寻人
@@ -59,7 +59,11 @@ skill-learn-adaptive/
     ├── cmake-mental-model.html              # Modern CMake Target 属性传播模型
     ├── langchain-mental-model.html          # LangChain 1.x LCEL 管道传送带
     ├── reverse-engineering.html             # 逆向工程 PE 解剖与反汇编证据链
-    └── rea-mental-model.html                # REA 业务本体模型与 AI 因果审计
+    ├── rea-mental-model.html                # REA 业务本体模型与 AI 因果审计
+    ├── docker-mental-model.html             # Docker 镜像、容器与分层文件系统
+    ├── cpp-virtual-functions.html           # C++ 虚函数与多态调用
+    ├── udp-loss-prevention.html             # UDP 四种丢包死法与三条防线
+    └── algorithm-complexity.html            # 算法复杂度增长率与摊还分析
 ```
 
 ---
@@ -100,9 +104,9 @@ git clone https://github.com/Modify6/skill-learn-adaptive-public.git skill-learn
 
 ---
 
-## 🌐 体验 14 套精品交互课程
+## 🌐 体验 16 套精品交互课程
 
-仓库 `courses/` 下自带 14 套开箱即用、完全自包含（纯原生单文件 HTML+CSS+JS，无任何打包依赖）的工业级概念透视课件：
+仓库 `courses/` 下自带 16 套开箱即用、完全自包含（纯原生单文件 HTML+CSS+JS，无任何打包依赖）的工业级概念透视课件：
 
 ```bash
 cd courses

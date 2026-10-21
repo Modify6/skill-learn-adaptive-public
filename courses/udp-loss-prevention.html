@@ -1,0 +1,1626 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UDP 防丢包 —— 四种死法 · 三条防线</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#151f36; --panel2:#0f1729;
+    --line:#26334d; --text:#dde6f5; --muted:#a6b9d9;
+    --blue:#3b82f6; --green:#22c55e; --purple:#a855f7;
+    --amber:#f5b544; --cyan:#38bdf8; --red:#f87171;
+    --mono:"Cascadia Code",Consolas,"JetBrains Mono",monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:radial-gradient(1200px 600px at 50% -100px,#16223d 0%,var(--bg) 60%);
+    color:var(--text);
+    font-family:system-ui,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+    padding:30px 18px 70px; line-height:1.65;
+  }
+  .wrap{max-width:1240px; margin:0 auto;}
+
+  h1{font-size:26px; letter-spacing:.5px;}
+  h1 .dot-word{color:var(--amber);}
+  .sub{color:var(--muted); margin-top:6px; font-size:14.5px;}
+
+  .ladder-badge{
+    display:inline-flex; align-items:center; gap:8px; margin-top:10px; padding:4px 10px;
+    background:#162442; border:1px solid #2e446d; border-radius:6px; font-size:12px;
+    color:var(--cyan); font-family:var(--mono); font-weight:600;
+  }
+
+  /* ---------- landing table ---------- */
+  .ltable{margin-top:14px; border:1px solid var(--line); border-radius:10px; overflow:hidden; font-size:12px;}
+  .ltable table{width:100%; border-collapse:collapse;}
+  .ltable th{
+    background:rgba(255,255,255,.03); color:var(--muted); font-size:11px; font-weight:600;
+    padding:6px 10px; text-align:left; border-bottom:1px solid var(--line); letter-spacing:1px;
+  }
+  .ltable td{padding:6px 10px; border-bottom:1px solid rgba(38,51,77,.5); vertical-align:top;}
+  .ltable tr:last-child td{border-bottom:none;}
+  .ltable .nick{color:var(--amber); font-weight:700; font-family:var(--mono); white-space:nowrap;}
+  .ltable .real{color:var(--cyan); font-family:var(--mono);}
+  .ltable .phys{color:var(--text);}
+  .ltable .life{color:var(--muted);}
+
+  /* ---------- journey rail ---------- */
+  .journey{margin-top:20px;}
+  .rail{display:flex; align-items:center; gap:5px; overflow-x:auto; padding:4px 2px 10px;}
+  .pill{
+    flex:none; font-size:11px; padding:4px 9px; border-radius:999px;
+    border:1px solid var(--line); color:var(--muted); white-space:nowrap; background:var(--panel2);
+    cursor:pointer;
+  }
+  .pill.done{color:var(--green); border-color:rgba(34,197,94,.55);}
+  .pill.current{color:var(--amber); border-color:var(--amber); box-shadow:0 0 10px rgba(245,181,68,.25); font-weight:700;}
+  .sep{flex:none; width:10px; height:2px; background:var(--line);}
+
+  /* ---------- quest card ---------- */
+  .quest{
+    border:1px solid rgba(245,181,68,.45); border-left:4px solid var(--amber);
+    background:linear-gradient(90deg, rgba(245,181,68,.07), var(--panel2) 45%);
+    border-radius:12px; padding:14px 18px;
+  }
+  .quest.free{border-color:rgba(34,197,94,.45); border-left-color:var(--green);
+    background:linear-gradient(90deg, rgba(34,197,94,.07), var(--panel2) 45%);}
+  .quest-head{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .quest-stage{font-family:var(--mono); font-size:11px; color:var(--amber); letter-spacing:1px;}
+  .quest-title{font-size:16px; font-weight:700;}
+  .skip{font-size:12px; color:var(--muted); cursor:pointer; border:none; background:none; text-decoration:underline dotted; padding:0;}
+  .skip:hover{color:var(--text);}
+  .replay-btn{
+    font-size:11px; padding:3px 8px; border-radius:6px; background:#182338;
+    color:var(--cyan); border:1px solid var(--line); cursor:pointer; margin-left:auto;
+  }
+  .replay-btn:hover{border-color:var(--cyan); background:#1e2d48;}
+  .q-row{display:flex; gap:12px; margin-top:9px; font-size:13.5px;}
+  .q-row .k{flex:none; width:88px; color:var(--muted); font-weight:600;}
+  .q-row .v{color:var(--text);}
+  .q-row .v b{color:var(--amber);}
+  .quest .go{margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;}
+  .quest .go button{
+    font-size:13px; padding:7px 18px; border-color:var(--amber); color:var(--amber);
+    font-family:system-ui,"Microsoft YaHei",sans-serif; font-weight:700;
+  }
+
+  /* quiz */
+  .quiz{margin-top:6px;}
+  .qitem{margin-top:12px; padding-top:10px; border-top:1px dashed var(--line);}
+  .qitem .qtext{font-size:13.5px; font-weight:600;}
+  .opts{display:flex; flex-direction:column; gap:6px; margin-top:8px;}
+  .opt{
+    text-align:left; font-size:12.5px; font-family:var(--mono),system-ui,sans-serif;
+    background:#182338; color:var(--text); border:1px solid var(--line); border-radius:6px;
+    padding:8px 12px; cursor:pointer;
+  }
+  .opt.correct{border-color:var(--green); color:var(--green); background:rgba(34,197,94,.1);}
+  .opt.wrong{border-color:var(--red); color:var(--red); background:rgba(248,113,113,.08);}
+  .opt.dim{opacity:.4;}
+  .qexpl{font-size:12px; color:var(--muted); margin-top:6px;}
+
+  /* decision */
+  .decision-grid{display:flex; flex-direction:column; gap:7px; margin-top:10px;}
+  .decision-btn{
+    text-align:left; font-size:12.5px; background:#182338; color:var(--text);
+    border:1px solid var(--line); border-radius:7px; padding:9px 12px; cursor:pointer;
+    font-family:system-ui,"Microsoft YaHei",sans-serif;
+  }
+  .decision-btn:hover{border-color:var(--cyan);}
+  .decision-btn.active{border-color:var(--amber); background:rgba(245,181,68,.1);}
+  .decision-result{
+    margin-top:10px; padding:10px 12px; border-radius:8px; font-size:12.5px;
+    background:rgba(34,197,94,.07); border:1px solid rgba(34,197,94,.35); display:none;
+  }
+  .decision-result.show{display:block;}
+  .decision-result b{color:var(--green);}
+  .decision-result .why{color:var(--muted); margin-top:4px; display:block;}
+
+  /* ---------- stage (3 columns) ---------- */
+  .stage-scroll{overflow-x:auto; margin-top:20px; padding-bottom:6px;}
+  .stage{
+    min-width:1120px;
+    display:grid;
+    grid-template-columns:1fr 1.45fr 1fr;
+    gap:0 12px; align-items:stretch;
+  }
+  .col-head{margin-bottom:10px; text-align:center;}
+  .col-head .nick{font-size:17px; font-weight:700;}
+  .col-head .real{font-family:var(--mono); font-size:11.5px; color:var(--cyan); letter-spacing:1px; text-transform:uppercase;}
+  .col-head .duty{font-size:12px; color:var(--muted); margin-top:2px;}
+  .col{
+    background:var(--panel2); border:1px solid var(--line); border-radius:14px;
+    padding:14px; display:flex; flex-direction:column; gap:12px; min-height:520px;
+  }
+  .c1 .nick{color:var(--cyan);} .c2 .nick{color:var(--amber);} .c3 .nick{color:var(--green);}
+
+  /* Column 1: Code box */
+  .codebox-wrap{
+    background:#080d18; border:1px solid var(--line); border-radius:10px;
+    overflow:hidden; display:flex; flex-direction:column; flex:1; min-height:300px;
+  }
+  .codebox-topbar{
+    background:#0f172a; padding:6px 12px; border-bottom:1px solid var(--line);
+    display:flex; align-items:center; justify-content:space-between;
+    font-size:11px; font-family:var(--mono); color:var(--muted);
+  }
+  .codebox-dots{display:flex; gap:5px;}
+  .codebox-dot{width:8px; height:8px; border-radius:50%;}
+  .dot-r{background:#f87171;} .dot-y{background:#f5b544;} .dot-g{background:#22c55e;}
+  .codebox{
+    padding:12px; font-family:var(--mono); font-size:11.5px;
+    white-space:pre; overflow:auto; tab-size:4;
+    line-height:1.7; flex:1; color:#dde6f5;
+  }
+  .codebox .cm{color:#78909c; font-style:italic;}
+  .codebox .kw{color:#c792ea; font-weight:700;}
+  .codebox .fn{color:#82aaff; font-weight:700;}
+  .codebox .str{color:#c3e88d;}
+  .codebox .type{color:#ffcb6b;}
+  .codebox .val{color:#f78c6c;}
+
+  .note-card{
+    background:#0d1527; border:1px solid var(--line); border-radius:10px; padding:10px;
+    font-size:11px; font-family:var(--mono);
+  }
+  .note-card .nt{color:var(--cyan); font-weight:700; margin-bottom:5px; display:flex; justify-content:space-between;}
+  .note-card .nd{font-size:10.5px; color:var(--muted); line-height:1.6;}
+
+  /* Column 2: pipeline */
+  .pipe-box{display:flex; flex-direction:column; gap:10px; flex:1;}
+  .mode-banner{
+    background:#101a2f; border:1px dashed var(--line); border-radius:8px;
+    padding:6px 10px; font-size:11.5px; font-family:var(--mono); color:var(--muted);
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .mode-badge{padding:2px 8px; border-radius:4px; font-size:10.5px; font-weight:700; background:#1b2947; color:var(--cyan);}
+  .mode-badge.danger{background:rgba(248,113,113,.15); color:var(--red); border:1px solid rgba(248,113,113,.4);}
+  .mode-badge.safe{background:rgba(34,197,94,.15); color:var(--green); border:1px solid rgba(34,197,94,.4);}
+
+  .metro-track{
+    position:relative; display:flex; align-items:center; justify-content:space-between;
+    gap:2px; padding:30px 2px 8px; background:#090f1d; border:1px solid var(--line);
+    border-radius:10px;
+  }
+  .station{
+    background:#111c33; border:1px solid var(--line); border-radius:6px;
+    padding:5px 5px; font-size:9.5px; font-family:var(--mono); text-align:center;
+    min-width:58px; z-index:2; color:var(--muted); transition:all .2s;
+  }
+  .station.hit{border-color:var(--green); color:var(--green); background:rgba(34,197,94,.1);}
+  .station.dead{border-color:var(--red); color:var(--red); background:rgba(248,113,113,.15); box-shadow:0 0 10px rgba(248,113,113,.3);}
+  .station.nack{border-color:var(--cyan); color:var(--cyan); background:rgba(56,189,248,.12);}
+  .arrow{color:#334764; font-size:10px; z-index:2;}
+  .metro-pkt{
+    position:absolute; top:4px; left:0; width:44px; height:20px; border-radius:4px;
+    background:var(--amber); color:#000; font-family:var(--mono); font-size:9px; font-weight:700;
+    display:flex; align-items:center; justify-content:center;
+    transition:left .34s ease-in-out; z-index:3; transform:translateX(-50%);
+  }
+  .metro-pkt.dead{background:var(--red); color:#fff; box-shadow:0 0 10px var(--red);}
+  .metro-pkt.nack{background:var(--cyan); color:#000; box-shadow:0 0 10px var(--cyan);}
+  .metro-pkt.fec{background:var(--purple); color:#fff; box-shadow:0 0 10px var(--purple);}
+
+  .buffer-panel{
+    background:#0b1324; border:1px solid var(--line); border-radius:8px; padding:7px 9px;
+  }
+  .bp-title{
+    font-size:10.5px; font-family:var(--mono); color:var(--muted);
+    display:flex; justify-content:space-between; margin-bottom:4px;
+  }
+  .bp-title b{color:var(--text);}
+  .bp-slots{display:flex; gap:3px; height:22px;}
+  .bp-slot{
+    flex:1; border-radius:3px; background:#15223c; border:1px solid #233457;
+    display:flex; align-items:center; justify-content:center;
+    font-family:var(--mono); font-size:8.5px; color:#4b6188; transition:all .18s;
+  }
+  .bp-slot.filled{background:rgba(59,130,246,.28); border-color:var(--blue); color:var(--cyan);}
+  .bp-slot.overflow{background:rgba(248,113,113,.3); border-color:var(--red); color:var(--red);}
+  .bp-slot.parity{background:rgba(168,85,247,.28); border-color:var(--purple); color:var(--purple);}
+
+  .drop-bin{
+    background:#1a0f16; border:1px solid rgba(248,113,113,.35); border-radius:8px;
+    padding:7px 10px; display:flex; justify-content:space-between; align-items:center;
+    font-family:var(--mono); font-size:11px;
+  }
+  .drop-bin .db-lbl{color:var(--muted);}
+  .drop-bin .db-count{color:var(--red); font-size:15px; font-weight:700;}
+  .drop-bin.flash{animation:dropFlash .45s ease-out;}
+  @keyframes dropFlash{
+    0%{background:rgba(248,113,113,.45); border-color:var(--red);}
+    100%{background:#1a0f16; border-color:rgba(248,113,113,.35);}
+  }
+  .pace-bar{
+    height:6px; background:#15223c; border-radius:3px; overflow:hidden; margin-top:5px;
+  }
+  .pace-fill{height:100%; width:0%; background:var(--green); transition:width .3s;}
+
+  /* Column 3: metrics */
+  .run-box{display:flex; flex-direction:column; gap:10px; flex:1;}
+  .metric-card{
+    background:#111b31; border:1px solid var(--line); border-radius:8px; padding:9px 11px;
+  }
+  .mc-title{font-size:11px; font-weight:700; color:var(--cyan); margin-bottom:5px;}
+  .metric-row{display:flex; justify-content:space-between; font-size:11px; margin-top:4px;}
+  .metric-row .m-lbl{color:var(--muted);}
+  .metric-row .m-val{font-family:var(--mono); font-weight:700;}
+  .m-val.good{color:var(--green);} .m-val.warn{color:var(--amber);} .m-val.bad{color:var(--red);}
+  .death-list,.defense-list{display:flex; flex-direction:column; gap:4px;}
+  .death-item,.def-item{
+    font-size:10.5px; font-family:var(--mono); color:var(--muted);
+    padding:3px 6px; border-radius:4px; border:1px solid transparent;
+  }
+  .death-item.active{color:var(--red); background:rgba(248,113,113,.12); border-color:rgba(248,113,113,.4);}
+  .def-item{display:flex; justify-content:space-between;}
+  .def-item b{color:var(--text);}
+  .def-item span{color:#4b6188; font-size:9.5px;}
+  .def-item.active{background:rgba(34,197,94,.1); border-color:rgba(34,197,94,.35);}
+  .def-item.active span{color:var(--green);}
+
+  .stats-bar{
+    display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;
+    margin-top:auto; padding-top:10px; border-top:1px dashed var(--line);
+  }
+  .stat-item{background:#0e172a; padding:6px; border-radius:6px; border:1px solid var(--line); text-align:center;}
+  .stat-val{font-size:13px; font-weight:700; color:var(--text); font-family:var(--mono);}
+  .stat-val.good{color:var(--green);}
+  .stat-val.bad{color:var(--red);}
+  .stat-lbl{font-size:9.5px; color:var(--muted);}
+
+  /* ---------- console ---------- */
+  .console{margin-top:24px; background:var(--panel2); border:1px solid var(--line); border-radius:14px; overflow:hidden;}
+  .console-head{
+    display:flex; align-items:center; gap:10px; padding:10px 16px;
+    border-bottom:1px solid var(--line); background:rgba(255,255,255,.02);
+    font-size:13px; color:var(--muted); flex-wrap:wrap;
+  }
+  .btns{display:flex; gap:8px; flex-wrap:wrap; margin-left:auto;}
+  button{
+    font-family:var(--mono); font-size:12px; color:var(--text);
+    background:#1d2a47; border:1px solid var(--line); border-radius:8px;
+    padding:6px 12px; cursor:pointer; transition:all .15s;
+  }
+  button:hover:not(:disabled){border-color:var(--amber); color:var(--amber); transform:translateY(-1px);}
+  button:disabled{opacity:.3; cursor:not-allowed;}
+  button.action-btn{border-color:var(--cyan); color:var(--cyan);}
+  .clear-btn{font-size:11px; padding:4px 8px; color:var(--muted); background:#151f34; border:1px solid var(--line);}
+  .clear-btn.armed{border-color:var(--red); color:var(--red); background:#28151f;}
+
+  .logbox{padding:12px 16px; max-height:230px; overflow-y:auto; font-family:var(--mono); font-size:12px;}
+  .logline{margin-bottom:6px;}
+  .logline .cmd{color:var(--amber); font-weight:700;}
+  .logline .expl{color:var(--muted); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:11.5px; margin-top:1px;}
+  .logline.ok{color:var(--green);}
+  .logline.err{color:var(--red);}
+  .logline.info{color:var(--cyan);}
+
+  .why{margin-top:22px; display:grid; grid-template-columns:repeat(3,1fr); gap:12px;}
+  .why-card{background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:14px 16px; font-size:13px;}
+  .why-card h3{font-size:13.5px; margin-bottom:6px;}
+  .why-card p{color:var(--muted); font-size:12px;}
+  .why-card b{color:var(--text);}
+  .w1 h3{color:var(--cyan);} .w2 h3{color:var(--amber);} .w3 h3{color:var(--green);}
+
+  footer{margin-top:26px; text-align:center; color:var(--muted); font-size:12px;}
+  @media (max-width:900px){ .why{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>UDP 防丢包：<span class="dot-word">四种死法</span> · <span class="dot-word">三条防线</span></h1>
+  <p class="sub">治「UDP 丢了就丢了，到底该在哪里救？」：先把包死在哪一段物理链路上找出来，再匹配对应的防线——限速防溢出、ARQ 重传、FEC 冗余。每个工程场景都有唯一正确的选择。</p>
+
+  <div class="ladder-badge">
+    🧱 位置：传输层之上 · 三条防线（防 / 补 / 冗余）· 本课属于 DDS、音视频、游戏网络的共同底座
+  </div>
+
+  <div class="ltable">
+    <table>
+      <thead>
+        <tr>
+          <th>丢包死法</th>
+          <th>物理死亡位置</th>
+          <th>根因</th>
+          <th>对应防线</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="nick">应用读太慢</td>
+          <td class="real">内核 RCVBUF 溢出</td>
+          <td class="phys">接收端每秒只能处理 20 包，发送端灌了 100 包，缓冲区塞满后内核静默丢弃</td>
+          <td class="life"><b>A 限速</b> / 加大缓冲 / 应用提速</td>
+        </tr>
+        <tr>
+          <td class="nick">发送太突然</td>
+          <td class="real">交换机队列尾丢弃</td>
+          <td class="phys">瞬间突发流量撑爆交换机端口缓存，第 9 个之后的包被尾部丢弃</td>
+          <td class="life"><b>A 限速整形 (Pacing)</b></td>
+        </tr>
+        <tr>
+          <td class="nick">信号变质</td>
+          <td class="real">无线信道误码</td>
+          <td class="phys">空气干扰导致比特翻转，校验和不过，整包被丢</td>
+          <td class="life"><b>C FEC</b> / <b>B 重传</b></td>
+        </tr>
+        <tr>
+          <td class="nick">一碎全毁</td>
+          <td class="real">MTU 分片丢失</td>
+          <td class="phys">4KB 大包被切成 3 片，任意一片丢失，整个 UDP 数据报作废</td>
+          <td class="life"><b>应用层切小包</b> + <b>B 重传</b></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="journey">
+    <div class="rail" id="rail"></div>
+  </div>
+
+  <div class="quest" id="quest"></div>
+
+  <div class="stage-scroll">
+    <div class="stage">
+
+      <!-- Column 1 -->
+      <div class="col c1">
+        <div class="col-head">
+          <div class="nick">代码与参数透视</div>
+          <div class="real">Socket API & Config</div>
+          <div class="duty">观察每一道防线对应的系统调用与参数</div>
+        </div>
+
+        <div class="codebox-wrap">
+          <div class="codebox-topbar">
+            <div class="codebox-dots">
+              <span class="codebox-dot dot-r"></span>
+              <span class="codebox-dot dot-y"></span>
+              <span class="codebox-dot dot-g"></span>
+            </div>
+            <span id="codebox-filename">udp_sender.c</span>
+            <span style="font-size:10px; color:var(--muted); font-family:var(--mono);">POSIX C</span>
+          </div>
+          <div class="codebox" id="codebox"></div>
+        </div>
+
+        <div class="note-card">
+          <div class="nt"><span>🔑 关键参数速查</span><span id="note-tag">SO_RCVBUF</span></div>
+          <div class="nd" id="note-desc">内核接收缓冲区大小。应用读得慢时，先怀疑它太小。</div>
+        </div>
+      </div>
+
+      <!-- Column 2 -->
+      <div class="col c2">
+        <div class="col-head">
+          <div class="nick">物理流水线与丢包现场</div>
+          <div class="real">Pipeline & Drop Sites</div>
+          <div class="duty">亲眼看到包死在哪一站</div>
+        </div>
+
+        <div class="pipe-box">
+          <div class="mode-banner">
+            <span>🔬 当前实验：</span>
+            <span class="mode-badge" id="mode-badge">空闲</span>
+          </div>
+
+          <div class="metro-track" id="metro-track">
+            <div class="station" id="st-0">📤 发送App</div>
+            <div class="arrow">→</div>
+            <div class="station" id="st-1">🖧 交换机</div>
+            <div class="arrow">→</div>
+            <div class="station" id="st-2">📡 无线</div>
+            <div class="arrow">→</div>
+            <div class="station" id="st-3">📥 RCVBUF</div>
+            <div class="arrow">→</div>
+            <div class="station" id="st-4">📬 接收App</div>
+            <div class="metro-pkt" id="metro-pkt">PKT</div>
+          </div>
+
+          <div class="buffer-panel">
+            <div class="bp-title"><span>交换机端口队列</span><b id="switch-fill">0/8</b></div>
+            <div class="bp-slots" id="switch-slots"></div>
+          </div>
+
+          <div class="buffer-panel">
+            <div class="bp-title"><span>内核 RCVBUF 接收缓冲区</span><b id="rcv-fill">0/4</b></div>
+            <div class="bp-slots" id="rcv-slots"></div>
+          </div>
+
+          <div class="buffer-panel" id="pacing-panel" style="display:none;">
+            <div class="bp-title"><span>⏳ 令牌桶 (Pacing)</span><b id="token-fill">20/s</b></div>
+            <div class="pace-bar"><div class="pace-fill" id="pace-fill"></div></div>
+          </div>
+
+          <div class="drop-bin" id="drop-bin">
+            <span class="db-lbl">💀 丢弃累计</span>
+            <span class="db-count" id="drop-count">0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Column 3 -->
+      <div class="col c3">
+        <div class="col-head">
+          <div class="nick">实时账本与防线状态</div>
+          <div class="real">Metrics & Defense Ledger</div>
+          <div class="duty">核验丢包数、恢复延迟与带宽代价</div>
+        </div>
+
+        <div class="run-box">
+          <div class="metric-card">
+            <div class="mc-title">📊 实验账本</div>
+            <div class="metric-row"><span class="m-lbl">累计丢包</span><span class="m-val bad" id="m-loss">0</span></div>
+            <div class="metric-row"><span class="m-lbl">成功恢复</span><span class="m-val good" id="m-recovered">0</span></div>
+            <div class="metric-row"><span class="m-lbl">恢复延迟</span><span class="m-val" id="m-latency">—</span></div>
+            <div class="metric-row"><span class="m-lbl">额外带宽开销</span><span class="m-val" id="m-overhead">0%</span></div>
+          </div>
+
+          <div class="metric-card">
+            <div class="mc-title">☠️ 四个死亡点</div>
+            <div class="death-list" id="death-list">
+              <div class="death-item" data-d="rcv">① 接收缓冲溢出</div>
+              <div class="death-item" data-d="switch">② 交换机队列满</div>
+              <div class="death-item" data-d="air">③ 无线信道误码</div>
+              <div class="death-item" data-d="mtu">④ MTU 分片丢失</div>
+            </div>
+          </div>
+
+          <div class="metric-card">
+            <div class="mc-title">🛡️ 三条防线</div>
+            <div class="defense-list" id="defense-list">
+              <div class="def-item" data-f="pacing"><span><b>A</b> 限速整形</span><span>未启用</span></div>
+              <div class="def-item" data-f="arq"><span><b>B</b> ARQ 重传</span><span>未启用</span></div>
+              <div class="def-item" data-f="fec"><span><b>C</b> FEC 冗余</span><span>未启用</span></div>
+            </div>
+          </div>
+
+          <div class="stats-bar">
+            <div class="stat-item">
+              <div class="stat-val" id="st-sent">0</div>
+              <div class="stat-lbl">已发包数</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-val bad" id="st-dropped">0</div>
+              <div class="stat-lbl">丢包数</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-val good" id="st-healed">0</div>
+              <div class="stat-lbl">恢复数</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="console">
+    <div class="console-head">
+      <span>控制台 · 丢包实验驱动器</span>
+      <div class="btns">
+        <button id="btn-rearm" class="clear-btn" onclick="handleClearClick()">⟲ 清除全部进度</button>
+      </div>
+    </div>
+    <div class="console-head" style="background:rgba(0,0,0,.2); border-bottom:1px solid var(--line);">
+      <span style="font-size:12px; color:var(--muted);">当前关卡专属动作：</span>
+      <div class="btns" id="action-btns"></div>
+    </div>
+    <div class="logbox" id="logbox"></div>
+  </div>
+
+  <div class="why">
+    <div class="why-card w1">
+      <h3>① 为什么“丢了再补”不是万能药？</h3>
+      <p><b>RTT 代价</b>：ARQ 重传至少要等一个往返时延。跨城 30ms、跨洋 150ms、卫星 600ms。实时语音、云游戏、无人机图传，等一个 RTT 帧早就过期了。<br>
+      <b>结论</b>：延迟敏感的场景，必须用 FEC 或限速，而不是重传。</p>
+    </div>
+    <div class="why-card w2">
+      <h3>② 为什么“限速”反而能提高有效吞吐？</h3>
+      <p><b>缓冲区膨胀</b>：发送端越快，交换机队列越满，排队延迟越高，最后触发尾丢弃——重传又加剧拥塞，形成“拥塞崩溃”。<br>
+      <b>Pacing 的回报</b>：把突发削成匀速，队列长期处于低位，零丢包、低延迟，有效吞吐反而更高。这是 BBR / QUIC 的核心思想。</p>
+    </div>
+    <div class="why-card w3">
+      <h3>③ 为什么 FEC 是实时场景的终极武器？</h3>
+      <p><b>用带宽换延迟</b>：多花 20% 带宽发冗余，换来丢包后 0ms 恢复。只要丢失量不超过冗余量，接收端当场算回来，完全不用等发送端。<br>
+      <b>边界</b>：冗余只能扛随机丢包，扛不住连续整段断网；超过冗余上限仍需回退到 ARQ。</p>
+    </div>
+  </div>
+
+  <footer>
+    UDP Loss Prevention Mental Model · 个人自适应学习系统专用交付物 · 遵循「机制直述 + 课程化 + 可重玩机制」标准
+  </footer>
+
+</div>
+
+<script>
+/* ==================== 状态 ==================== */
+const STORAGE_KEY = 'udp_loss_prevention_v1';
+let currentStage = 0;
+let clearClickCount = 0;
+let clearTimer = null;
+let quizAnswers = {};
+
+let world = {
+  mode: 'IDLE',
+  flowing: false,
+  dropCount: 0,
+  recovered: 0,
+  latencyCost: '—',
+  overhead: '0%',
+  rcvFilled: 0,
+  switchFilled: 0,
+  activeDeath: null,
+  activeDefense: null,
+  decisionPick: null,
+  sent: 0
+};
+
+const STAGES = [
+  {
+    title: "起点：UDP 包死在哪？",
+    tag: "00 起点",
+    desc: "UDP 只负责把包踹出去，丢了它不管。要防丢包，先要知道包是在哪一段物理链路上死的。",
+    obs: "看中间的五站流水线：发送 App → 交换机队列 → 无线信道 → 内核 RCVBUF → 接收 App。四个死亡点就藏在这条线上。",
+    pass: "记住四个死亡位置，准备逐个制造死法。",
+    initBtn: { text: "让数据流过完整流水线", fn: "doBaselineFlow" }
+  },
+  {
+    title: "死法① 接收缓冲溢出 —— 应用读得太慢",
+    tag: "01 接收溢出",
+    desc: "发送端每秒发 100 包，接收端应用每秒只读 20 包。内核 RCVBUF 只有 4 个槽，很快被塞满。",
+    obs: "看 RCVBUF 亮红：槽满了以后，新到的包被内核当场静默丢弃，连应用层都碰不到。",
+    pass: "理解『接收端处理能力不足』是丢包的第一大死因。",
+    initBtn: { text: "开始高频发送 (100 包/秒)", fn: "doRcvOverflow" }
+  },
+  {
+    title: "死法② 交换机队列尾丢弃 —— 发送端太突然",
+    tag: "02 交换机满",
+    desc: "发送端瞬间突发 12 个包。交换机端口队列只有 8 个槽，塞不下的包被交换机直接踢掉。",
+    obs: "看交换机队列槽从 8/8 变红，后面的包在交换机里就死了，根本到不了接收端。",
+    pass: "理解『突发流量撑爆中间设备缓存』是丢包的第二大死因。",
+    initBtn: { text: "触发 12 包突发流量", fn: "doSwitchOverflow" }
+  },
+  {
+    title: "死法③ 无线信道误码 —— 信号在空气里变质",
+    tag: "03 无线误码",
+    desc: "Wi-Fi / 无线电波受干扰，数据位翻转。接收端校验和不过，包被当垃圾扔掉。",
+    obs: "看无线信道段亮起红色噪声：10 个包里有 3 个在空气中损坏，接收端收不到。",
+    pass: "理解『物理介质不可靠』是丢包的第三大死因，和缓冲区无关。",
+    initBtn: { text: "模拟无线干扰 (丢 3/10)", fn: "doWirelessCorruption" }
+  },
+  {
+    title: "死法④ MTU 分片 —— 一个碎片丢了，整封信作废",
+    tag: "04 MTU 分片",
+    desc: "发送一个 4000 字节的大 UDP 包。超过 1500 字节 MTU，被切成 3 个分片。分片 #2 丢了。",
+    obs: "看分片 #2 在空气中消失：即使 #1 和 #3 到达，接收端也无法拼出完整数据，整个包作废！",
+    pass: "理解『过大包会牵连无辜分片』，这是最隐蔽的丢包方式。",
+    initBtn: { text: "发送 4000 字节大包 (切 3 片)", fn: "doMtuFragmentation" }
+  },
+  {
+    title: "防线 B：ARQ 重传 —— 丢了再补",
+    tag: "05 ARQ 重传",
+    desc: "给每个包打上递增序号。接收端发现序号跳空，立刻反向催发 NACK，发送端从缓存里补发。",
+    obs: "看包 #3 丢失后，接收端发 NACK，发送端重传 #3。数据补回来了，但多等了 1 个往返时延 (200ms)。",
+    pass: "掌握已会的重传防线，同时看清它的代价：至少 1 RTT 延迟。",
+    initBtn: { text: "模拟丢包并触发 ARQ 重传", fn: "doArqRecovery" }
+  },
+  {
+    title: "防线 A：限速整形 —— 从根上不丢",
+    tag: "06 限速防溢出",
+    desc: "与其丢了再补，不如一开始就不把网络撑爆。用令牌桶 / Pacing 把突发流量削成平滑水流。",
+    obs: "同样是 12 个包，现在匀速发。交换机队列最高只到 2/8，一个都没丢！代价是峰值发送更慢。",
+    pass: "理解『预防优于补救』：限速是唯一能做到零丢包的防线。",
+    initBtn: { text: "开启令牌桶限速后重发 12 包", fn: "doPacing" }
+  },
+  {
+    title: "防线 C：FEC 前向纠错 —— 用冗余换零等待",
+    tag: "07 FEC 冗余",
+    desc: "发送 10 个数据包 + 2 个校验冗余包。丢了任意 1~2 个，接收端可以直接用冗余算回来，不用等重传。",
+    obs: "看数据包 #3 和 #7 丢失：接收端用 2 个冗余包当场还原，恢复延迟 0ms！代价是多花 20% 带宽。",
+    pass: "掌握第三条防线：用带宽换延迟，实时场景的终极武器。",
+    initBtn: { text: "发送 10 数据 + 2 冗余 (丢 2 个)", fn: "doFecRecovery" }
+  },
+  {
+    title: "决策台：三条防线怎么选？",
+    tag: "08 决策选型",
+    desc: "三条防线没有优劣，只有场景匹配。点选下面的场景，看看该上哪一条。",
+    obs: "实时语音怕延迟 → FEC；大文件怕丢数据 → ARQ；突发视频怕撑爆 → 限速。",
+    pass: "建立『先看场景约束，再选防线』的工程决策习惯。",
+    initBtn: null
+  },
+  {
+    title: "毕业小测：3 道真实丢包事故诊断题",
+    tag: "09 毕业小测",
+    desc: "检测你对丢包死因与三条防线的理解深度，完成 3 道场景决策。",
+    obs: "根据物理位置与场景约束，做出正确的防线选择。",
+    pass: "3 题全对即标志本主题彻底夯实。",
+    initBtn: null
+  },
+  {
+    title: "终点：丢包防线自由沙盒 (Free Play)",
+    tag: "10 自由模式",
+    desc: "自由制造四种死法，切换三条防线，观察账本变化！",
+    obs: "可随时重刷小测或倒带回任一关卡。",
+    pass: "自由探索 UDP 丢包防治机制。",
+    initBtn: null
+  }
+];
+
+/* ==================== 工具 ==================== */
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+function addLog(cmd, type, expl) {
+  const box = document.getElementById('logbox');
+  const div = document.createElement('div');
+  div.className = `logline ${type}`;
+  div.innerHTML = `<span class="cmd">&gt; ${cmd}</span>${expl ? `<div class="expl">${expl}</div>` : ''}`;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+function setMode(label, cls){
+  const b = document.getElementById('mode-badge');
+  b.textContent = label;
+  b.className = 'mode-badge' + (cls ? ' ' + cls : '');
+}
+
+function fillSlots(containerId, total, filled, overflowFrom, parityFrom){
+  const box = document.getElementById(containerId);
+  let html = '';
+  for(let i=1; i<=total; i++){
+    let cls = 'bp-slot';
+    let txt = '空';
+    if(parityFrom && i > parityFrom){ cls += ' parity'; txt = 'P' + (i - parityFrom); }
+    else if(filled >= i){ cls += ' filled'; txt = '#' + i; }
+    if(overflowFrom && i >= overflowFrom && filled >= i){ cls = 'bp-slot overflow'; txt = '#' + i; }
+    html += `<div class="${cls}">${txt}</div>`;
+  }
+  box.innerHTML = html;
+}
+
+function setSwitchSlots(n){
+  world.switchFilled = n;
+  document.getElementById('switch-fill').textContent = n + '/8';
+  fillSlots('switch-slots', 8, n, 0, 0);
+}
+
+function setRcvSlots(n, overflow){
+  world.rcvFilled = n;
+  document.getElementById('rcv-fill').textContent = n + '/4';
+  fillSlots('rcv-slots', 4, n, overflow ? 1 : 0, 0);
+}
+
+function addDrop(reason, n=1){
+  world.dropCount += n;
+  document.getElementById('drop-count').textContent = world.dropCount;
+  const bin = document.getElementById('drop-bin');
+  bin.classList.remove('flash');
+  void bin.offsetWidth;
+  bin.classList.add('flash');
+}
+
+function stationPos(idx){
+  const track = document.getElementById('metro-track');
+  const st = document.getElementById('st-' + idx);
+  const tr = track.getBoundingClientRect();
+  const sr = st.getBoundingClientRect();
+  return ((sr.left + sr.width/2 - tr.left) / tr.width) * 100;
+}
+
+function resetDot(label='PKT', cls=''){
+  const dot = document.getElementById('metro-pkt');
+  dot.style.transition = 'none';
+  dot.style.left = stationPos(0) + '%';
+  dot.className = 'metro-pkt' + (cls ? ' ' + cls : '');
+  dot.textContent = label;
+  void dot.offsetWidth;
+  dot.style.transition = 'left .34s ease-in-out';
+}
+
+async function travelTo(idx, ms=340){
+  const dot = document.getElementById('metro-pkt');
+  dot.style.left = stationPos(idx) + '%';
+  await sleep(ms + 30);
+}
+
+async function flashStation(idx, cls, ms=420){
+  const st = document.getElementById('st-' + idx);
+  st.classList.add(cls);
+  await sleep(ms);
+  st.classList.remove(cls);
+}
+
+async function clearStations(){
+  for(let i=0; i<5; i++){
+    document.getElementById('st-' + i).className = 'station';
+  }
+}
+
+async function runPacket(label, deathIdx, opts={}){
+  const dot = document.getElementById('metro-pkt');
+  resetDot(label, opts.cls || '');
+  const end = deathIdx === null ? 4 : deathIdx;
+  for(let s=1; s<=end; s++){
+    await travelTo(s, opts.speed || 300);
+  }
+  if(deathIdx !== null){
+    dot.className = 'metro-pkt dead';
+    await flashStation(deathIdx, 'dead');
+    addDrop(opts.reason || '丢包');
+    await sleep(60);
+    return false;
+  } else {
+    await flashStation(4, 'hit', 260);
+    return true;
+  }
+}
+
+function setMetrics(){
+  document.getElementById('m-loss').textContent = world.dropCount;
+  document.getElementById('m-recovered').textContent = world.recovered;
+  document.getElementById('m-latency').textContent = world.latencyCost;
+  document.getElementById('m-overhead').textContent = world.overhead;
+  document.getElementById('st-sent').textContent = world.sent;
+  document.getElementById('st-dropped').textContent = world.dropCount;
+  document.getElementById('st-healed').textContent = world.recovered;
+}
+
+function setDeath(name){
+  world.activeDeath = name;
+  document.querySelectorAll('.death-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.d === name);
+  });
+}
+
+function setDefense(name){
+  world.activeDefense = name;
+  document.querySelectorAll('.def-item').forEach(el => {
+    const active = el.dataset.f === name;
+    el.classList.toggle('active', active);
+    el.querySelector('span:last-child').textContent = active ? '已启用' : '未启用';
+  });
+}
+
+/* ==================== 渲染 ==================== */
+function renderRail() {
+  const rail = document.getElementById('rail');
+  rail.innerHTML = '';
+  STAGES.forEach((st, idx) => {
+    const pill = document.createElement('div');
+    pill.className = `pill ${idx < currentStage ? 'done' : ''} ${idx === currentStage ? 'current' : ''}`;
+    pill.innerText = st.tag;
+    pill.onclick = () => { buildToStage(idx); };
+    rail.appendChild(pill);
+    if(idx < STAGES.length - 1){
+      const sep = document.createElement('div');
+      sep.className = 'sep';
+      rail.appendChild(sep);
+    }
+  });
+}
+
+function renderQuest() {
+  const q = document.getElementById('quest');
+  const st = STAGES[currentStage];
+
+  if(currentStage === 8) { renderDecisionQuest(q); return; }
+  if(currentStage === 9) { renderQuizQuest(q); return; }
+
+  if(currentStage === 10) {
+    q.className = 'quest free';
+    q.innerHTML = `
+      <div class="quest-head">
+        <span class="quest-stage" style="color:var(--green);">STAGE 10 · 自由模式</span>
+        <span class="quest-title">${st.title}</span>
+        <button class="replay-btn" onclick="buildToStage(currentStage)">↺ 重置沙盒</button>
+      </div>
+      <div class="q-row"><span class="k">🎯 当前状态</span><span class="v">四种死法与三条防线已全部解锁！</span></div>
+      <div class="q-row"><span class="k">👀 自由试验</span><span class="v">用下方按钮任意组合死法与防线，观察账本变化。</span></div>
+      <div class="go">
+        <button onclick="doRcvOverflow()" style="border-color:var(--red); color:var(--red);">① 接收溢出</button>
+        <button onclick="doSwitchOverflow()" style="border-color:var(--red); color:var(--red);">② 交换机满</button>
+        <button onclick="doWirelessCorruption()" style="border-color:var(--red); color:var(--red);">③ 无线误码</button>
+        <button onclick="doMtuFragmentation()" style="border-color:var(--red); color:var(--red);">④ MTU 分片</button>
+        <button onclick="doArqRecovery()" style="border-color:var(--green); color:var(--green);">B ARQ 重传</button>
+        <button onclick="doPacing()" style="border-color:var(--green); color:var(--green);">A 限速</button>
+        <button onclick="doFecRecovery()" style="border-color:var(--green); color:var(--green);">C FEC</button>
+      </div>
+    `;
+    renderActionBtns();
+    return;
+  }
+
+  q.className = 'quest';
+  q.innerHTML = `
+    <div class="quest-head">
+      <span class="quest-stage">STAGE 0${currentStage} / 10</span>
+      <span class="quest-title">${st.title}</span>
+      <button class="replay-btn" onclick="buildToStage(currentStage)">↺ 重玩本关</button>
+      <button class="skip" onclick="skipStage()">跳至下一关 &gt;</button>
+    </div>
+    <div class="q-row"><span class="k">📍 任务背景</span><span class="v">${st.desc}</span></div>
+    <div class="q-row"><span class="k">👀 核心观察</span><span class="v">${st.obs}</span></div>
+    <div class="q-row"><span class="k">✅ 通关机制</span><span class="v">${st.pass}</span></div>
+    ${st.initBtn ? `
+      <div class="go">
+        <button onclick="${st.initBtn.fn}()">${st.initBtn.text}</button>
+      </div>
+    ` : ''}
+  `;
+  renderActionBtns();
+}
+
+function renderActionBtns() {
+  const container = document.getElementById('action-btns');
+  container.innerHTML = '';
+  const st = STAGES[currentStage];
+  if(st && st.initBtn) {
+    const b = document.createElement('button');
+    b.className = 'action-btn';
+    b.innerText = st.initBtn.text;
+    b.onclick = () => { window[st.initBtn.fn](); };
+    container.appendChild(b);
+  }
+}
+
+/* ---------- decision ---------- */
+const DECISIONS = {
+  voice: {
+    name: 'FEC 冗余 (+ 少量 ARQ 兜底)',
+    why: '语音对延迟极其敏感，重传的 1 个 RTT 会让声音卡成电音。FEC 用 20% 冗余换 0ms 恢复，是实时媒体的标准做法。'
+  },
+  file: {
+    name: 'ARQ 重传',
+    why: '文件传输对延迟不敏感，但一个字节都不能丢。重传虽然慢，但能保证 100% 完整，且带宽开销最低。'
+  },
+  drone: {
+    name: '限速整形 + FEC (混合)',
+    why: '弱网 + 突发码率：先用 Pacing 削平突发，避免撑爆链路；再用 FEC 扛住随机误码。单靠一条防线扛不住。'
+  }
+};
+
+function renderDecisionQuest(container) {
+  container.className = 'quest';
+  container.innerHTML = `
+    <div class="quest-head">
+      <span class="quest-stage">STAGE 08 · 决策选型</span>
+      <span class="quest-title">三条防线怎么选？</span>
+      <button class="replay-btn" onclick="buildToStage(8)">↺ 重置</button>
+    </div>
+    <div class="q-row"><span class="k">📍 场景</span><span class="v">点选一个真实场景，看看该上哪条防线。</span></div>
+    <div class="decision-grid">
+      <button class="decision-btn ${world.decisionPick==='voice'?'active':''}" onclick="pickScenario('voice')">🎙️ 实时语音通话（延迟 > 100ms 就卡顿）</button>
+      <button class="decision-btn ${world.decisionPick==='file'?'active':''}" onclick="pickScenario('file')">📁 局域网传 10GB 日志文件（一个字节都不能丢）</button>
+      <button class="decision-btn ${world.decisionPick==='drone'?'active':''}" onclick="pickScenario('drone')">🚁 无人机 4K 图传（突发码率 + 弱网）</button>
+    </div>
+    <div class="decision-result ${world.decisionPick?'show':''}" id="decision-result">
+      ${world.decisionPick ? `<b>推荐防线：${DECISIONS[world.decisionPick].name}</b><span class="why">${DECISIONS[world.decisionPick].why}</span>` : ''}
+    </div>
+  `;
+}
+
+function pickScenario(key){
+  world.decisionPick = key;
+  renderQuest();
+  const d = DECISIONS[key];
+  addLog(`场景 → ${d.name}`, 'ok', d.why);
+  if(key==='voice'){ setDefense('fec'); setMode('实时语音 · FEC', 'safe'); }
+  if(key==='file'){ setDefense('arq'); setMode('大文件 · ARQ', 'safe'); }
+  if(key==='drone'){ setDefense('pacing'); setMode('弱网图传 · 限速+FEC', 'safe'); }
+}
+
+/* ---------- quiz ---------- */
+const QUIZ_DATA = [
+  {
+    q: "1. 200 台机器人同时上报状态，接收端处理不过来，RCVBUF 持续溢出。最根本的修法是？",
+    opts: [
+      { t: "A. 上 FEC 冗余包，把丢掉的包算回来", c: false, expl: "错误！FEC 是事后补救，而且接收端本来就处理不过来，多发冗余只会更堵。" },
+      { t: "B. 加大 SO_RCVBUF + 降低发送频率（限速）+ 提高应用消费速度", c: true, expl: "正确！接收缓冲溢出的根因是『进得比出得快』，必须从入口限速或出口提速，单纯加缓冲只能拖延。" },
+      { t: "C. 改用广播，让所有机器都收到", c: false, expl: "错误！广播会放大流量，让溢出更严重。" }
+    ]
+  },
+  {
+    q: "2. 云游戏 60fps，丢一帧就去等 ARQ 重传，玩家会感觉怎样？",
+    opts: [
+      { t: "A. 完全无感知，TCP 也是这么做的", c: false, expl: "错误！TCP 正是因为有队头阻塞，才不适合实时媒体。" },
+      { t: "B. 画面卡顿 200ms，操作延迟明显，必须改用 FEC 或帧间冗余", c: true, expl: "正确！60fps 一帧只有 16ms，等一个 RTT 等于丢掉十几帧。实时场景必须用 FEC 做到 0 RTT 恢复。" },
+      { t: "C. 只要加大交换机缓冲区就能解决", c: false, expl: "错误！缓冲区只会增加排队延迟，不能消除重传等待。" }
+    ]
+  },
+  {
+    q: "3. 一个 4KB 的 UDP 包在弱网下经常『整包消失』，但抓包看到部分分片其实到了。根因是？",
+    opts: [
+      { t: "A. UDP 不支持大包，这是协议限制", c: false, expl: "错误！UDP 本身支持大包，问题出在 IP 分片。" },
+      { t: "B. 超过 MTU 被 IP 层切片，任意一片丢失都会导致整个数据报被接收端丢弃", c: true, expl: "正确！IP 分片是『一荣俱荣、一损俱损』。应用层应把包控制在 1200B 以下，让每个 UDP 包独立可恢复。" },
+      { t: "C. 因为交换机不认识 4KB 的包", c: false, expl: "错误！交换机会正常转发，问题在分片重组。" }
+    ]
+  }
+];
+
+function renderQuizQuest(container) {
+  container.className = 'quest';
+  let html = `
+    <div class="quest-head">
+      <span class="quest-stage" style="color:var(--amber);">STAGE 09 · 毕业小测</span>
+      <span class="quest-title">UDP 丢包防治考核 (3 题全对毕业)</span>
+      <button class="replay-btn" onclick="buildToStage(9)">↺ 重置做题</button>
+    </div>
+    <div class="quiz">
+  `;
+  QUIZ_DATA.forEach((qitem, qidx) => {
+    html += `<div class="qitem"><div class="qtext">${qitem.q}</div><div class="opts">`;
+    qitem.opts.forEach((opt, oidx) => {
+      const selected = quizAnswers[qidx] === oidx;
+      let cls = 'opt';
+      if(quizAnswers[qidx] !== undefined) {
+        if(opt.c) cls += ' correct';
+        else if(selected) cls += ' wrong';
+        else cls += ' dim';
+      }
+      html += `<button class="${cls}" onclick="answerQuiz(${qidx}, ${oidx})">${opt.t}</button>`;
+    });
+    if(quizAnswers[qidx] !== undefined) {
+      html += `<div class="qexpl">${qitem.opts[quizAnswers[qidx]].expl}</div>`;
+    }
+    html += `</div></div>`;
+  });
+  html += `</div>`;
+  container.innerHTML = html;
+}
+
+function answerQuiz(qidx, oidx) {
+  quizAnswers[qidx] = oidx;
+  renderQuest();
+  const allCorrect = QUIZ_DATA.every((q, idx) => quizAnswers[idx] !== undefined && q.opts[quizAnswers[idx]].c);
+  if(allCorrect) {
+    addLog('毕业小测全对通过！', 'ok', '恭喜！你已经建立了『先看丢包位置，再选防线』的完整工程直觉。即将进入自由沙盒。');
+    setTimeout(() => {
+      currentStage = 10;
+      saveState();
+      render();
+    }, 1200);
+  }
+}
+
+/* ==================== 渲染代码列 ==================== */
+function renderCodebox() {
+  const box = document.getElementById('codebox');
+  const fnElem = document.getElementById('codebox-filename');
+  const noteTag = document.getElementById('note-tag');
+  const noteDesc = document.getElementById('note-desc');
+  let code = '';
+
+  if(currentStage === 0) {
+    fnElem.innerText = 'udp_pipeline.c';
+    noteTag.innerText = '五站流水线';
+    noteDesc.innerHTML = 'App 发 → 内核 SNDBUF → 交换机 → 无线 → 内核 RCVBUF → App 收。任何一个环节满或坏，包就死在那里。';
+    code = `
+<span class="cm">// ===== UDP 包的一生：五站流水线 =====</span>
+<span class="type">int</span> fd = <span class="fn">socket</span>(AF_INET, SOCK_DGRAM, <span class="val">0</span>);
+
+<span class="cm">// ① 发送 App 调 sendto，包进入内核 SNDBUF</span>
+<span class="fn">sendto</span>(fd, data, len, <span class="val">0</span>, ...);
+
+<span class="cm">// ② 网卡发出 → 交换机端口队列 (可能满)</span>
+<span class="cm">// ③ 无线/光纤传输 (可能误码)</span>
+<span class="cm">// ④ 接收端网卡 → 内核 RCVBUF (可能满)</span>
+<span class="cm">// ⑤ 接收 App recvfrom 取走</span>
+
+<span class="cm">// 丢包可能发生在 ①~⑤ 任意一站，</span>
+<span class="cm">// 所以救法完全不同！</span>`;
+  } else if(currentStage === 1) {
+    fnElem.innerText = 'slow_reader.c';
+    noteTag.innerText = 'SO_RCVBUF';
+    noteDesc.innerHTML = '内核接收缓冲区大小。应用读得慢时，先怀疑它太小；但加大缓冲只能拖延，不能根治。';
+    code = `
+<span class="cm">// ===== 死法①：接收缓冲溢出 =====</span>
+<span class="type">int</span> fd = <span class="fn">socket</span>(AF_INET, SOCK_DGRAM, <span class="val">0</span>);
+
+<span class="cm">// 发送端: 100 pkt/s</span>
+<span class="cm">// 接收端应用: 20 pkt/s</span>
+<span class="cm">// 内核 RCVBUF: 4 个槽 (本例)</span>
+
+<span class="type">int</span> buf = <span class="val">4</span> * <span class="val">1500</span>;
+<span class="fn">setsockopt</span>(fd, SOL_SOCKET, SO_RCVBUF, &amp;buf, <span class="kw">sizeof</span>(buf));
+
+<span class="kw">while</span> (running) {
+    <span class="fn">recvfrom</span>(fd, buf, <span class="kw">sizeof</span>(buf), <span class="val">0</span>, ...); <span class="cm">// 读得慢</span>
+    <span class="fn">process</span>(buf);                              <span class="cm">// 处理更慢</span>
+}
+
+<span class="cm">// RCVBUF 满后，新包被内核静默丢弃</span>
+<span class="cm">// 发送端完全不知道，应用层也看不到</span>`;
+  } else if(currentStage === 2) {
+    fnElem.innerText = 'burst_sender.c';
+    noteTag.innerText = '交换机 Tail Drop';
+    noteDesc.innerHTML = '交换机端口队列只有固定容量。突发超过容量时，尾部包被直接丢弃，发送端无感知。';
+    code = `
+<span class="cm">// ===== 死法②：交换机队列尾丢弃 =====</span>
+<span class="cm">// 瞬间突发 12 个包，没有限速</span>
+<span class="kw">for</span> (<span class="type">int</span> i = <span class="val">0</span>; i &lt; <span class="val">12</span>; i++) {
+    <span class="fn">sendto</span>(fd, data, len, <span class="val">0</span>, ...);
+}
+
+<span class="cm">// 交换机端口队列 (8 槽)</span>
+<span class="cm">// 第 1~8 个包: 入队转发</span>
+<span class="cm">// 第 9~12 个包: 队列已满 → Tail Drop</span>
+
+<span class="cm">// 发送端: 没有任何报错</span>
+<span class="cm">// 应用层: 也不知道</span>
+<span class="cm">// 直到接收端发现序号缺失</span>`;
+  } else if(currentStage === 3) {
+    fnElem.innerText = 'wireless_crc.c';
+    noteTag.innerText = 'Checksum';
+    noteDesc.innerHTML = '无线干扰导致比特翻转。接收端网卡做校验和，失败就整包丢弃，发送端无感知。';
+    code = `
+<span class="cm">// ===== 死法③：无线信道误码 =====</span>
+<span class="cm">// 空气干扰 → 某些比特翻转</span>
+
+<span class="cm">// 接收端网卡做校验和检查:</span>
+<span class="kw">if</span> (<span class="fn">checksum</span>(packet) != packet.checksum) {
+    <span class="fn">drop</span>(packet);   <span class="cm">// 校验失败，整包丢弃</span>
+}
+
+<span class="cm">// 发送端不知道</span>
+<span class="cm">// 应用层也看不到这个包曾经来过</span>
+
+<span class="cm">// 这类丢包和缓冲区无关，</span>
+<span class="cm">// 加内存、加带宽都救不了</span>`;
+  } else if(currentStage === 4) {
+    fnElem.innerText = 'mtu_fragment.c';
+    noteTag.innerText = 'IP_MTU_DISCOVER';
+    noteDesc.innerHTML = '超过 MTU 的 UDP 包会被 IP 层切片。任意一片丢失，整个数据报作废。';
+    code = `
+<span class="cm">// ===== 死法④：MTU 分片 =====</span>
+<span class="cm">// 一次 sendto 4000 字节，超过 MTU 1500</span>
+<span class="fn">sendto</span>(fd, big_buf, <span class="val">4000</span>, <span class="val">0</span>, ...);
+
+<span class="cm">// IP 层自动切成 3 个分片:</span>
+<span class="cm">//   frag #1 (1500B)  frag #2 (1500B)  frag #3 (1000B)</span>
+
+<span class="cm">// 只要 frag #2 丢失:</span>
+<span class="cm">//   接收端无法重组完整数据报</span>
+<span class="cm">//   内核把 frag #1 和 #3 也一起丢弃！</span>
+
+<span class="cm">// 正确做法: 应用层切到 1200B 以下</span>
+<span class="cm">// 让每个 UDP 包独立可恢复</span>`;
+  } else if(currentStage === 5) {
+    fnElem.innerText = 'arq_receiver.c';
+    noteTag.innerText = 'SeqNum + NACK';
+    noteDesc.innerHTML = 'ARQ 用序号检测缺失、用 NACK 催补、用发送端缓存重发。代价是至少 1 个 RTT。';
+    code = `
+<span class="cm">// ===== 防线 B：ARQ 重传 =====</span>
+<span class="cm">// 每个包带递增序号</span>
+packet.seq = seq++;
+
+<span class="cm">// 接收端发现跳号: 收到 #2, #4</span>
+<span class="kw">if</span> (expected_seq != packet.seq) {
+    <span class="fn">send_nack</span>(expected_seq);   <span class="cm">// 催补 #3</span>
+}
+
+<span class="cm">// 发送端从 History Cache 重发</span>
+<span class="fn">resend</span>(history[expected_seq]);
+
+<span class="cm">// 代价: 至少等 1 个 RTT</span>
+<span class="cm">// 跨城 ~30ms, 跨洋 ~150ms, 卫星 ~600ms</span>`;
+  } else if(currentStage === 6) {
+    fnElem.innerText = 'pacing_sender.c';
+    noteTag.innerText = 'SO_MAX_PACING_RATE';
+    noteDesc.innerHTML = '令牌桶把突发削成匀速。队列长期低位，零丢包，有效吞吐反而更高。';
+    code = `
+<span class="cm">// ===== 防线 A：限速整形 (Pacing) =====</span>
+<span class="cm">// 令牌桶: 每秒最多放 20 个令牌</span>
+<span class="kw">while</span> (running) {
+    <span class="fn">take_token</span>();              <span class="cm">// 没令牌就等</span>
+    <span class="fn">sendto</span>(fd, data, len, <span class="val">0</span>, ...);
+}
+
+<span class="cm">// 或者交给内核 Pacing:</span>
+<span class="type">int</span> rate = <span class="val">20</span> * <span class="val">1500</span> * <span class="val">8</span>;
+<span class="fn">setsockopt</span>(fd, SOL_SOCKET, SO_MAX_PACING_RATE,
+           &amp;rate, <span class="kw">sizeof</span>(rate));
+
+<span class="cm">// 交换机队列再也不会被撑爆</span>
+<span class="cm">// 代价: 峰值被削平</span>`;
+  } else if(currentStage === 7) {
+    fnElem.innerText = 'fec_encoder.c';
+    noteTag.innerText = 'XOR Parity';
+    noteDesc.innerHTML = '每 10 个数据包附 2 个 XOR 冗余包。丢失量不超过冗余量时，接收端当场算回来，0 RTT。';
+    code = `
+<span class="cm">// ===== 防线 C：FEC 前向纠错 =====</span>
+<span class="cm">// 每 10 个数据包，额外发 2 个 XOR 冗余包</span>
+parity[<span class="val">0</span>] = data[<span class="val">1</span>] ^ data[<span class="val">2</span>] ^ ... ^ data[<span class="val">10</span>];
+parity[<span class="val">1</span>] = data[<span class="val">1</span>] ^ data[<span class="val">3</span>] ^ ... ^ data[<span class="val">9</span>];
+
+<span class="cm">// 接收端丢了 #3 和 #7:</span>
+data[<span class="val">3</span>] = parity[<span class="val">0</span>] ^ data[<span class="val">1</span>] ^ data[<span class="val">2</span>] ^ ...;
+data[<span class="val">7</span>] = parity[<span class="val">1</span>] ^ data[<span class="val">1</span>] ^ ...;
+
+<span class="cm">// 恢复延迟 0ms</span>
+<span class="cm">// 代价: 多花 20% 带宽</span>`;
+  } else if(currentStage === 8) {
+    fnElem.innerText = 'defense_decision.txt';
+    noteTag.innerText = '场景 → 防线';
+    noteDesc.innerHTML = '没有最好的防线，只有最匹配约束的防线。延迟敏感选 FEC，完整性优先选 ARQ，突发流量选限速。';
+    code = `
+<span class="cm">// ===== 三条防线决策表 =====</span>
+<span class="cm">//</span>
+<span class="cm">//            延迟代价   带宽代价   适用场景</span>
+<span class="cm">// A 限速      低         低        突发流量、直播推流</span>
+<span class="cm">// B ARQ       高(≥1RTT)  低        文件传输、控制指令</span>
+<span class="cm">// C FEC       零         高(+20%)  实时语音、云游戏、图传</span>
+<span class="cm">//</span>
+<span class="cm">// 真实工程常常是组合拳:</span>
+<span class="cm">//   弱网图传 = Pacing + FEC</span>
+<span class="cm">//   实时会议 = FEC + NACK 兜底</span>
+<span class="cm">//   文件传输 = 限速 + ARQ</span>`;
+  } else if(currentStage === 9) {
+    fnElem.innerText = 'diagnose.sh';
+    noteTag.innerText = '诊断顺序';
+    noteDesc.innerHTML = '先定位丢包发生在哪一站，再选防线。位置错，努力白费。';
+    code = `
+<span class="cm"># ===== 丢包诊断顺序 =====</span>
+<span class="cm"># 1. 看丢包发生在哪一站</span>
+netstat -su          <span class="cm"># RCVBUF 溢出计数</span>
+ethtool -S eth0      <span class="cm"># 网卡丢弃计数</span>
+tc -s qdisc show     <span class="cm"># 队列溢出计数</span>
+
+<span class="cm"># 2. 再看是突发还是随机</span>
+<span class="cm">#    突发 → 限速 / Pacing</span>
+<span class="cm">#    随机 → FEC / ARQ</span>
+
+<span class="cm"># 3. 最后看延迟约束</span>
+<span class="cm">#    延迟敏感 → FEC</span>
+<span class="cm">#    完整性优先 → ARQ</span>`;
+  } else {
+    fnElem.innerText = 'sandbox.c';
+    noteTag.innerText = '自由组合';
+    noteDesc.innerHTML = '先制造死法，再切换防线，观察账本里的丢包数、延迟与带宽代价。';
+    code = `
+<span class="cm">// ===== 自由沙盒 =====</span>
+<span class="cm">// 四种死法:</span>
+<span class="cm">//   ① RCVBUF 溢出   ② 交换机队列满</span>
+<span class="cm">//   ③ 无线误码       ④ MTU 分片</span>
+
+<span class="cm">// 三条防线:</span>
+<span class="cm">//   A 限速整形 (Pacing)</span>
+<span class="cm">//   B ARQ 重传 (SeqNum + NACK)</span>
+<span class="cm">//   C FEC 冗余 (XOR Parity)</span>
+
+<span class="cm">// 试一试: 先用 ① 制造溢出，再上 A 限速</span>
+<span class="cm">// 观察: 丢包归零，但峰值带宽被削平</span>`;
+  }
+
+  box.innerHTML = code.trim();
+  updateNote();
+}
+
+function updateNote(){
+  // note 内容在各 stage 的 renderCodebox 中已设置，这里保留扩展位
+}
+
+/* ==================== 渲染指标 ==================== */
+function renderMetrics(){
+  setMetrics();
+  document.querySelectorAll('.death-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.d === world.activeDeath);
+  });
+  document.querySelectorAll('.def-item').forEach(el => {
+    const active = el.dataset.f === world.activeDefense;
+    el.classList.toggle('active', active);
+    el.querySelector('span:last-child').textContent = active ? '已启用' : '未启用';
+  });
+}
+
+function render() {
+  renderRail();
+  renderQuest();
+  renderCodebox();
+  renderMetrics();
+  saveState();
+}
+
+/* ==================== 关卡动作 ==================== */
+async function doBaselineFlow() {
+  if(world.flowing) return;
+  world.flowing = true;
+  setMode('正常流动', 'safe');
+  setDeath(null); setDefense(null);
+  await clearStations();
+  setSwitchSlots(0); setRcvSlots(0);
+  world.sent = 0; world.dropCount = 0; world.recovered = 0;
+  world.latencyCost = '—'; world.overhead = '0%';
+  renderMetrics();
+  addLog('sendto() → recvfrom()', 'info', '让 3 个包完整流过五站，先看清正常链路。');
+
+  for(let i=1; i<=3; i++){
+    world.sent++;
+    const ok = await runPacket('#'+i, null, {speed: 280});
+    if(ok){ addLog(`包 #${i} 完整抵达接收 App`, 'ok', ''); }
+  }
+  setSwitchSlots(0);
+  setRcvSlots(0);
+  renderMetrics();
+  addLog('基线流动完成', 'ok', '三站全部通畅，零丢包。接下来逐个制造死法。');
+  world.flowing = false;
+  currentStage = 1; render();
+}
+
+async function doRcvOverflow() {
+  if(world.flowing) return;
+  world.flowing = true;
+  setMode('RCVBUF 溢出', 'danger');
+  setDeath('rcv'); setDefense(null);
+  await clearStations();
+  setSwitchSlots(0); setRcvSlots(0);
+  world.sent = 0; world.dropCount = 0; world.recovered = 0;
+  world.latencyCost = '—'; world.overhead = '0%';
+  renderMetrics();
+
+  addLog('发送 100 pkt/s · 应用读取 20 pkt/s', 'info', '进得比出得快，RCVBUF 只有 4 个槽...');
+
+  for(let i=1; i<=10; i++){
+    world.sent++;
+    if(world.rcvFilled < 4){
+      await runPacket('#'+i, null, {speed: 220});
+      setRcvSlots(world.rcvFilled + 1);
+      addLog(`包 #${i} 进入 RCVBUF (${world.rcvFilled+1}/4)`, 'ok', '');
+    } else {
+      await runPacket('#'+i, 3, {speed: 220, reason: 'RCVBUF 满'});
+      setRcvSlots(4, true);
+      addLog(`包 #${i} 被内核丢弃！(RCVBUF 已满)`, 'err', '应用每秒只能读 20 包，内核缓冲区被灌满，新包静默丢弃。发送端与应用层都毫不知情。');
+    }
+    renderMetrics();
+  }
+
+  world.overhead = '0%';
+  world.latencyCost = '—';
+  setDefense(null);
+  renderMetrics();
+  addLog('死法① 完成：丢 6/10', 'err', '根因不是网络，而是接收端消费能力不足。下一关看发送端太突然会怎样。');
+  world.flowing = false;
+  currentStage = 2; render();
+}
+
+async function doSwitchOverflow() {
+  if(world.flowing) return;
+  world.flowing = true;
+  setMode('交换机队列溢出', 'danger');
+  setDeath('switch'); setDefense(null);
+  await clearStations();
+  setSwitchSlots(0); setRcvSlots(0);
+  world.sent = 0; world.dropCount = 0; world.recovered = 0;
+  world.latencyCost = '—'; world.overhead = '0%';
+  renderMetrics();
+
+  addLog('突发发送 12 个包', 'info', '发送端一口气踹出 12 个包，交换机端口队列只有 8 个槽...');
+
+  for(let i=1; i<=12; i++){
+    world.sent++;
+    if(world.switchFilled < 8){
+      await runPacket('#'+i, null, {speed: 110});
+      setSwitchSlots(world.switchFilled + 1);
+      addLog(`包 #${i} 入队 (${world.switchFilled+1}/8)`, 'ok', '');
+    } else {
+      await runPacket('#'+i, 1, {speed: 110, reason: '交换机队列满'});
+      addLog(`包 #${i} 被交换机 Tail Drop！`, 'err', '队列已满，后续包在交换机里就死了，根本到不了接收端。发送端无感知。');
+    }
+    renderMetrics();
+  }
+
+  addLog('死法② 完成：突发撑爆交换机', 'err', '根因是发送速率瞬间超过链路容量，和接收端处理能力无关。');
+  world.flowing = false;
+  currentStage = 3; render();
+}
+
+async function doWirelessCorruption() {
+  if(world.flowing) return;
+  world.flowing = true;
+  setMode('无线误码', 'danger');
+  setDeath('air'); setDefense(null);
+  await clearStations();
+  setSwitchSlots(0); setRcvSlots(0);
+  world.sent = 0; world.dropCount = 0; world.recovered = 0;
+  world.latencyCost = '—'; world.overhead = '0%';
+  renderMetrics();
+
+  addLog('无线信道干扰 · 10 个包', 'info', '空气噪声导致部分比特翻转，接收端校验和不过...');
+
+  for(let i=1; i<=10; i++){
+    world.sent++;
+    const corrupted = (i===3 || i===6 || i===9);
+    if(corrupted){
+      await runPacket('#'+i, 2, {speed: 260, reason: '校验和失败'});
+      addLog(`包 #${i} 在空中损坏 (校验和失败)`, 'err', '接收端网卡直接丢弃，发送端与应用层都无感知。');
+    } else {
+      await runPacket('#'+i, null, {speed: 260});
+      addLog(`包 #${i} 完好抵达`, 'ok', '');
+    }
+    renderMetrics();
+  }
+
+  addLog('死法③ 完成：丢 3/10', 'err', '这类丢包与缓冲区无关，加内存也没用。只能靠冗余或重传补。');
+  world.flowing = false;
+  currentStage = 4; render();
+}
+
+async function doMtuFragmentation() {
+  if(world.flowing) return;
+  world.flowing = true;
+  setMode('MTU 分片丢失', 'danger');
+  setDeath('mtu'); setDefense(null);
+  await clearStations();
+  setSwitchSlots(0); setRcvSlots(0);
+  world.sent = 3; world.dropCount = 0; world.recovered = 0;
+  world.latencyCost = '—'; world.overhead = '0%';
+  renderMetrics();
+
+  addLog('发送 4000 字节 UDP 包', 'info', '超过 MTU 1500，IP 层切成 3 个分片...');
+
+  await runPacket('片#1', null, {speed: 300});
+  addLog('分片 #1 抵达', 'ok', '先暂存在接收端重组缓冲区。');
+  await sleep(120);
+
+  await runPacket('片#2', 2, {speed: 300, reason: '分片丢失'});
+  addLog('分片 #2 在空气中丢失！', 'err', '关键碎片没了。');
+
+  await sleep(120);
+  await runPacket('片#3', null, {speed: 300});
+  addLog('分片 #3 抵达', 'ok', '但重组仍然缺 #2。');
+
+  addDrop('整包作废', 2);
+  addLog('整个 4000B 数据报被丢弃！', 'err', '即使 #1 和 #3 都到了，内核也无法重组完整 UDP 包，只能把已到的分片一起扔掉。这就是最隐蔽的丢包：1 个碎片丢 = 整封信作废。');
+
+  addLog('死法④ 完成', 'err', '正确做法：应用层把包切到 1200B 以下，让每个 UDP 包独立可恢复，不再依赖 IP 分片。');
+  world.flowing = false;
+  currentStage = 5; render();
+}
+
+async function doArqRecovery() {
+  if(world.flowing) return;
+  world.flowing = true;
+  setMode('ARQ 重传', 'safe');
+  setDeath(null); setDefense('arq');
+  await clearStations();
+  setSwitchSlots(0); setRcvSlots(0);
+  world.sent = 0; world.dropCount = 0; world.recovered = 0;
+  world.latencyCost = '—'; world.overhead = '~0%';
+  renderMetrics();
+
+  addLog('发送 5 个带序号的包', 'info', '每个包带递增 SeqNum，发送端保留 History Cache。');
+
+  for(let i=1; i<=2; i++){
+    world.sent++;
+    await runPacket('#'+i, null, {speed: 250});
+    addLog(`包 #${i} 抵达`, 'ok', '');
+  }
+
+  world.sent++;
+  await runPacket('#3', 2, {speed: 250, reason: '包 #3 丢失'});
+  addLog('包 #3 丢失！', 'err', '接收端维护期望序号，发现跳到 #4，立刻准备发 NACK。');
+
+  // NACK 回传
+  const dot = document.getElementById('metro-pkt');
+  resetDot('NACK', 'nack');
+  dot.style.left = stationPos(3) + '%';
+  await sleep(60);
+  flashStation(3, 'nack');
+  dot.style.left = stationPos(0) + '%';
+  await sleep(380);
+  addLog('NACK(缺 #3) 回传发送端', 'info', '反向催补，发送端从 History Cache 取出 #3 重发。');
+
+  // 重传
+  world.recovered++;
+  await runPacket('重传#3', null, {speed: 250, cls: 'fec'});
+  addLog('包 #3 补发成功', 'ok', '数据完整了！但这次恢复多等了 1 个往返时延。');
+
+  for(let i=4; i<=5; i++){
+    world.sent++;
+    await runPacket('#'+i, null, {speed: 250});
+    addLog(`包 #${i} 抵达`, 'ok', '');
+  }
+
+  world.latencyCost = '+200ms (1 RTT)';
+  world.overhead = '~0%';
+  renderMetrics();
+  addLog('防线 B 完成：可靠补回，但延迟 +200ms', 'ok', '适合文件传输、控制指令；不适合实时语音。');
+  world.flowing = false;
+  currentStage = 6; render();
+}
+
+async function doPacing() {
+  if(world.flowing) return;
+  world.flowing = true;
+  setMode('Pacing 限速', 'safe');
+  setDeath(null); setDefense('pacing');
+  await clearStations();
+  setSwitchSlots(0); setRcvSlots(0);
+  document.getElementById('pacing-panel').style.display = 'block';
+  world.sent = 0; world.dropCount = 0; world.recovered = 0;
+  world.latencyCost = '—'; world.overhead = '0%';
+  renderMetrics();
+
+  addLog('开启令牌桶：20 包/秒', 'info', '同样是 12 个包，但被削成匀速水流，不再瞬间突发。');
+
+  for(let i=1; i<=12; i++){
+    world.sent++;
+    // 令牌桶动画
+    const fill = document.getElementById('pace-fill');
+    fill.style.width = '60%';
+    await sleep(60);
+    fill.style.width = '20%';
+
+    await runPacket('#'+i, null, {speed: 130});
+    const q = Math.min(2, Math.ceil(i/6));
+    setSwitchSlots(q);
+    addLog(`包 #${i} 平滑入队 (队列 ${q}/8)`, 'ok', '');
+    renderMetrics();
+  }
+
+  setSwitchSlots(0);
+  world.latencyCost = '—';
+  world.overhead = '0% (峰值被削平)';
+  renderMetrics();
+  addLog('防线 A 完成：12 包零丢失！', 'ok', '交换机队列最高只到 2/8。代价是峰值发送变慢，但有效吞吐和稳定性更高。');
+  world.flowing = false;
+  currentStage = 7; render();
+}
+
+async function doFecRecovery() {
+  if(world.flowing) return;
+  world.flowing = true;
+  setMode('FEC 冗余', 'safe');
+  setDeath(null); setDefense('fec');
+  await clearStations();
+  setSwitchSlots(0); setRcvSlots(0);
+  world.sent = 0; world.dropCount = 0; world.recovered = 0;
+  world.latencyCost = '—'; world.overhead = '+20%';
+  renderMetrics();
+
+  addLog('发送 10 数据 + 2 冗余包', 'info', 'parity 用 XOR 编码，任意丢 2 个都能当场算回来。');
+
+  for(let i=1; i<=10; i++){
+    world.sent++;
+    if(i===3 || i===7){
+      await runPacket('#'+i, 2, {speed: 210, reason: '数据包丢失'});
+      addLog(`数据包 #${i} 丢失`, 'err', '发送端先不急着重传，接收端手里有冗余包。');
+    } else {
+      await runPacket('#'+i, null, {speed: 210});
+      addLog(`数据包 #${i} 抵达`, 'ok', '');
+    }
+    renderMetrics();
+  }
+
+  // 冗余包
+  for(let p=1; p<=2; p++){
+    world.sent++;
+    await runPacket('P'+p, null, {speed: 210, cls: 'fec'});
+    addLog(`冗余包 P${p} 抵达`, 'ok', '');
+  }
+
+  world.recovered = 2;
+  world.dropCount = 0; // 被冗余完全修复，净丢包为 0
+  world.latencyCost = '0ms';
+  world.overhead = '+20%';
+  renderMetrics();
+  addLog('接收端 XOR 还原 #3 和 #7', 'ok', '【零等待恢复】完全不用等发送端重传，恢复延迟 0ms！代价是多花 20% 带宽。');
+  addLog('防线 C 完成：丢 2 个，恢复 2 个，净丢 0', 'ok', '实时语音、云游戏、无人机图传的终极武器。');
+  world.flowing = false;
+  currentStage = 8; render();
+}
+
+function skipStage() {
+  if(currentStage < 9) {
+    currentStage += 1;
+    render();
+  }
+}
+
+/* ==================== 可重玩 ==================== */
+function saveState() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ currentStage, quizAnswers }));
+  } catch(e) {}
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw) {
+      const data = JSON.parse(raw);
+      if(data && typeof data.currentStage === 'number') {
+        buildToStage(data.currentStage);
+        if(data.quizAnswers) quizAnswers = data.quizAnswers;
+        return true;
+      }
+    }
+  } catch(e) {}
+  return false;
+}
+
+function buildToStage(target) {
+  currentStage = target;
+  world.mode = 'IDLE';
+  world.flowing = false;
+  world.dropCount = 0;
+  world.recovered = 0;
+  world.latencyCost = '—';
+  world.overhead = '0%';
+  world.rcvFilled = 0;
+  world.switchFilled = 0;
+  world.activeDeath = null;
+  world.activeDefense = null;
+  world.decisionPick = null;
+  world.sent = 0;
+
+  const dot = document.getElementById('metro-pkt');
+  if(dot){
+    dot.style.transition = 'none';
+    dot.style.left = stationPos(0) + '%';
+    dot.className = 'metro-pkt';
+    dot.textContent = 'PKT';
+  }
+  document.querySelectorAll('.station').forEach(el => el.className = 'station');
+  setSwitchSlots(0);
+  setRcvSlots(0);
+  setMode('空闲', '');
+  const pp = document.getElementById('pacing-panel');
+  if(pp) pp.style.display = (target === 6 || target === 10) ? 'block' : 'none';
+
+  addLog(`↺ 进度跳转`, 'info', `已同步至第 0${target} 关「${STAGES[target].title}」。`);
+  render();
+}
+
+function handleClearClick() {
+  clearClickCount++;
+  const btn = document.getElementById('btn-rearm');
+  if(clearClickCount === 1) {
+    btn.className = 'clear-btn armed';
+    btn.innerText = '⚠️ 再点一次确认清空全部进度';
+    clearTimer = setTimeout(() => {
+      clearClickCount = 0;
+      btn.className = 'clear-btn';
+      btn.innerText = '⟲ 清除全部进度';
+    }, 3000);
+  } else if(clearClickCount >= 2) {
+    clearTimeout(clearTimer);
+    clearClickCount = 0;
+    btn.className = 'clear-btn';
+    btn.innerText = '⟲ 清除全部进度';
+    try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+    quizAnswers = {};
+    document.getElementById('logbox').innerHTML = '';
+    buildToStage(0);
+    addLog('已清除全部学习记录与进度', 'ok', '已回到起点。');
+  }
+}
+
+/* ==================== 全局绑定 ==================== */
+window.world = world;
+window.STAGES = STAGES;
+window.getCurrentStage = () => currentStage;
+window.buildToStage = buildToStage;
+window.doBaselineFlow = doBaselineFlow;
+window.doRcvOverflow = doRcvOverflow;
+window.doSwitchOverflow = doSwitchOverflow;
+window.doWirelessCorruption = doWirelessCorruption;
+window.doMtuFragmentation = doMtuFragmentation;
+window.doArqRecovery = doArqRecovery;
+window.doPacing = doPacing;
+window.doFecRecovery = doFecRecovery;
+window.pickScenario = pickScenario;
+window.answerQuiz = answerQuiz;
+window.handleClearClick = handleClearClick;
+
+window.addEventListener('DOMContentLoaded', () => {
+  if(!loadState()) {
+    buildToStage(0);
+    addLog('欢迎来到 UDP 丢包防治实验台', 'info', '已就绪。点击下方按钮，逐个制造死法、逐条启用防线！');
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,1717 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>算法复杂度 —— 增长率的形状</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#151f36; --panel2:#0f1729;
+    --line:#26334d; --text:#dde6f5; --muted:#a6b9d9;
+    --blue:#3b82f6; --green:#22c55e; --purple:#a855f7;
+    --amber:#f5b544; --cyan:#38bdf8; --red:#f87171;
+    --mono:"Cascadia Code",Consolas,"JetBrains Mono",monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:radial-gradient(1000px 500px at 50% -100px,#16223d 0%,var(--bg) 60%);
+    color:var(--text);
+    font-family:system-ui,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+    padding:28px 18px 60px; line-height:1.65;
+  }
+  .wrap{max-width:880px; margin:0 auto;}
+
+  h1{font-size:25px; letter-spacing:.5px;}
+  h1 .dot-word{color:var(--amber);}
+  .sub{color:var(--muted); margin-top:4px; font-size:14px;}
+
+  /* 六档小胶囊：只给名字，细节留给关卡 */
+  .tier-chips{display:flex; flex-wrap:wrap; gap:6px; margin-top:12px;}
+  .chip{
+    font-size:11.5px; font-family:var(--mono); color:var(--muted);
+    background:#111c33; border:1px solid var(--line); border-radius:999px; padding:3px 10px;
+  }
+  .chip b{color:var(--cyan); margin-right:4px;}
+
+  /* 关卡轨道 */
+  .rail{display:flex; align-items:center; gap:5px; overflow-x:auto; padding:16px 2px 10px; scrollbar-width:none;}
+  .rail::-webkit-scrollbar{display:none;}
+  .pill{
+    flex:none; font-size:11px; padding:4px 9px; border-radius:999px;
+    border:1px solid var(--line); color:var(--muted); white-space:nowrap; background:var(--panel2);
+    cursor:pointer;
+  }
+  .pill.done{color:var(--green); border-color:rgba(34,197,94,.55);}
+  .pill.current{color:var(--amber); border-color:var(--amber); box-shadow:0 0 10px rgba(245,181,68,.25); font-weight:700;}
+  .sep{flex:none; width:10px; height:2px; background:var(--line);}
+
+  /* 关卡卡：一句话 + 一句链接 + 一个按钮 */
+  .quest{
+    border:1px solid rgba(245,181,68,.45); border-left:4px solid var(--amber);
+    background:linear-gradient(90deg, rgba(245,181,68,.06), var(--panel2) 50%);
+    border-radius:12px; padding:13px 16px;
+  }
+  .quest.free{border-color:rgba(34,197,94,.45); border-left-color:var(--green);
+    background:linear-gradient(90deg, rgba(34,197,94,.06), var(--panel2) 50%);}
+  .quest-head{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .quest-tag{font-family:var(--mono); font-size:10.5px; color:var(--amber); letter-spacing:1px;}
+  .quest-title{font-size:15.5px; font-weight:700;}
+  .replay-btn{
+    font-size:11px; padding:2px 8px; border-radius:6px; background:#182338;
+    color:var(--cyan); border:1px solid var(--line); cursor:pointer; margin-left:auto;
+  }
+  .replay-btn:hover{border-color:var(--cyan);}
+  .quest-headline{font-size:17px; font-weight:700; margin-top:7px; line-height:1.45;}
+  .quest-link{font-size:13px; color:var(--muted); margin-top:4px;}
+  .quest-link b{color:var(--amber);}
+  .quest .go{margin-top:10px;}
+  .quest .go button{
+    font-size:13.5px; padding:7px 20px; border-color:var(--amber); color:var(--amber);
+    font-family:system-ui,"Microsoft YaHei",sans-serif; font-weight:700;
+  }
+  .done-zone{margin-top:9px;}
+  .done-bar{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    background:rgba(34,197,94,.08); border:1px solid rgba(34,197,94,.4);
+    border-radius:8px; padding:8px 12px; font-size:12.5px; color:var(--muted);
+  }
+  .done-bar span{flex:1; min-width:180px;}
+  .done-bar button{border-color:var(--green); color:var(--green); font-weight:700;}
+
+  /* 核心画面：全页唯一的实验台 */
+  .core-card{
+    margin-top:14px; background:var(--panel2); border:1px solid var(--line);
+    border-radius:14px; padding:16px 18px;
+  }
+  .core-lab{display:flex; flex-direction:column; gap:12px;}
+  .lab-controls{display:flex; gap:8px; flex-wrap:wrap; align-items:center; font-size:12px; color:var(--muted); font-family:var(--mono);}
+  .lab-controls button{font-size:11.5px; padding:5px 12px; border-radius:7px; background:#182338; color:var(--text); border:1px solid var(--line); cursor:pointer;}
+  .lab-controls button.on{border-color:var(--amber); color:var(--amber);}
+  .lab-controls .chk{display:inline-flex; align-items:center; gap:4px; cursor:pointer; font-size:11.5px;}
+  .lab-controls input[type=range]{flex:1; min-width:120px; accent-color:var(--amber);}
+  .lab-note{
+    font-size:12px; color:var(--muted); background:#0d1527; border:1px solid var(--line);
+    border-radius:8px; padding:8px 11px; line-height:1.6;
+  }
+  .lab-note b{color:var(--amber);}
+  .big-line{font-size:13.5px; color:var(--text); font-family:var(--mono);}
+  .big-line b{color:var(--amber); font-size:17px;}
+
+  /* 代码/账本抽屉 */
+  .drawer{
+    margin-top:10px; background:var(--panel2); border:1px solid var(--line);
+    border-radius:10px; overflow:hidden;
+  }
+  .drawer summary{
+    cursor:pointer; padding:10px 14px; font-size:12.5px; color:var(--muted);
+    background:rgba(255,255,255,.02); list-style:none; user-select:none;
+  }
+  .drawer summary::-webkit-details-marker{display:none;}
+  .drawer summary:hover{color:var(--text);}
+  .drawer[open] summary{border-bottom:1px solid var(--line); color:var(--cyan);}
+  .drawer-inner{padding:14px;}
+
+  .codebox-wrap{
+    background:#080d18; border:1px solid var(--line); border-radius:10px; overflow:hidden;
+  }
+  .codebox-topbar{
+    background:#0f172a; padding:5px 12px; border-bottom:1px solid var(--line);
+    display:flex; align-items:center; justify-content:space-between;
+    font-size:10.5px; font-family:var(--mono); color:var(--muted);
+  }
+  .codebox-dots{display:flex; gap:5px;}
+  .codebox-dot{width:8px; height:8px; border-radius:50%;}
+  .dot-r{background:#f87171;} .dot-y{background:#f5b544;} .dot-g{background:#22c55e;}
+  .codebox{
+    padding:12px; font-family:var(--mono); font-size:11.5px;
+    white-space:pre; overflow:auto; tab-size:4; line-height:1.7; color:#dde6f5;
+  }
+  .codebox .cm{color:#78909c; font-style:italic;}
+  .codebox .kw{color:#c792ea; font-weight:700;}
+  .codebox .fn{color:#82aaff; font-weight:700;}
+  .codebox .type{color:#ffcb6b;}
+  .codebox .val{color:#f78c6c;}
+  .note-card{
+    margin-top:10px; background:#0d1527; border:1px solid var(--line); border-radius:10px; padding:10px;
+    font-size:11px; font-family:var(--mono);
+  }
+  .note-card .nt{color:var(--cyan); font-weight:700; margin-bottom:5px; display:flex; justify-content:space-between;}
+  .note-card .nd{font-size:10.5px; color:var(--muted); line-height:1.6;}
+
+  .ledger-grid{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .lg-cell{background:#0b1324; border:1px solid var(--line); border-radius:8px; padding:7px 11px;}
+  .lg-cell .k{font-size:10px; color:var(--muted);}
+  .lg-cell .v{font-family:var(--mono); font-size:15px; font-weight:700; color:var(--text);}
+  .ledger-foot{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:10px; font-size:11px; color:var(--muted); font-family:var(--mono);}
+  .clear-btn{font-size:11px; padding:4px 8px; color:var(--muted); background:#151f34; border:1px solid var(--line); margin-left:auto;}
+  .clear-btn.armed{border-color:var(--red); color:var(--red); background:#28151f;}
+
+  .logbox{max-height:200px; overflow-y:auto; font-family:var(--mono); font-size:12px; padding:10px 14px;}
+  .logline{margin-bottom:5px;}
+  .logline .cmd{color:var(--amber); font-weight:700;}
+  .logline .expl{color:var(--muted); font-family:system-ui,"Microsoft YaHei",sans-serif; font-size:11.5px; margin-top:1px;}
+  .logline.ok{color:var(--green);}
+  .logline.err{color:var(--red);}
+  .logline.info{color:var(--cyan);}
+
+  /* 通用按钮 */
+  button{
+    font-family:var(--mono); font-size:12px; color:var(--text);
+    background:#1d2a47; border:1px solid var(--line); border-radius:8px;
+    padding:6px 12px; cursor:pointer; transition:all .15s;
+  }
+  button:hover:not(:disabled){border-color:var(--amber); color:var(--amber); transform:translateY(-1px);}
+  button:disabled{opacity:.3; cursor:not-allowed;}
+
+  /* ===== 各关核心画面 ===== */
+  /* 0 起点：两条横条 */
+  .compare{display:flex; flex-direction:column; gap:14px; padding:6px 0;}
+  .cmp-row{display:flex; align-items:center; gap:10px;}
+  .cmp-name{width:150px; flex:none; font-size:12px;}
+  .cmp-name b{display:block; color:var(--text);}
+  .cmp-name i{font-style:normal; color:var(--muted); font-size:10.5px;}
+  .cmp-track{flex:1; height:26px; background:#0b1324; border:1px solid var(--line); border-radius:5px; overflow:hidden;}
+  .cmp-fill{height:100%; width:0%; transition:width .5s;}
+  .cmp-fill.a{background:linear-gradient(90deg,rgba(248,113,113,.85),rgba(248,113,113,.55));}
+  .cmp-fill.b{background:linear-gradient(90deg,rgba(34,197,94,.85),rgba(34,197,94,.55));}
+  .cmp-val{width:78px; text-align:right; font-family:var(--mono); font-size:12px; color:var(--text); flex:none;}
+
+  /* 1 数步数 */
+  .cells{display:flex; gap:5px; flex-wrap:wrap; justify-content:center; padding:6px 0;}
+  .cell{
+    width:38px; height:38px; border-radius:6px; background:#15223c; border:1px solid #233457;
+    display:flex; align-items:center; justify-content:center; font-family:var(--mono);
+    font-size:12px; color:var(--muted); transition:all .15s;
+  }
+  .cell.active{background:rgba(59,130,246,.4); border-color:var(--blue); color:#fff; transform:translateY(-2px);}
+  .cell.done{background:rgba(34,197,94,.16); border-color:var(--green); color:var(--green);}
+
+  /* 2 翻倍 */
+  .double-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:10px;}
+  .dcard{
+    background:#0b1324; border:1px solid var(--line); border-radius:10px;
+    padding:12px; text-align:center;
+  }
+  .dc-name{font-size:13px; font-weight:700; color:var(--cyan); font-family:var(--mono);}
+  .dc-num{font-size:26px; font-weight:700; font-family:var(--mono); margin-top:4px;}
+  .dc-after{font-size:11px; color:var(--muted); font-family:var(--mono);}
+  .dc-after b{color:var(--text);}
+  .dc-ratio{font-size:12px; font-family:var(--mono); color:var(--amber); margin:3px 0;}
+
+  /* 3 领头项 */
+  .stack-bar{
+    display:flex; height:42px; border-radius:8px; overflow:hidden;
+    border:1px solid var(--line); background:#0b1324;
+  }
+  .stack-seg{height:100%; transition:width .2s;}
+  .seg-a{background:var(--amber);} .seg-b{background:var(--cyan);} .seg-c{background:var(--purple);}
+  .stack-legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11.5px; font-family:var(--mono); color:var(--muted);}
+  .stack-legend i{display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px;}
+  .stack-legend b{color:var(--text);}
+
+  /* 4 二分 */
+  .bisect-track{display:flex; gap:1px; height:42px; background:#090f1d; border:1px solid var(--line); border-radius:8px; padding:4px;}
+  .bcell{flex:1; border-radius:2px; background:rgba(59,130,246,.18); border:1px solid rgba(59,130,246,.28); transition:all .25s;}
+  .bcell.dim{background:#0e1628; border-color:#182338; opacity:.35;}
+  .bcell.mid{background:var(--amber); border-color:var(--amber); box-shadow:0 0 9px rgba(245,181,68,.65);}
+
+  /* 5 归并 */
+  .merge-levels{display:flex; flex-direction:column; gap:6px;}
+  .merge-level{
+    display:flex; align-items:center; gap:1px; flex-wrap:wrap; padding:5px 8px;
+    border:1px solid #1a2741; border-radius:7px; background:#0b1324;
+    opacity:.2; transition:opacity .35s;
+  }
+  .merge-level.on{opacity:1; border-color:#2b3d5f;}
+  .mlvl{font-family:var(--mono); font-size:9px; color:var(--cyan); width:22px; flex:none;}
+  .mgroup{display:flex; gap:1px; padding:1px 0; border-radius:4px; background:rgba(56,189,248,.07);}
+  .mcard{
+    width:19px; height:19px; border-radius:4px; background:#15223c; border:1px solid #233457;
+    font-family:var(--mono); font-size:8.5px; color:var(--text);
+    display:flex; align-items:center; justify-content:center;
+  }
+
+  /* 6 n² */
+  .chart-box{background:#090f1d; border:1px solid var(--line); border-radius:10px; padding:8px;}
+  .chart-box canvas{display:block; width:100%;}
+  .budget-bar{height:16px; background:#111c33; border-radius:4px; overflow:hidden;}
+  .budget-fill{height:100%; width:0%; background:var(--green); transition:width .3s, background .3s;}
+
+  /* 7 代价卡 */
+  .ds-cards{display:grid; grid-template-columns:repeat(4,1fr); gap:8px;}
+  .ds-card{
+    background:#0b1324; border:1px solid var(--line); border-radius:9px;
+    padding:10px; text-align:center;
+  }
+  .ds-card .ds-name{font-size:11.5px; color:var(--muted);}
+  .ds-card .ds-cost{font-family:var(--mono); font-size:16px; font-weight:700; margin-top:3px;}
+  .cost.o1{color:var(--green);} .cost.olog{color:var(--cyan);} .cost.on{color:var(--amber);}
+  .cost.onlogn{color:var(--purple);} .cost.on2{color:var(--red);} .cost.dash{color:#4b6188;}
+
+  /* 8 摊还 */
+  .amort-bars{
+    display:flex; align-items:flex-end; gap:5px; height:190px; padding:10px;
+    background:#090f1d; border:1px solid var(--line); border-radius:10px;
+  }
+  .amort-bar{flex:1; display:flex; align-items:flex-end; height:100%;}
+  .amort-bar i{display:block; width:100%; border-radius:3px 3px 0 0; background:rgba(59,130,246,.65); transition:height .2s;}
+  .amort-bar.hot i{background:rgba(248,113,113,.9);}
+
+  /* 9/10 决策与测验 */
+  .decision-grid{display:flex; flex-direction:column; gap:7px; margin-top:10px;}
+  .decision-btn{
+    text-align:left; font-size:12.5px; background:#182338; color:var(--text);
+    border:1px solid var(--line); border-radius:7px; padding:9px 12px; cursor:pointer;
+    font-family:system-ui,"Microsoft YaHei",sans-serif;
+  }
+  .decision-btn:hover{border-color:var(--cyan);}
+  .decision-btn.active{border-color:var(--amber); background:rgba(245,181,68,.1);}
+  .decision-result{
+    margin-top:10px; padding:10px 12px; border-radius:8px; font-size:12.5px;
+    background:rgba(34,197,94,.07); border:1px solid rgba(34,197,94,.35); display:none;
+  }
+  .decision-result.show{display:block;}
+  .decision-result b{color:var(--green);}
+  .decision-result .why{color:var(--muted); margin-top:4px; display:block;}
+
+  .quiz{margin-top:4px;}
+  .qitem{margin-top:12px; padding-top:10px; border-top:1px dashed var(--line);}
+  .qitem .qtext{font-size:13.5px; font-weight:600;}
+  .opts{display:flex; flex-direction:column; gap:6px; margin-top:8px;}
+  .opt{
+    text-align:left; font-size:12.5px; font-family:var(--mono),system-ui,sans-serif;
+    background:#182338; color:var(--text); border:1px solid var(--line); border-radius:6px;
+    padding:8px 12px; cursor:pointer;
+  }
+  .opt.correct{border-color:var(--green); color:var(--green); background:rgba(34,197,94,.1);}
+  .opt.wrong{border-color:var(--red); color:var(--red); background:rgba(248,113,113,.08);}
+  .opt.dim{opacity:.4;}
+  .qexpl{font-size:12px; color:var(--muted); margin-top:6px;}
+
+  .free-readout{display:flex; flex-direction:column; gap:4px; font-family:var(--mono); font-size:11.5px; color:var(--muted);}
+  .fr-row{display:flex; gap:12px; justify-content:space-between; padding:4px 8px; background:#0b1324; border:1px solid #1a2741; border-radius:5px;}
+  .fr-name{width:80px; flex:none; color:var(--text); font-weight:700;}
+
+  /* 为什么 */
+  .why-stack{display:flex; flex-direction:column; gap:10px;}
+  .why-card{background:#0b1324; border:1px solid var(--line); border-radius:10px; padding:12px 14px; font-size:12.5px;}
+  .why-card h3{font-size:13px; margin-bottom:5px;}
+  .why-card p{color:var(--muted); font-size:12px;}
+  .why-card b{color:var(--text);}
+  .why-card.w1 h3{color:var(--cyan);} .why-card.w2 h3{color:var(--amber);} .why-card.w3 h3{color:var(--green);}
+
+  footer{margin-top:24px; text-align:center; color:var(--muted); font-size:11.5px;}
+
+  @media (max-width:620px){
+    .dcard{padding:9px 6px;}
+    .dc-name{font-size:10.5px;}
+    .dc-num{font-size:20px;}
+    .ds-cards{grid-template-columns:1fr 1fr;}
+    .cmp-name{width:100px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>算法复杂度：<span class="dot-word">增长率的形状</span></h1>
+  <p class="sub">只回答一件事：数据变大时，步数怎么涨。</p>
+
+  <div class="tier-chips">
+    <span class="chip"><b>O(1)</b>一步到位</span>
+    <span class="chip"><b>O(log n)</b>对折找</span>
+    <span class="chip"><b>O(n)</b>挨个点名</span>
+    <span class="chip"><b>O(n log n)</b>分堆合并</span>
+    <span class="chip"><b>O(n²)</b>两两握手</span>
+    <span class="chip"><b>O(2ⁿ)</b>组合爆炸</span>
+  </div>
+
+  <div class="rail" id="rail"></div>
+
+  <div class="quest" id="quest"></div>
+
+  <div class="core-card">
+    <div id="lab" class="core-lab"></div>
+  </div>
+
+  <details class="drawer">
+    <summary>▸ 这一关在代码里长什么样（不想看可以跳过）</summary>
+    <div class="drawer-inner">
+      <div class="codebox-wrap">
+        <div class="codebox-topbar">
+          <div class="codebox-dots">
+            <span class="codebox-dot dot-r"></span>
+            <span class="codebox-dot dot-y"></span>
+            <span class="codebox-dot dot-g"></span>
+          </div>
+          <span id="codebox-filename">algorithm.c</span>
+          <span style="font-size:10px; color:var(--muted); font-family:var(--mono);">C / 伪代码</span>
+        </div>
+        <div class="codebox" id="codebox"></div>
+      </div>
+      <div class="note-card">
+        <div class="nt"><span>🔑 关键结论</span><span id="note-tag">复杂度</span></div>
+        <div class="nd" id="note-desc">复杂度只数步数怎么随 n 涨，不看秒表。</div>
+      </div>
+    </div>
+  </details>
+
+  <details class="drawer">
+    <summary>▸ 明细账本（n / 步数 / 档位）</summary>
+    <div class="drawer-inner">
+      <div class="ledger-grid">
+        <div class="lg-cell"><div class="k">当前 n（数据规模）</div><div class="v" id="m-n">—</div></div>
+        <div class="lg-cell"><div class="k">当前步数</div><div class="v" id="m-steps">—</div></div>
+        <div class="lg-cell"><div class="k">复杂度档位</div><div class="v" id="m-class">—</div></div>
+        <div class="lg-cell"><div class="k">n 翻倍时</div><div class="v" id="m-factor">—</div></div>
+      </div>
+      <div class="ledger-foot">
+        <span>实验 <b id="st-exp">0</b> 次</span>
+        <span>最大 n <b id="st-maxn">—</b></span>
+        <span>关卡 <b id="st-stage">00</b></span>
+        <button id="btn-rearm" class="clear-btn" onclick="handleClearClick()">⟲ 清除全部进度</button>
+      </div>
+    </div>
+  </details>
+
+  <details class="drawer">
+    <summary>▸ 过程记录</summary>
+    <div class="logbox" id="logbox"></div>
+  </details>
+
+  <details class="drawer">
+    <summary>▸ 想深一点：三个为什么</summary>
+    <div class="drawer-inner">
+      <div class="why-stack">
+        <div class="why-card w1">
+          <h3>为什么复杂度不看秒数？</h3>
+          <p>秒表量的是<b>算法 + 机器 + 这批数据</b>的混合物。换台快 10 倍的机器，曲线整体压低，但形状不变。数据一大，形状说了算。</p>
+        </div>
+        <div class="why-card w2">
+          <h3>为什么实时系统盯最坏复杂度？</h3>
+          <p>控制回路每帧只有 10ms，平均值再好，只要有一帧超时，控制器就抖。哈希表平均 O(1)，最坏 O(n)；红黑树最坏也 O(log n)。<b>截止时间只认上界。</b></p>
+        </div>
+        <div class="why-card w3">
+          <h3>为什么排序绕不开 n log n？</h3>
+          <p>归并排序每层做 n 次活、共 log₂n 层，总账 n log n。比较排序的下界也是它——不是实现不够聪明，是问题本身的下限。</p>
+        </div>
+      </div>
+    </div>
+  </details>
+
+  <footer>算法复杂度心智模型 · 轻量版 · 每关只留一个核心画面，细节收进抽屉</footer>
+
+</div>
+
+<script>
+/* ==================== 状态 ==================== */
+const STORAGE_KEY = 'algo_complexity_v2';
+let currentStage = 0;
+let clearClickCount = 0;
+let clearTimer = null;
+let quizAnswers = {};
+let runToken = 0;
+
+let world = {
+  running: false,
+  stageDone: false,
+  n: 0,
+  steps: 0,
+  cls: '—',
+  factor: '—',
+  experiments: 0,
+  maxN: 0,
+  startN: 1000,
+  doublingN: 100,
+  termsN: 10,
+  dsOp: 'idx',
+  freeN: 128,
+  decisionPick: null
+};
+
+const COLORS = { green:'#22c55e', cyan:'#38bdf8', amber:'#f5b544', purple:'#a855f7', red:'#f87171' };
+
+/* ==================== 12 关 ==================== */
+const STAGES = [
+  {
+    tag: '00 起点', title: '秒表会骗人',
+    head: '机器快慢只改起跑线，数据变大后形状说了算。',
+    link: '两条横条就是两个算法：A 每步快 10 倍但干 n² 次活，B 机器慢但干 n log n 次活。把 n 从 1 千推到 2 万，看谁反超。',
+    action: '把数据量推到 2 万', fn: 'doStartShape'
+  },
+  {
+    tag: '01 数步数', title: '复杂度就是数步数',
+    head: '每多一个数，固定多 3 步——这就是 O(n)。',
+    link: '12 个数求和，每个数 3 步，一共 38 步。n 翻倍，步数就翻倍；把循环翻译成步数，就是复杂度分析的全部起点。',
+    action: '单步求和 12 个数', fn: 'doCountSteps'
+  },
+  {
+    tag: '02 翻倍', title: '翻倍倍数是身份证',
+    head: 'n 翻倍时步数翻几倍，一眼认出档位。',
+    link: '三张卡就是三种复杂度。点一次翻倍：×2 是 O(n)，×2 多一点是 O(n log n)，×4 是 O(n²)。机器换多快，这个倍数都不变。',
+    action: '把 n 翻一倍', fn: 'doDoubling'
+  },
+  {
+    tag: '03 领头项', title: '只留最胖的一段',
+    head: 'n 大了，低阶项和常数都被领头项吞掉。',
+    link: '整条横条就是 T(n)：橙色是 5n²，蓝紫是 300n 和 500。n=10 时零头占 87%，n=2000 时橙色占 97%——所以 Big-O 只写 O(n²)。',
+    action: '从 n=10 推到 2000', fn: 'doDropTerms'
+  },
+  {
+    tag: '04 对折找', title: '每次都砍掉一半',
+    head: '100 万个数，只要 20 次就能找到。',
+    link: '猜 1~1024 的中间值，候选每次减半：1024→512→…→1，10 次锁定 673。log n 不是"慢一点"，是"几乎不涨"。',
+    action: '二分查找 673', fn: 'doBisect'
+  },
+  {
+    tag: '05 分堆合并', title: '排序的账本',
+    head: '每层做 n 次活，一共 log n 层——所以是 n log n。',
+    link: '16 张牌分 4 层合并，每层都要把 16 张过一遍：16×4=64。层数就是 log₂16，这就是排序绕不开 n log n 的原因。',
+    action: '合并 16 张牌', fn: 'doMergeSort'
+  },
+  {
+    tag: '06 两两握手', title: 'n² 会撞上截止期',
+    head: '人数翻倍，工作量 ×4；实时系统会当场超时。',
+    link: '每个格子是一次两两比较。500 个点 = 12.5 万次 ≈ 12.5ms，而控制回路一帧只有 10ms——这一帧保不住，小车就会抖。',
+    action: '暴力比较 500 个点', fn: 'doPairs'
+  },
+  {
+    tag: '07 结构代价', title: '同一个「查」，代价差出天际',
+    head: '先看操作，再看结构；实时系统先看最坏。',
+    link: '点一个操作，四张卡就是四种结构的代价。数组按下标一步到位，链表按值要挨个走，哈希平均快但最坏不可控。',
+    action: '逐个操作对比', fn: 'doDsCompare'
+  },
+  {
+    tag: '08 摊还', title: '偶尔疼一次，平均不疼',
+    head: '最坏单次 O(n)，摊还下来每次 O(1)。',
+    link: '每根柱子是一次 push_back 的代价。红柱是扩容搬家（1、2、4、8…才搬一次），蓝柱是普通插入；平均下来每次只多 2 步。',
+    action: '连续插入 16 个元素', fn: 'doAmortized'
+  },
+  {
+    tag: '09 决策台', title: '先看约束，再选结构',
+    head: '有截止时间看最坏；离线看平均；查询反复发生就先预处理。',
+    link: '点一个真实场景，看该盯哪一列复杂度。没有最好的结构，只有最匹配约束的结构。',
+    action: null, fn: null
+  },
+  {
+    tag: '10 毕业测', title: '4 道题，检验一眼认档位',
+    head: '第 1 题是认图题：拿翻倍实验里的数字反推档位。',
+    link: '先回忆画面，再对照术语。4 题全对，这一课就夯实了。',
+    action: null, fn: null
+  },
+  {
+    tag: '11 自由沙盒', title: '自己拖 n，验证你的估算',
+    head: '先估档位，再用翻倍倍数验证。',
+    link: '勾选曲线、拖动 n：每一档的步数和翻倍倍率都摆在下面。',
+    action: null, fn: null
+  }
+];
+
+/* ==================== 工具 ==================== */
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function fmt(v){
+  if(v === undefined || v === null || isNaN(v)) return '—';
+  if(v >= 1e9) return (v/1e9).toFixed(1).replace(/\.0$/,'') + 'G';
+  if(v >= 1e6) return (v/1e6).toFixed(1).replace(/\.0$/,'') + 'M';
+  if(v >= 1e3) return (v/1e3).toFixed(1).replace(/\.0$/,'') + 'k';
+  return Math.round(v).toString();
+}
+function fmtTick(v){
+  if(v >= 1e6) return (v/1e6).toFixed(v >= 1e7 ? 0 : 1).replace(/\.0$/,'') + 'M';
+  if(v >= 1e3) return Math.round(v/1e3) + 'k';
+  return Math.round(v).toString();
+}
+function fmtMs(ms){
+  if(ms >= 1) return ms.toFixed(1) + ' ms';
+  if(ms >= 0.001) return (ms * 1000).toFixed(0) + ' μs';
+  return ms.toExponential(1) + ' ms';
+}
+function setTxt(id, v){
+  const el = document.getElementById(id);
+  if(el) el.textContent = v;
+}
+function addLog(cmd, type, expl){
+  const box = document.getElementById('logbox');
+  if(!box) return;
+  const div = document.createElement('div');
+  div.className = `logline ${type}`;
+  div.innerHTML = `<span class="cmd">&gt; ${cmd}</span>${expl ? `<div class="expl">${expl}</div>` : ''}`;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+/* ==================== 通用图表（仅自由沙盒用） ==================== */
+function drawChart(id, opts){
+  const cv = document.getElementById(id);
+  if(!cv) return;
+  const parent = cv.parentElement;
+  const w = Math.max(340, (parent ? parent.clientWidth : 600) - 18);
+  const h = opts.height || 280;
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(w * dpr);
+  cv.height = Math.round(h * dpr);
+  cv.style.width = '100%';
+  cv.style.height = h + 'px';
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const L = 62, R = 16, T = 18, B = 36;
+  const pw = w - L - R, ph = h - T - B;
+  const nMax = opts.nMax, yMax = opts.yMax, logY = !!opts.logY;
+  const xPix = n => L + (Math.max(0, Math.min(n, nMax)) / nMax) * pw;
+  const yPix = v => {
+    if(logY){
+      const lm = Math.log10(yMax), lv = Math.log10(Math.max(v, 1));
+      return T + (1 - Math.max(0, Math.min(lv, lm)) / lm) * ph;
+    }
+    return T + (1 - Math.max(0, Math.min(v, yMax)) / yMax) * ph;
+  };
+  ctx.fillStyle = '#070c16'; ctx.fillRect(L, T, pw, ph);
+  ctx.strokeStyle = '#1c2942'; ctx.lineWidth = 1;
+  ctx.font = '10px "Cascadia Code", Consolas, monospace';
+  let yTicks = [];
+  if(logY){ let p = 1; while(p <= yMax * 1.0001){ yTicks.push(p); p *= 10; } }
+  else { for(let k = 0; k <= 4; k++) yTicks.push(yMax * k / 4); }
+  yTicks.forEach(v => {
+    const y = yPix(v);
+    if(y < T - 1 || y > T + ph + 1) return;
+    ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(L + pw, y); ctx.stroke();
+    ctx.fillStyle = '#7f93b8'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    ctx.fillText(fmtTick(v), L - 8, y);
+  });
+  [0, .25, .5, .75, 1].forEach(k => {
+    const n = Math.round(k * nMax), x = xPix(n);
+    ctx.beginPath(); ctx.moveTo(x, T); ctx.lineTo(x, T + ph); ctx.stroke();
+    ctx.fillStyle = '#7f93b8'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillText(fmtTick(n), x, T + ph + 6);
+  });
+  ctx.fillStyle = '#8fa4c7'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  ctx.fillText('n 数据规模', L + pw / 2, h - 14);
+  ctx.save(); ctx.translate(13, T + ph / 2); ctx.rotate(-Math.PI / 2); ctx.fillText('步数', 0, 0); ctx.restore();
+  if(opts.markX !== undefined && opts.markX !== null){
+    const x = xPix(opts.markX);
+    ctx.strokeStyle = 'rgba(245,181,68,.7)'; ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(x, T); ctx.lineTo(x, T + ph); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = '#f5b544'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillText(opts.markLabel || ('n=' + fmt(opts.markX)), x, T + 3);
+  }
+  const prog = opts.progress === undefined ? 1 : opts.progress;
+  ctx.save(); ctx.beginPath(); ctx.rect(L, T, pw, ph); ctx.clip();
+  (opts.curves || []).forEach(c => {
+    ctx.beginPath(); ctx.lineWidth = 2.2; ctx.strokeStyle = c.color;
+    ctx.setLineDash(c.dash ? [6, 5] : []);
+    const K = 240;
+    let started = false;
+    for(let i = 0; i <= K; i++){
+      const t = i / K;
+      if(t > prog + 1e-9) break;
+      const n = t * nMax, v = c.fn(n);
+      const x = xPix(n), y = yPix(v);
+      if(!started){ ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+    }
+    ctx.stroke(); ctx.setLineDash([]);
+  });
+  ctx.restore();
+}
+
+/* ==================== 渲染 ==================== */
+function renderRail(){
+  const rail = document.getElementById('rail');
+  if(!rail) return;
+  rail.innerHTML = '';
+  STAGES.forEach((st, idx) => {
+    const pill = document.createElement('div');
+    pill.className = `pill ${idx < currentStage ? 'done' : ''} ${idx === currentStage ? 'current' : ''}`;
+    pill.innerText = st.tag;
+    pill.onclick = () => buildToStage(idx);
+    rail.appendChild(pill);
+    if(idx < STAGES.length - 1){
+      const sep = document.createElement('div'); sep.className = 'sep'; rail.appendChild(sep);
+    }
+  });
+}
+
+function doneBarHtml(){
+  return `<div class="done-bar">
+    <span>✅ 跑完了。可以重跑、继续看；准备好了再走。</span>
+    <button onclick="skipStage()">进入下一关 →</button>
+  </div>`;
+}
+
+function renderQuest(){
+  const q = document.getElementById('quest');
+  if(!q) return;
+  if(currentStage === 9) { renderDecisionQuest(q); return; }
+  if(currentStage === 10) { renderQuizQuest(q); return; }
+  if(currentStage === 11) { renderFreeQuest(q); return; }
+  const st = STAGES[currentStage];
+  q.className = 'quest';
+  q.innerHTML = `
+    <div class="quest-head">
+      <span class="quest-tag">${st.tag}</span>
+      <span class="quest-title">${st.title}</span>
+      <button class="replay-btn" onclick="buildToStage(${currentStage})">↺ 重玩本关</button>
+    </div>
+    <div class="quest-headline">${st.head}</div>
+    <div class="quest-link">${st.link}</div>
+    ${st.action ? `<div class="go"><button onclick="${st.fn}()">${st.action}</button></div>` : ''}
+    <div class="done-zone" id="done-zone">${world.stageDone ? doneBarHtml() : ''}</div>
+  `;
+}
+
+function renderFreeQuest(q){
+  q.className = 'quest free';
+  q.innerHTML = `
+    <div class="quest-head">
+      <span class="quest-tag">11 自由沙盒</span>
+      <span class="quest-title">自己拖 n，验证你的估算</span>
+      <button class="replay-btn" onclick="buildToStage(11)">↺ 重置</button>
+    </div>
+    <div class="quest-headline">先估档位，再用翻倍倍数验证。</div>
+    <div class="quest-link">勾选曲线、拖动 n：每一档的步数和翻倍倍率都摆在下面。</div>
+  `;
+}
+
+/* ---------- 决策台 ---------- */
+const DECISIONS = {
+  control: { name: '固定数组 / 红黑树', why: '1kHz 截止期看最坏：数组按下标 O(1)、红黑树最坏 O(log n)，都能算进 10ms 预算；哈希最坏 O(n) 不可控。' },
+  dedup: { name: '哈希表 / 外部排序', why: '离线任务没有截止期，看平均和内存。哈希平均 O(1) 最快；放不下就外部排序 O(n log n)。' },
+  knn: { name: '空间网格 / KD-tree', why: '每帧 500 点暴力是 O(n²)≈12.5 万次，12.5ms 超时。网格/KD-tree 平均接近 O(log n)，压到常数级。' }
+};
+function renderDecisionQuest(container){
+  container.className = 'quest';
+  container.innerHTML = `
+    <div class="quest-head">
+      <span class="quest-tag">09 决策台</span>
+      <span class="quest-title">先看约束，再选结构</span>
+      <button class="replay-btn" onclick="buildToStage(9)">↺ 重置</button>
+    </div>
+    <div class="quest-headline">有截止时间看最坏；离线看平均；查询反复发生就先预处理。</div>
+    <div class="quest-link">点一个真实场景，看该盯哪一列复杂度。</div>
+    <div class="decision-grid">
+      <button class="decision-btn ${world.decisionPick==='control'?'active':''}" onclick="pickScenario('control')">⚙️ 1kHz 电机控制回路：按 ID 查 50 个关节参数（截止 10ms）</button>
+      <button class="decision-btn ${world.decisionPick==='dedup'?'active':''}" onclick="pickScenario('dedup')">🗂️ 离线处理 10 亿条日志去重（没有截止期，内存 32GB）</button>
+      <button class="decision-btn ${world.decisionPick==='knn'?'active':''}" onclick="pickScenario('knn')">🚁 每帧 500 个雷达点找最近邻（1kHz 控制回路）</button>
+    </div>
+    <div class="decision-result ${world.decisionPick?'show':''}" id="decision-result">
+      ${world.decisionPick ? `<b>推荐：${DECISIONS[world.decisionPick].name}</b><span class="why">${DECISIONS[world.decisionPick].why}</span>` : ''}
+    </div>
+    <div class="done-zone" id="done-zone">${world.stageDone ? doneBarHtml() : ''}</div>
+  `;
+}
+function pickScenario(key){
+  world.decisionPick = key;
+  renderQuest();
+  const d = DECISIONS[key];
+  addLog('场景 → ' + d.name, 'ok', d.why);
+  world.cls = d.name;
+  world.factor = key === 'control' ? '看最坏' : (key === 'dedup' ? '看平均' : '预处理摊薄');
+  renderLedger();
+  if(currentStage === 9) markStageDone(9);
+}
+
+/* ---------- 毕业测 ---------- */
+const QUIZ_DATA = [
+  {
+    q: '1. 翻倍实验里有一条：n=100 约 700 步，n=200 约 1600 步，n=400 约 3600 步。它是哪一档？',
+    opts: [
+      { t: 'A. O(log n)：每次对折，翻倍只 +1 步', c: false, expl: 'O(log n) 在 n 从 100 到 200 时只会从约 7 步变 8 步。' },
+      { t: 'B. O(n)：每个元素过一遍，翻倍就 ×2', c: false, expl: '接近，但 700→1600 涨了 2.3 倍，多出来的就是 log 因子。' },
+      { t: 'C. O(n log n)：每层 n 个工作量，层数随 n 增长', c: true, expl: '100×6.6≈660，200×7.6≈1530，400×8.6≈3450，与 700/1600/3600 对上。' }
+    ]
+  },
+  {
+    q: '2. for (i=0; i&lt;n; i++) for (j=0; j&lt;i; j++) work(); 总工作量是多少？',
+    opts: [
+      { t: 'A. O(n)：平均每次内层很短', c: false, expl: '内层平均跑 n/2 次，总量是 1+2+…+(n−1)=n(n−1)/2，仍是平方级。' },
+      { t: 'B. O(n log n)：因为内层在缩小', c: false, expl: '内层缩短是线性平均（n/2），不是对折，不产生 log。' },
+      { t: 'C. O(n²)：n(n−1)/2 的领头项还是 n²', c: true, expl: '三角形循环 = n(n−1)/2，Big-O 扔掉系数 1/2，还是 O(n²)。' }
+    ]
+  },
+  {
+    q: '3. T(n) = 5n² + 300n + 500 的复杂度是？',
+    opts: [
+      { t: 'A. O(5n² + 300n + 500)，必须写全', c: false, expl: 'Big-O 只保留领头项、丢掉常数：O(n²)。' },
+      { t: 'B. O(n²)：n 大时 5n² 占绝对大头', c: true, expl: 'n=2000 时 5n² 占 97%，300n 和 500 都是零头；系数 5 也只影响起跑线。' },
+      { t: 'C. O(n² + n)，因为 300n 不能省', c: false, expl: '低阶项会被领头项吞掉，Big-O 里不写。' }
+    ]
+  },
+  {
+    q: '4. 1kHz 控制回路里，某 unordered_map 平时 0.1ms，最坏碰撞退化到 8ms。最稳妥的改法是？',
+    opts: [
+      { t: 'A. 保持哈希表：平均 0.1ms 已经够快', c: false, expl: '实时系统不赌平均——一帧 8ms 加上其他工作就可能超 10ms。' },
+      { t: 'B. 换成最坏有保证的结构（固定数组 / 红黑树），把最坏钉死', c: true, expl: '截时间面前，最坏复杂度才是承诺。红黑树最坏 O(log n) 可预算。' },
+      { t: 'C. 换更大的哈希表，碰撞概率就低了', c: false, expl: '概率低 ≠ 不会发生。实时系统要上界，不是大概率没事。' }
+    ]
+  }
+];
+function renderQuizQuest(container){
+  container.className = 'quest';
+  let html = `
+    <div class="quest-head">
+      <span class="quest-tag">10 毕业测</span>
+      <span class="quest-title">4 道题，检验一眼认档位</span>
+      <button class="replay-btn" onclick="buildToStage(10)">↺ 重置做题</button>
+    </div>
+    <div class="quest-headline">第 1 题是认图题：拿翻倍实验里的数字反推档位。</div>
+    <div class="quiz">
+  `;
+  QUIZ_DATA.forEach((qitem, qidx) => {
+    html += `<div class="qitem"><div class="qtext">${qitem.q}</div><div class="opts">`;
+    qitem.opts.forEach((opt, oidx) => {
+      const selected = quizAnswers[qidx] === oidx;
+      let cls = 'opt';
+      if(quizAnswers[qidx] !== undefined){
+        if(opt.c) cls += ' correct';
+        else if(selected) cls += ' wrong';
+        else cls += ' dim';
+      }
+      html += `<button class="${cls}" onclick="answerQuiz(${qidx}, ${oidx})">${opt.t}</button>`;
+    });
+    if(quizAnswers[qidx] !== undefined){
+      html += `<div class="qexpl">${qitem.opts[quizAnswers[qidx]].expl}</div>`;
+    }
+    html += `</div></div>`;
+  });
+  html += `</div><div class="done-zone" id="done-zone">${world.stageDone ? doneBarHtml() : ''}</div>`;
+  container.innerHTML = html;
+}
+function answerQuiz(qidx, oidx){
+  quizAnswers[qidx] = oidx;
+  renderQuest();
+  const allCorrect = QUIZ_DATA.every((q, idx) => quizAnswers[idx] !== undefined && q.opts[quizAnswers[idx]].c);
+  if(allCorrect){
+    addLog('毕业小测全对通过！', 'ok', '可以先回看解析；准备好了再进入下一关。');
+    markStageDone(10);
+  }
+}
+
+/* ==================== 代码抽屉 ==================== */
+function renderCodebox(){
+  const box = document.getElementById('codebox');
+  const fnElem = document.getElementById('codebox-filename');
+  const noteTag = document.getElementById('note-tag');
+  const noteDesc = document.getElementById('note-desc');
+  if(!box || !fnElem || !noteTag || !noteDesc) return;
+  let code = '', tag = '', desc = '', file = 'algorithm.c';
+
+  if(currentStage === 0){
+    file = 'two_algos.js'; tag = '常数 vs 形状'; desc = '常数只影响起跑线（整体上下平移），增长率决定数据变大后谁先撑爆。';
+    code = `
+<span class="cm">// A：每步快 10 倍，但干 n² 次活</span>
+<span class="kw">for</span> (i = 0; i &lt; n; i++)
+  <span class="kw">for</span> (j = 0; j &lt; n; j++)
+    <span class="fn">compare</span>(a[i], a[j]);   <span class="cm">// n² 次</span>
+
+<span class="cm">// B：机器慢，但干 n log n 次活</span>
+<span class="fn">mergeSort</span>(a);              <span class="cm">// n log n 次</span>
+
+<span class="cm">// 小数据：A 快得离谱</span>
+<span class="cm">// 数据长大：B 反超</span>`;
+  } else if(currentStage === 1){
+    file = 'sum_array.c'; tag = 'T(n) = 3n + 2'; desc = '初始化 2 步 + 每轮 3 步。每多一个数固定多 3 步，就是 O(n)。';
+    code = `
+<span class="type">int</span> sum = <span class="val">0</span>;   <span class="cm">// 1 步</span>
+<span class="type">int</span> i = <span class="val">0</span>;     <span class="cm">// 1 步</span>
+<span class="kw">for</span> (i = <span class="val">0</span>; i &lt; n; i++) {
+    sum += a[i];   <span class="cm">// 读 + 加 + 自增 ≈ 3 步</span>
+}
+<span class="cm">// T(n) = 3n + 2</span>
+<span class="cm">// n=12 → 38 步</span>`;
+  } else if(currentStage === 2){
+    file = 'five_tiers.c'; tag = '翻倍指纹'; desc = 'n 翻倍时步数怎么变：不变 / +1 / ×2 / ×2.3 / ×4。';
+    code = `
+<span class="cm">// n: 100 → 200 → 400 → 800</span>
+<span class="cm">// O(1)      1 → 1 → 1 → 1        (不变)</span>
+<span class="cm">// O(log n)  7 → 8 → 9 → 10       (+1)</span>
+<span class="cm">// O(n)      100 → 200 → 400 → 800 (×2)</span>
+<span class="cm">// O(nlogn)  664 → 1528 → 3456 → 7900 (×2.3)</span>
+<span class="cm">// O(n²)     10k → 40k → 160k → 640k (×4)</span>`;
+  } else if(currentStage === 3){
+    file = 'big_o_rules.c'; tag = '只留领头项'; desc = 'Big-O：只保留增长最快的一项，丢掉常数系数。5n²+300n+500 → O(n²)。';
+    code = `
+<span class="type">long</span> <span class="fn">T</span>(<span class="type">long</span> n) {
+    <span class="kw">return</span> <span class="val">5</span>*n*n + <span class="val">300</span>*n + <span class="val">500</span>;
+}
+<span class="cm">// 规则 1：丢低阶项 → 5n²</span>
+<span class="cm">// 规则 2：丢常数系数 → O(n²)</span>
+<span class="cm">// n 小时低阶项会骗人，大数据看形状</span>`;
+  } else if(currentStage === 4){
+    file = 'binary_search.c'; tag = 'log₂n 步'; desc = '每轮候选减半，最多 log₂n + 1 轮。1024 → 10 轮；100 万 → 20 轮。';
+    code = `
+<span class="type">int</span> lo = <span class="val">0</span>, hi = n - <span class="val">1</span>;
+<span class="kw">while</span> (lo &lt;= hi) {
+    <span class="type">int</span> mid = (lo + hi) / <span class="val">2</span>;
+    <span class="kw">if</span> (a[mid] == target) <span class="kw">return</span> mid;
+    <span class="kw">else if</span> (a[mid] &lt; target) lo = mid + <span class="val">1</span>;
+    <span class="kw">else</span> hi = mid - <span class="val">1</span>;
+}
+<span class="cm">// n=1024 → 10 轮；n=100 万 → 20 轮</span>`;
+  } else if(currentStage === 5){
+    file = 'merge_sort.c'; tag = 'n × log₂n'; desc = '每层合并总工作量都是 n，层数 log₂n。总账 n log n。';
+    code = `
+<span class="kw">void</span> <span class="fn">mergeSort</span>(<span class="type">int</span> a[], <span class="type">int</span> lo, <span class="type">int</span> hi) {
+    <span class="kw">if</span> (lo >= hi) <span class="kw">return</span>;
+    <span class="type">int</span> mid = (lo + hi) / <span class="val">2</span>;
+    <span class="fn">mergeSort</span>(a, lo, mid);
+    <span class="fn">mergeSort</span>(a, mid + <span class="val">1</span>, hi);
+    <span class="fn">merge</span>(a, lo, mid, hi);   <span class="cm">// 本层 n 次比较</span>
+}
+<span class="cm">// 每层 n 次活，共 log₂n 层</span>
+<span class="cm">// 16 个元素 → 16 × 4 = 64</span>`;
+  } else if(currentStage === 6){
+    file = 'bruteforce_knn.c'; tag = '10ms 截止期'; desc = '双重循环 = O(n²)。500 点要 12.5ms，超过 1kHz 控制回路的 10ms 预算。';
+    code = `
+<span class="kw">for</span> (<span class="type">int</span> i = <span class="val">0</span>; i &lt; n; i++)
+  <span class="kw">for</span> (<span class="type">int</span> j = i + <span class="val">1</span>; j &lt; n; j++)
+    <span class="fn">dist</span>(pts[i], pts[j]);
+
+<span class="cm">// 比较次数 = n(n−1)/2</span>
+<span class="cm">// n=500 → 124,750 次 → 12.5ms</span>
+<span class="cm">// 预算 10ms → 本帧超时</span>`;
+  } else if(currentStage === 7){
+    file = 'ds_costs.c'; tag = '平均 vs 最坏'; desc = '实时系统看最坏列：哈希最坏 O(n) 不可控，红黑树最坏 O(log n) 可预算。';
+    code = `
+<span class="cm">//            按下标查  按值查      中间插入   最坏保证</span>
+<span class="cm">// 数组       O(1)      O(n)        O(n)      有 O(1)</span>
+<span class="cm">// 链表       O(n)      O(n)        O(1)      有 O(n)</span>
+<span class="cm">// 哈希表     —         O(1)平均    O(1)平均  无！O(n)</span>
+<span class="cm">// 红黑树     —         O(log n)    O(log n)  有 O(log n)</span>`;
+  } else if(currentStage === 8){
+    file = 'vector_push.cpp'; tag = '摊还 O(1)'; desc = '容量翻倍扩容，复制总量 ≈ n；摊到 n 次插入，平均每次 < 2 步。';
+    code = `
+<span class="kw">if</span> (size == capacity) {
+    capacity *= <span class="val">2</span>;
+    new_buf = <span class="fn">malloc</span>(capacity * <span class="kw">sizeof</span>(T));
+    <span class="fn">memcpy</span>(new_buf, old_buf, size * <span class="kw">sizeof</span>(T)); <span class="cm">// O(n)</span>
+    <span class="fn">free</span>(old_buf);
+}
+new_buf[size++] = value;   <span class="cm">// 1 步</span>
+<span class="cm">// 复制总量 1+2+4+…&lt;n</span>
+<span class="cm">// 平均 &lt; 2 步 → 摊还 O(1)</span>`;
+  } else if(currentStage === 9){
+    file = 'decision.txt'; tag = '约束 → 看哪列'; desc = '有截止时间看最坏；离线看平均和内存；查询反复发生就先预处理。';
+    code = `
+<span class="cm">// 约束                 看什么        典型选择</span>
+<span class="cm">// 有截止时间           最坏复杂度    固定数组 / 红黑树</span>
+<span class="cm">// 离线跑批             平均 + 内存   哈希表 / 外部排序</span>
+<span class="cm">// 查询反复发生         预处理摊薄    排序一次 + 二分</span>
+<span class="cm">// 数据总在长大         增长率        避开 n²、2ⁿ</span>`;
+  } else if(currentStage === 10){
+    file = 'checklist.md'; tag = '四步判读'; desc = '数步数 → 看翻倍 → 扔零头 → 对约束。';
+    code = `
+<span class="cm"># 1. 数步数：循环翻译成 T(n)</span>
+<span class="cm">#    for i&lt;n        → n</span>
+<span class="cm">#    嵌套 for       → n²（含三角形 n(n−1)/2）</span>
+<span class="cm">#    每次砍一半     → log n</span>
+<span class="cm"># 2. 看翻倍：n 翻倍时步数怎么变</span>
+<span class="cm"># 3. 扔零头：只留领头项、丢系数</span>
+<span class="cm"># 4. 对约束：实时看最坏，离线看平均</span>`;
+  } else {
+    file = 'sandbox.js'; tag = '自由观察'; desc = '勾选曲线、拖动 n：每一档的步数与翻倍倍率都摆在台面上。';
+    code = `
+<span class="cm">// 六档指纹：</span>
+<span class="cm">// O(1)      翻倍不变</span>
+<span class="cm">// O(log n)  翻倍 +1</span>
+<span class="cm">// O(n)      翻倍 ×2</span>
+<span class="cm">// O(nlogn)  翻倍 ×2.3</span>
+<span class="cm">// O(n²)     翻倍 ×4</span>
+<span class="cm">// O(2ⁿ)     多一个元素就翻倍</span>`;
+  }
+  fnElem.innerText = file;
+  noteTag.innerText = tag;
+  noteDesc.innerHTML = desc;
+  box.innerHTML = code.trim();
+}
+
+/* ==================== 账本 ==================== */
+function renderLedger(){
+  setTxt('m-n', world.n ? fmt(world.n) : '—');
+  setTxt('m-steps', world.steps ? fmt(world.steps) : '—');
+  setTxt('m-class', world.cls);
+  setTxt('m-factor', world.factor);
+  setTxt('st-exp', world.experiments);
+  setTxt('st-maxn', world.maxN ? fmt(world.maxN) : '—');
+  setTxt('st-stage', String(currentStage).padStart(2, '0'));
+}
+
+function render(){
+  renderRail();
+  renderQuest();
+  renderCodebox();
+  renderLab();
+  renderLedger();
+  saveState();
+}
+
+/* ==================== 实验台调度 ==================== */
+function renderLab(){
+  runToken++;
+  const lab = document.getElementById('lab');
+  if(!lab) return;
+  if(currentStage === 0) labStart(lab);
+  else if(currentStage === 1) labCount(lab);
+  else if(currentStage === 2) labDoubling(lab);
+  else if(currentStage === 3) labTerms(lab);
+  else if(currentStage === 4) labBisect(lab);
+  else if(currentStage === 5) labMerge(lab);
+  else if(currentStage === 6) labPairs(lab);
+  else if(currentStage === 7) labDs(lab);
+  else if(currentStage === 8) labAmortized(lab);
+  else if(currentStage === 9) labDecision(lab);
+  else if(currentStage === 10) labQuiz(lab);
+  else labFree(lab);
+}
+
+/* ==================== 0 起点 ==================== */
+function startTime(n){
+  return {
+    a: 0.01 * n * n / 1e6,                       // ms
+    b: 10 * n * Math.log2(Math.max(n, 2)) / 1e6  // ms
+  };
+}
+function labStart(lab){
+  lab.innerHTML = `
+    <div class="compare">
+      <div class="cmp-row">
+        <div class="cmp-name"><b>算法 A</b><i>每步快 10 倍 · n² 次活</i></div>
+        <div class="cmp-track"><div class="cmp-fill a" id="fill-a"></div></div>
+        <div class="cmp-val" id="val-a">—</div>
+      </div>
+      <div class="cmp-row">
+        <div class="cmp-name"><b>算法 B</b><i>机器慢 · n log n 次活</i></div>
+        <div class="cmp-track"><div class="cmp-fill b" id="fill-b"></div></div>
+        <div class="cmp-val" id="val-b">—</div>
+      </div>
+    </div>
+    <div class="big-line" id="start-line">—</div>
+    <div class="lab-controls">
+      <button onclick="setStartN(1000)">n = 1 千</button>
+      <button onclick="setStartN(20000)">n = 2 万</button>
+    </div>
+    <div class="lab-note">横条越短越快。点「n = 2 万」，看哪根反超。</div>
+  `;
+  setStartN(world.startN || 1000, false);
+}
+function setStartN(n, logIt = true){
+  const { a, b } = startTime(n);
+  const max = Math.max(a, b);
+  const fa = document.getElementById('fill-a');
+  const fb = document.getElementById('fill-b');
+  if(fa) fa.style.width = (a / max * 100).toFixed(1) + '%';
+  if(fb) fb.style.width = (b / max * 100).toFixed(1) + '%';
+  setTxt('val-a', fmtMs(a));
+  setTxt('val-b', fmtMs(b));
+  setTxt('start-line', `n = ${fmt(n)} · ${a < b ? 'A 更快' : 'B 反超'}`);
+  world.startN = n;
+  world.n = n;
+  world.steps = Math.round(a);
+  world.cls = a < b ? 'A 暂时领先' : 'B 反超';
+  world.factor = a < b ? '常数赢' : '形状赢';
+  renderLedger();
+  if(logIt){
+    addLog(`n = ${fmt(n)}：A ${fmtMs(a)} vs B ${fmtMs(b)}`, a < b ? 'info' : 'ok',
+      a < b ? '小数据时，常数小的 A 看起来更强。' : '数据长大，n² 的形状开始统治。');
+  }
+}
+function doStartShape(){
+  if(world.running) return;
+  setStartN(20000);
+  world.experiments++;
+  world.maxN = Math.max(world.maxN, 20000);
+  renderLedger();
+  markStageDone(0);
+}
+
+/* ==================== 1 数步数 ==================== */
+const SUM_VALS = [4, 8, 15, 16, 23, 42, 7, 11, 2, 9, 30, 5];
+function labCount(lab){
+  lab.innerHTML = `
+    <div class="cells">
+      ${SUM_VALS.map((v, i) => `<div class="cell" id="cell-${i}">${v}</div>`).join('')}
+    </div>
+    <div class="big-line">已走 <b id="step-disp">0</b> 步 · 当前和 <b id="sum-disp">0</b></div>
+    <div class="lab-note">看格子亮到哪，步数就加到哪。</div>
+  `;
+}
+async function doCountSteps(){
+  if(world.running) return;
+  world.running = true;
+  const token = ++runToken;
+  document.querySelectorAll('#lab .cell').forEach(c => c.className = 'cell');
+  setTxt('sum-disp', '0');
+  world.n = 0;
+  world.steps = 2;
+  world.cls = 'O(n)';
+  world.factor = '×2';
+  renderLedger();
+  addLog('初始化 2 步，然后每个数 3 步', 'info', '');
+  let sum = 0;
+  for(let i = 0; i < SUM_VALS.length; i++){
+    if(token !== runToken){ world.running = false; return; }
+    const cell = document.getElementById('cell-' + i);
+    if(!cell){ world.running = false; return; }
+    cell.classList.add('active');
+    sum += SUM_VALS[i];
+    world.steps += 3;
+    world.n = i + 1;
+    setTxt('sum-disp', sum);
+    setTxt('step-disp', world.steps);
+    renderLedger();
+    await sleep(190);
+    cell.classList.remove('active');
+    cell.classList.add('done');
+  }
+  world.steps = 3 * SUM_VALS.length + 2;
+  world.experiments++;
+  world.maxN = Math.max(world.maxN, SUM_VALS.length);
+  renderLedger();
+  addLog(`12 个数：3×12+2 = ${world.steps} 步`, 'ok', '每多一个数固定多 3 步——把循环翻译成步数，就是复杂度分析的第一步。');
+  world.running = false;
+  markStageDone(1);
+}
+
+/* ==================== 2 翻倍 ==================== */
+function fN(n){ return n; }
+function fNL(n){ return n * Math.log2(Math.max(n, 2)); }
+function fN2(n){ return n * n; }
+function labDoubling(lab){
+  lab.innerHTML = `
+    <div class="double-grid">
+      <div class="dcard"><div class="dc-name">O(n)</div><div class="dc-num" id="d-n">100</div><div class="dc-ratio" id="r-n">—</div><div class="dc-after">翻倍后 <b id="d-n2">200</b></div></div>
+      <div class="dcard"><div class="dc-name">O(n log n)</div><div class="dc-num" id="d-nlogn">664</div><div class="dc-ratio" id="r-nlogn">—</div><div class="dc-after">翻倍后 <b id="d-nlogn2">1.5k</b></div></div>
+      <div class="dcard"><div class="dc-name">O(n²)</div><div class="dc-num" id="d-n2c">10k</div><div class="dc-ratio" id="r-n2">—</div><div class="dc-after">翻倍后 <b id="d-n2c2">40k</b></div></div>
+    </div>
+    <div class="big-line">n = <b id="d-ncur">100</b> · 点一次翻倍，盯着三个倍数</div>
+    <div class="lab-controls">
+      <button onclick="resetDoubling()">回到 100</button>
+    </div>
+    <div class="lab-note">点一次翻倍，盯着三个倍数：<b>×4 那张就是 n² 的身份证</b>。</div>
+  `;
+  updateDoubling(world.doublingN || 100);
+}
+function updateDoubling(n){
+  const n2 = n * 2;
+  setTxt('d-n', fmt(fN(n))); setTxt('d-n2', fmt(fN(n2)));
+  setTxt('d-nlogn', fmt(fNL(n))); setTxt('d-nlogn2', fmt(fNL(n2)));
+  setTxt('d-n2c', fmt(fN2(n))); setTxt('d-n2c2', fmt(fN2(n2)));
+  setTxt('r-n', '×' + (fN(n2) / fN(n)).toFixed(1));
+  setTxt('r-nlogn', '×' + (fNL(n2) / fNL(n)).toFixed(1));
+  setTxt('r-n2', '×' + (fN2(n2) / fN2(n)).toFixed(1));
+  setTxt('d-ncur', fmt(n));
+  world.doublingN = n;
+  world.n = n;
+  world.steps = Math.round(fN2(n));
+  world.cls = '看倍数';
+  world.factor = '×2 / ×2.3 / ×4';
+  renderLedger();
+}
+function doDoubling(){
+  let n = world.doublingN || 100;
+  n = n >= 800 ? 100 : n * 2;
+  updateDoubling(n);
+  world.experiments++;
+  world.maxN = Math.max(world.maxN, n);
+  addLog(`n → ${fmt(n)}：×2 / ×${(fNL(n)/fNL(n/2)).toFixed(1)} / ×4`, 'ok', '三个倍数就是三种复杂度的指纹。');
+  markStageDone(2);
+}
+function resetDoubling(){
+  updateDoubling(100);
+  addLog('回到 n = 100', 'info', '可以再翻一次。');
+}
+
+/* ==================== 3 领头项 ==================== */
+function labTerms(lab){
+  lab.innerHTML = `
+    <div class="stack-bar" id="stack-bar">
+      <div class="stack-seg seg-a" id="seg-a"></div>
+      <div class="stack-seg seg-b" id="seg-b"></div>
+      <div class="stack-seg seg-c" id="seg-c"></div>
+    </div>
+    <div class="stack-legend">
+      <span><i style="background:${COLORS.amber}"></i>5n² <b id="pa">—</b></span>
+      <span><i style="background:${COLORS.cyan}"></i>300n <b id="pb">—</b></span>
+      <span><i style="background:${COLORS.purple}"></i>500 <b id="pc">—</b></span>
+    </div>
+    <div class="big-line">n = <b id="term-n">10</b> · T(n) = <b id="term-total">—</b></div>
+    <div class="lab-controls">
+      <button onclick="setTerms(10)">n = 10</button>
+      <button onclick="setTerms(2000)">n = 2000</button>
+      <input type="range" id="term-slider" min="10" max="2000" step="10" value="10" oninput="setTerms(+this.value)">
+    </div>
+    <div class="lab-note">拖滑杆，看橙色怎么一点点吞掉蓝紫。</div>
+  `;
+  setTerms(world.termsN || 10, false);
+}
+function setTerms(n, logIt = true){
+  const a = 5 * n * n, b = 300 * n, c = 500, t = a + b + c;
+  const pa = a / t * 100, pb = b / t * 100, pc = c / t * 100;
+  const ea = document.getElementById('seg-a');
+  const eb = document.getElementById('seg-b');
+  const ec = document.getElementById('seg-c');
+  if(ea) ea.style.width = Math.max(pa, 0.3) + '%';
+  if(eb) eb.style.width = Math.max(pb, 0.3) + '%';
+  if(ec) ec.style.width = Math.max(pc, 0.3) + '%';
+  setTxt('pa', pa.toFixed(1) + '%');
+  setTxt('pb', pb.toFixed(1) + '%');
+  setTxt('pc', pc.toFixed(1) + '%');
+  setTxt('term-n', fmt(n));
+  setTxt('term-total', fmt(t) + ' 步');
+  const slider = document.getElementById('term-slider');
+  if(slider && +slider.value !== n) slider.value = n;
+  world.termsN = n;
+  world.n = n;
+  world.steps = t;
+  world.cls = 'O(n²)';
+  world.factor = '×4';
+  renderLedger();
+  if(logIt) addLog(`n = ${fmt(n)}：5n² 占 ${pa.toFixed(1)}%`, 'info', pa > 90 ? '橙色几乎占满——领头项说了算。' : '零头还看得见；n 再大，橙色会吞掉它们。');
+}
+function doDropTerms(){
+  setTerms(2000);
+  world.experiments++;
+  world.maxN = Math.max(world.maxN, 2000);
+  renderLedger();
+  addLog('n=2000：橙色占 97.1%', 'ok', 'Big-O 只留领头项，系数 5 也扔掉——它只决定起跑线。');
+  markStageDone(3);
+}
+
+/* ==================== 4 二分 ==================== */
+function labBisect(lab){
+  lab.innerHTML = `
+    <div class="bisect-track" id="bisect-track">
+      ${Array.from({ length: 64 }, (_, i) => `<div class="bcell" id="bcell-${i}"></div>`).join('')}
+    </div>
+    <div class="big-line">候选 <b id="bisect-count">1024</b> 个 · 已比较 <b id="bisect-steps">0</b> 次 · 中点 <b id="bisect-mid">—</b></div>
+    <div class="lab-note">黄色格是本次猜的位置；看候选窗口怎么缩。</div>
+  `;
+}
+async function doBisect(){
+  if(world.running) return;
+  world.running = true;
+  const token = ++runToken;
+  let lo = 1, hi = 1024, steps = 0;
+  const target = 673;
+  world.n = 1024; world.steps = 0; world.cls = 'O(log n)'; world.factor = '翻倍 +1';
+  renderLedger();
+  const cells = document.querySelectorAll('#bisect-track .bcell');
+  function paint(){
+    cells.forEach((c, i) => {
+      const cellLo = 1 + i * 16, cellHi = cellLo + 15;
+      c.className = 'bcell' + (cellHi < lo || cellLo > hi ? ' dim' : '');
+    });
+  }
+  paint();
+  addLog('目标 673，先在 1~1024 里猜中点 512', 'info', '每猜一次，候选砍一半。');
+  while(lo <= hi){
+    if(token !== runToken){ world.running = false; return; }
+    const mid = Math.floor((lo + hi) / 2);
+    steps++;
+    const idx = Math.min(63, Math.floor((mid - 1) / 16));
+    const cell = cells[idx];
+    if(cell) cell.className = 'bcell mid';
+    setTxt('bisect-count', hi - lo + 1);
+    setTxt('bisect-mid', mid);
+    setTxt('bisect-steps', steps);
+    world.steps = steps;
+    renderLedger();
+    if(mid === target){
+      addLog(`第 ${steps} 次：中点 ${mid} = 目标，找到！`, 'ok', '1024 个候选，10 次比较就锁定。');
+      break;
+    }
+    addLog(`第 ${steps} 次：中点 ${mid} ${mid < target ? '<' : '>'} 673 → 砍掉一半`, 'info', '');
+    if(mid < target) lo = mid + 1; else hi = mid - 1;
+    await sleep(300);
+    if(token !== runToken){ world.running = false; return; }
+    paint();
+    await sleep(130);
+  }
+  if(token !== runToken){ world.running = false; return; }
+  world.steps = steps;
+  world.cls = 'O(log n)';
+  world.factor = '翻倍 +1';
+  world.experiments++;
+  world.maxN = Math.max(world.maxN, 1024);
+  renderLedger();
+  addLog('100 万个数也只要 20 次', 'ok', '规模涨 1000 倍，步数只多 10 次——这就是 log n。');
+  world.running = false;
+  markStageDone(4);
+}
+
+/* ==================== 5 归并 ==================== */
+function mergeSortLevels(arr){
+  let level = arr.map(v => [v]);
+  const levels = [level.map(g => g.slice())];
+  while(level.length > 1){
+    const next = [];
+    for(let i = 0; i < level.length; i += 2){
+      const a = level[i], b = level[i + 1] || [];
+      const merged = [];
+      let x = 0, y = 0;
+      while(x < a.length && y < b.length) merged.push(a[x] <= b[y] ? a[x++] : b[y++]);
+      while(x < a.length) merged.push(a[x++]);
+      while(y < b.length) merged.push(b[y++]);
+      next.push(merged);
+    }
+    level = next;
+    levels.push(level.map(g => g.slice()));
+  }
+  return levels;
+}
+const MERGE_VALS = [7, 2, 11, 4, 0, 9, 14, 1, 6, 13, 3, 10, 5, 15, 8, 12];
+function labMerge(lab){
+  const levels = mergeSortLevels(MERGE_VALS);
+  const rows = levels.map((groups, li) => {
+    const gs = groups.map(g => `<span class="mgroup">${g.map(v => `<span class="mcard">${v}</span>`).join('')}</span>`).join('');
+    return `<div class="merge-level${li === 0 ? ' on' : ''}" id="mlevel-${li}"><span class="mlvl">L${li}</span>${gs}</div>`;
+  }).join('');
+  lab.innerHTML = `
+    <div class="merge-levels" id="merge-levels">${rows}</div>
+    <div class="big-line">已完成 <b id="merge-layer">0</b> 层 · 累计 <b id="merge-work">0</b> 次活</div>
+    <div class="lab-note">亮起的行 = 刚合并完的一层；看组数怎么减半。</div>
+  `;
+}
+async function doMergeSort(){
+  if(world.running) return;
+  world.running = true;
+  const token = ++runToken;
+  const rows = document.querySelectorAll('#merge-levels .merge-level');
+  rows.forEach((r, i) => r.classList.toggle('on', i === 0));
+  setTxt('merge-layer', '0');
+  setTxt('merge-work', '0');
+  addLog('16 张牌开始归并', 'info', '从单个元素开始，两两合并。');
+  let level = 0;
+  for(let i = 1; i < rows.length; i++){
+    if(token !== runToken){ world.running = false; return; }
+    const row = rows[i];
+    row.classList.add('on');
+    level++;
+    setTxt('merge-layer', level);
+    setTxt('merge-work', level * 16);
+    addLog(`第 ${level} 层：又做了 16 次活`, 'info', level < rows.length - 1 ? '组数减半，但每层工作量不变。' : '只剩一组，排序完成。');
+    await sleep(600);
+  }
+  if(token !== runToken){ world.running = false; return; }
+  world.n = 16;
+  world.steps = 64;
+  world.cls = 'O(n log n)';
+  world.factor = '×2.3';
+  world.experiments++;
+  world.maxN = Math.max(world.maxN, 16);
+  renderLedger();
+  addLog('总账 16×4=64', 'ok', '每层 n 次活、共 log n 层，排序的 n log n 就是这么来的。');
+  world.running = false;
+  markStageDone(5);
+}
+
+/* ==================== 6 n² ==================== */
+function pairsCount(N){ return N * (N - 1) / 2; }
+function drawPairsGrid(N, progress){
+  const cv = document.getElementById('pairs-canvas');
+  if(!cv) return;
+  const parent = cv.parentElement;
+  const w = Math.max(320, (parent ? parent.clientWidth : 600) - 18);
+  const h = 260;
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(w * dpr);
+  cv.height = Math.round(h * dpr);
+  cv.style.width = '100%';
+  cv.style.height = h + 'px';
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const pad = 8, size = Math.min(w, h) - 2 * pad;
+  const padX = (w - size) / 2;
+  const G = Math.min(N, 140);
+  const cell = size / G;
+  const rowsToShow = Math.ceil(G * progress);
+  for(let r = 0; r < rowsToShow; r++){
+    ctx.fillStyle = 'rgba(56,189,248,' + (0.25 + 0.55 * (r / G)) + ')';
+    for(let c = 0; c < G; c++){
+      ctx.fillRect(padX + c * cell, pad + r * cell, Math.max(cell - 0.5, 0.7), Math.max(cell - 0.5, 0.7));
+    }
+  }
+  ctx.strokeStyle = '#26334d';
+  ctx.strokeRect(padX, pad, size, size);
+}
+function updateBudget(N){
+  const comps = pairsCount(N);
+  const ms = comps / 1e7 * 1000;
+  const pct = ms / 10 * 100;
+  const fill = document.getElementById('budget-fill');
+  if(fill){
+    fill.style.width = Math.min(100, pct) + '%';
+    fill.style.background = pct > 100 ? 'var(--red)' : (pct > 60 ? 'var(--amber)' : 'var(--green)');
+  }
+  setTxt('pairs-line', `N=${N}：${fmt(comps)} 次比较 ≈ ${ms.toFixed(1)} ms（预算 10 ms）${pct > 100 ? ' · 超时！' : ''}`);
+  return ms;
+}
+function labPairs(lab){
+  lab.innerHTML = `
+    <div class="chart-box"><canvas id="pairs-canvas"></canvas></div>
+    <div class="big-line" id="pairs-line">—</div>
+    <div class="budget-bar"><div class="budget-fill" id="budget-fill"></div></div>
+    <div class="lab-controls">
+      <button onclick="pairsPreview(100)">N = 100</button>
+      <button onclick="pairsPreview(250)">N = 250</button>
+      <button onclick="pairsPreview(500)">N = 500</button>
+    </div>
+    <div class="lab-note">点 N = 500，看预算条冲红。</div>
+  `;
+  drawPairsGrid(100, 1);
+  updateBudget(100);
+}
+function pairsPreview(N){
+  runToken++;
+  world.running = false;
+  drawPairsGrid(N, 1);
+  const ms = updateBudget(N);
+  addLog(`N=${N}：${fmt(pairsCount(N))} 次 ≈ ${ms.toFixed(1)}ms`, ms > 10 ? 'err' : 'ok', ms > 10 ? '超出 10ms 截止期，这一帧保不住。' : '在 10ms 预算内。');
+  world.n = N;
+  world.steps = pairsCount(N);
+  world.cls = 'O(n²)';
+  world.factor = '×4';
+  renderLedger();
+}
+async function doPairs(){
+  if(world.running) return;
+  world.running = true;
+  const token = ++runToken;
+  updateBudget(500);
+  addLog('500 个点，两两比较', 'info', '500×499/2 = 124,750 次。');
+  const t0 = performance.now();
+  while(performance.now() - t0 < 800){
+    if(token !== runToken){ world.running = false; return; }
+    drawPairsGrid(500, Math.min(1, (performance.now() - t0) / 800));
+    await sleep(45);
+  }
+  if(token !== runToken){ world.running = false; return; }
+  drawPairsGrid(500, 1);
+  world.n = 500;
+  world.steps = 124750;
+  world.cls = 'O(n²)';
+  world.factor = '×4';
+  world.experiments++;
+  world.maxN = Math.max(world.maxN, 500);
+  renderLedger();
+  addLog('12.5ms > 10ms，本帧超时', 'err', '控制回路抖一帧，小车就可能冲出轨迹。换更快的 CPU 只是推迟问题。');
+  world.running = false;
+  markStageDone(6);
+}
+
+/* ==================== 7 结构代价 ==================== */
+const DS_OPS = {
+  idx:   { name: '按下标查', costs: { array: 'O(1)', list: 'O(n)', hash: '—', tree: '—' }, line: '数组的看家本领：地址一步算出，不碰其他元素。' },
+  val:   { name: '按值查',   costs: { array: 'O(n)', list: 'O(n)', hash: 'O(1) 平均', tree: 'O(log n)' }, line: '哈希平均最快，但最坏会退化；红黑树稳定。' },
+  ins:   { name: '中间插入', costs: { array: 'O(n) 挪人', list: 'O(1)', hash: 'O(1) 平均', tree: 'O(log n)' }, line: '数组要挪一整排；链表改两根指针。' },
+  worst: { name: '最坏保证', costs: { array: '有 O(1)', list: '有 O(n)', hash: '无！O(n)', tree: '有 O(log n)' }, line: '实时系统要的是上界，不是概率。' }
+};
+const DS_NAMES = { array: '数组', list: '链表', hash: '哈希表', tree: '红黑树' };
+function costClass(v){
+  if(v === '—') return 'dash';
+  if(v.indexOf('O(1)') === 0) return 'o1';
+  if(v.indexOf('O(log n)') === 0) return 'olog';
+  if(v.indexOf('O(n) 平均') === 0 || v.indexOf('O(1) 平均') === 0) return 'o1';
+  if(v.indexOf('O(n)') === 0) return 'on';
+  return 'onlogn';
+}
+function labDs(lab){
+  lab.innerHTML = `
+    <div class="lab-controls">
+      <button onclick="setDsOp('idx')">按下标查</button>
+      <button onclick="setDsOp('val')">按值查</button>
+      <button onclick="setDsOp('ins')">中间插入</button>
+      <button onclick="setDsOp('worst')">最坏保证</button>
+    </div>
+    <div class="ds-cards" id="ds-cards"></div>
+    <div class="big-line" id="ds-line">—</div>
+    <div class="lab-note">点不同操作，四张卡会跟着变；最坏保证那张最该盯。</div>
+  `;
+  setDsOp(world.dsOp || 'idx', false);
+}
+function setDsOp(key, logIt = true){
+  world.dsOp = key;
+  const op = DS_OPS[key];
+  const box = document.getElementById('ds-cards');
+  if(box){
+    box.innerHTML = ['array', 'list', 'hash', 'tree'].map(k => {
+      const v = op.costs[k];
+      return `<div class="ds-card"><div class="ds-name">${DS_NAMES[k]}</div><div class="ds-cost cost ${costClass(v)}">${v}</div></div>`;
+    }).join('');
+  }
+  setTxt('ds-line', op.name + '：' + op.line);
+  document.querySelectorAll('#lab .lab-controls button').forEach((b, i) => {
+    b.classList.toggle('on', ['idx', 'val', 'ins', 'worst'][i] === key);
+  });
+  if(logIt) addLog(op.name + '：' + op.line, 'info', '');
+}
+function doDsCompare(){
+  if(world.running) return;
+  world.running = true;
+  const token = ++runToken;
+  const keys = ['idx', 'val', 'ins', 'worst'];
+  (async () => {
+    for(const k of keys){
+      if(token !== runToken){ world.running = false; return; }
+      setDsOp(k);
+      await sleep(650);
+    }
+    if(token !== runToken){ world.running = false; return; }
+    world.cls = '平均 ≠ 最坏';
+    world.factor = '看最坏';
+    world.experiments++;
+    renderLedger();
+    addLog('结论：控制回路里，"平均 O(1)"不是承诺，"最坏 O(log n)"才是。', 'ok', '');
+    world.running = false;
+    markStageDone(7);
+  })();
+}
+
+/* ==================== 8 摊还 ==================== */
+function labAmortized(lab){
+  lab.innerHTML = `
+    <div class="amort-bars" id="amort-bars">
+      ${Array.from({ length: 16 }, (_, i) => `<div class="amort-bar" id="abar-${i}"><i style="height:0%"></i></div>`).join('')}
+    </div>
+    <div class="big-line">本次 <b id="amu-cost">0</b> 步 · 累计平均 <b id="amu-avg">—</b> 步/次</div>
+    <div class="lab-note">看红柱出现的节奏，和平均价怎么贴着 2。</div>
+  `;
+}
+async function doAmortized(){
+  if(world.running) return;
+  world.running = true;
+  const token = ++runToken;
+  addLog('连续 push_back 16 次', 'info', '看红柱（搬家）和平均价。');
+  const costs = [];
+  let cap = 1, size = 0, total = 0;
+  document.querySelectorAll('.amort-bar').forEach(b => {
+    b.classList.remove('hot');
+    const i = b.querySelector('i');
+    if(i) i.style.height = '0%';
+  });
+  for(let k = 1; k <= 16; k++){
+    if(token !== runToken){ world.running = false; return; }
+    let cost;
+    if(k > cap){
+      const old = cap;
+      cap *= 2;
+      cost = old + 1;
+      addLog(`push #${k}：容量 ${old} 满 → 扩到 ${cap}，复制 ${old} 个`, 'err', '这次是 O(n) 的搬家。');
+    } else {
+      cost = 1;
+    }
+    costs.push(cost);
+    size = k;
+    total += cost;
+    const bar = document.getElementById('abar-' + (k - 1));
+    if(bar){
+      bar.classList.toggle('hot', cost > 1);
+      const i = bar.querySelector('i');
+      if(i) i.style.height = (cost / 9 * 100).toFixed(1) + '%';
+    }
+    setTxt('amu-cost', cost);
+    setTxt('amu-avg', (total / k).toFixed(2));
+    world.n = k;
+    world.steps = total;
+    world.cls = '摊还 O(1)';
+    world.factor = '均价 ' + (total / k).toFixed(2);
+    renderLedger();
+    await sleep(230);
+  }
+  if(token !== runToken){ world.running = false; return; }
+  world.experiments++;
+  world.maxN = Math.max(world.maxN, 16);
+  renderLedger();
+  addLog(`16 次共 ${total} 步，平均 ${(total / 16).toFixed(2)} 步/次`, 'ok', '复制总量 1+2+4+8=15 < n。最坏单次 O(n)，摊还每次 O(1)。');
+  world.running = false;
+  markStageDone(8);
+}
+
+/* ==================== 9/10 静态板 ==================== */
+function labDecision(lab){
+  lab.innerHTML = `
+    <div class="lab-note" style="font-size:13px; line-height:1.8;">
+      <b>约束 → 看哪一列：</b><br>
+      有截止时间 → 最坏复杂度（固定数组 / 红黑树）<br>
+      离线跑批 → 平均 + 内存（哈希 / 外部排序）<br>
+      查询反复发生 → 预处理一次，把成本摊薄（排序 + 二分）<br>
+      数据总在长大 → 看增长率，不看秒表
+    </div>
+  `;
+}
+function labQuiz(lab){
+  lab.innerHTML = `
+    <div class="lab-note" style="font-size:13px; line-height:1.8;">
+      <b>判读四步：</b>① 数步数（循环 → T(n)） → ② 看翻倍（×2 / ×2.3 / ×4） → ③ 扔零头（只留领头项） → ④ 对约束（实时看最坏）。
+    </div>
+  `;
+}
+
+/* ==================== 11 自由沙盒 ==================== */
+const FREE_CLASSES = [
+  { key: 'n', name: 'O(n)', color: COLORS.amber, fn: n => n, defaultOn: true },
+  { key: 'n2', name: 'O(n²)', color: COLORS.red, fn: n => n * n, defaultOn: true },
+  { key: 'log', name: 'O(log n)', color: COLORS.cyan, fn: n => Math.max(1, Math.log2(n)), defaultOn: false },
+  { key: 'nlogn', name: 'O(n log n)', color: COLORS.purple, fn: n => n * Math.log2(Math.max(n, 2)), defaultOn: false }
+];
+function labFree(lab){
+  const n = world.freeN || 128;
+  lab.innerHTML = `
+    <div class="lab-controls">
+      ${FREE_CLASSES.map(c => `<label class="chk"><input type="checkbox" id="fc-${c.key}" ${c.defaultOn ? 'checked' : ''} onchange="freeUpdate()">${c.name}</label>`).join('')}
+    </div>
+    <div class="lab-controls">
+      <span>n = <b id="free-n-val">${fmt(n)}</b></span>
+      <input type="range" id="free-n" min="16" max="1024" step="16" value="${n}" oninput="freeUpdate()">
+    </div>
+    <div class="chart-box"><canvas id="chart-free"></canvas></div>
+    <div class="free-readout" id="free-readout"></div>
+  `;
+  freeUpdate(false);
+}
+function freeUpdate(logIt){
+  const slider = document.getElementById('free-n');
+  if(!slider) return;
+  const n = parseInt(slider.value, 10);
+  world.freeN = n;
+  setTxt('free-n-val', fmt(n));
+  const curves = [];
+  const checked = [];
+  FREE_CLASSES.forEach(c => {
+    const cb = document.getElementById('fc-' + c.key);
+    if(cb && cb.checked){
+      curves.push({ fn: c.fn, color: c.color });
+      checked.push(c);
+    }
+  });
+  drawChart('chart-free', {
+    nMax: 1024, yMax: 1048576,
+    markX: n, markLabel: 'n = ' + fmt(n),
+    curves: curves
+  });
+  const box = document.getElementById('free-readout');
+  if(box){
+    box.innerHTML = checked.map(c => {
+      const v = c.fn(n), v2 = c.fn(n * 2);
+      let ratio;
+      if(v <= 1) ratio = '不变';
+      else if(v2 / v >= 1.99) ratio = '×' + (v2 / v).toFixed(1);
+      else ratio = '+' + Math.round(v2 - v);
+      return `<div class="fr-row"><span class="fr-name" style="color:${c.color}">${c.name}</span><span>${fmt(v)} → 翻倍 ${fmt(v2)}</span><span style="color:${COLORS.amber}">${ratio}</span></div>`;
+    }).join('');
+  }
+  if(logIt !== false){
+    world.n = n;
+    world.steps = Math.round(n * Math.log2(n));
+    world.cls = '自由观察';
+    world.factor = '见下表';
+    renderLedger();
+  }
+}
+
+/* ==================== 流程 ==================== */
+function skipStage(){
+  if(currentStage < 11){
+    currentStage += 1;
+    world.stageDone = false;
+    render();
+  }
+}
+function markStageDone(idx){
+  if(currentStage !== idx) return;
+  world.stageDone = true;
+  saveState();
+  const zone = document.getElementById('done-zone');
+  if(zone) zone.innerHTML = doneBarHtml();
+}
+
+/* ==================== 存档 / 重玩 ==================== */
+function saveState(){
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ currentStage, quizAnswers })); } catch(e) {}
+}
+function loadState(){
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      const data = JSON.parse(raw);
+      if(data && typeof data.currentStage === 'number'){
+        if(data.quizAnswers) quizAnswers = data.quizAnswers;
+        buildToStage(data.currentStage);
+        return true;
+      }
+    }
+  } catch(e) {}
+  return false;
+}
+function buildToStage(target){
+  currentStage = target;
+  runToken++;
+  world.running = false;
+  world.stageDone = false;
+  world.n = 0; world.steps = 0; world.cls = '—'; world.factor = '—';
+  world.decisionPick = null;
+  const box = document.getElementById('logbox');
+  if(box) box.innerHTML = '';
+  addLog(`↺ 已同步至第 ${String(target).padStart(2, '0')} 关「${STAGES[target].title}」`, 'info', '');
+  render();
+}
+function handleClearClick(){
+  clearClickCount++;
+  const btn = document.getElementById('btn-rearm');
+  if(!btn) return;
+  if(clearClickCount === 1){
+    btn.className = 'clear-btn armed';
+    btn.innerText = '⚠️ 再点一次确认清空';
+    clearTimer = setTimeout(() => {
+      clearClickCount = 0;
+      btn.className = 'clear-btn';
+      btn.innerText = '⟲ 清除全部进度';
+    }, 3000);
+  } else if(clearClickCount >= 2){
+    clearTimeout(clearTimer);
+    clearClickCount = 0;
+    btn.className = 'clear-btn';
+    btn.innerText = '⟲ 清除全部进度';
+    try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+    quizAnswers = {};
+    world.experiments = 0;
+    world.maxN = 0;
+    const box = document.getElementById('logbox');
+    if(box) box.innerHTML = '';
+    buildToStage(0);
+    addLog('已清除全部学习记录与进度', 'ok', '已回到起点。');
+  }
+}
+
+/* ==================== 全局绑定 ==================== */
+window.world = world;
+window.getCurrentStage = () => currentStage;
+window.buildToStage = buildToStage;
+window.doStartShape = doStartShape;
+window.setStartN = setStartN;
+window.doCountSteps = doCountSteps;
+window.doDoubling = doDoubling;
+window.resetDoubling = resetDoubling;
+window.setTerms = setTerms;
+window.doDropTerms = doDropTerms;
+window.doBisect = doBisect;
+window.doMergeSort = doMergeSort;
+window.doPairs = doPairs;
+window.pairsPreview = pairsPreview;
+window.setDsOp = setDsOp;
+window.doDsCompare = doDsCompare;
+window.doAmortized = doAmortized;
+window.pickScenario = pickScenario;
+window.answerQuiz = answerQuiz;
+window.freeUpdate = freeUpdate;
+window.handleClearClick = handleClearClick;
+
+window.addEventListener('DOMContentLoaded', () => {
+  if(!loadState()){
+    buildToStage(0);
+    addLog('欢迎来到算法复杂度实验台（轻量版）', 'info', '每关只有一个核心画面；代码、账本、过程记录都收在下面抽屉里，需要时再展开。');
+  }
+});
+</script>
+</body>
+</html>
